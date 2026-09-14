@@ -1,7 +1,7 @@
 import json
 from ..core.commands import AsepriteCommand, lua_escape
 from ..core.state import prepare_filename
-from ..core.lua import FIND_LAYER
+from ..core.lua import FIND_LAYER, LAYER_NAMES
 from .. import mcp
 
 @mcp.tool()
@@ -97,8 +97,9 @@ async def set_layer_visibility(filename: str = "", *, layer_name: str, visible: 
     if not spr then print("ERROR:No active sprite") return end
 
     {FIND_LAYER}
+    {LAYER_NAMES}
     local target = find_layer(spr, "{safe_layer_name}")
-    if not target then print("ERROR:Layer not found") return end
+    if not target then print("ERROR:Layer '{safe_layer_name}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first.") return end
 
     app.transaction(function()
         target.isVisible = {visible_flag}
@@ -134,8 +135,9 @@ async def set_layer_opacity(filename: str = "", *, layer_name: str, opacity: int
     if not spr then print("ERROR:No active sprite") return end
 
     {FIND_LAYER}
+    {LAYER_NAMES}
     local target = find_layer(spr, "{safe_layer_name}")
-    if not target then print("ERROR:Layer not found") return end
+    if not target then print("ERROR:Layer '{safe_layer_name}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first.") return end
 
     app.transaction(function()
         target.opacity = {opacity}
@@ -297,8 +299,9 @@ async def set_cel_position(filename: str = "", *, layer_name: str, frame_index: 
     if not spr then print("ERROR:No active sprite") return end
 
     {FIND_LAYER}
+    {LAYER_NAMES}
     local target_layer = find_layer(spr, "{safe_layer_name}")
-    if not target_layer then print("ERROR:Layer not found") return end
+    if not target_layer then print("ERROR:Layer '{safe_layer_name}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first.") return end
 
     local idx = {frame_index}
     if idx < 1 or idx > #spr.frames then
@@ -367,8 +370,9 @@ async def tween_cel_positions(filename: str = "", *, layer_name: str, start_fram
     if not spr then print("ERROR:No active sprite") return end
 
     {FIND_LAYER}
+    {LAYER_NAMES}
     local target_layer = find_layer(spr, "{safe_layer_name}")
-    if not target_layer then print("ERROR:Layer not found") return end
+    if not target_layer then print("ERROR:Layer '{safe_layer_name}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first.") return end
 
     local start_idx = {start_frame}
     local end_idx = {end_frame}
@@ -438,8 +442,9 @@ async def offset_cel_positions(filename: str = "", *, layer_name: str, start_fra
     if not spr then print("ERROR:No active sprite") return end
 
     {FIND_LAYER}
+    {LAYER_NAMES}
     local target_layer = find_layer(spr, "{safe_layer_name}")
-    if not target_layer then print("ERROR:Layer not found") return end
+    if not target_layer then print("ERROR:Layer '{safe_layer_name}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first.") return end
 
     local start_idx = {start_frame}
     local end_idx = {end_frame}
@@ -491,8 +496,9 @@ async def create_cel(filename: str = "", *, layer_name: str, frame_index: int, x
     if idx < 1 or idx > #spr.frames then print("ERROR:Frame index out of range") return end
 
     {FIND_LAYER}
+    {LAYER_NAMES}
     local target = find_layer(spr, "{safe_layer_name}")
-    if not target then print("ERROR:Layer not found") return end
+    if not target then print("ERROR:Layer '{safe_layer_name}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first.") return end
 
     app.transaction(function()
         local frame = spr.frames[idx]
@@ -527,8 +533,9 @@ async def clear_cel(filename: str = "", *, layer_name: str, frame_index: int) ->
     if idx < 1 or idx > #spr.frames then print("ERROR:Frame index out of range") return end
 
     {FIND_LAYER}
+    {LAYER_NAMES}
     local target = find_layer(spr, "{safe_layer_name}")
-    if not target then print("ERROR:Layer not found") return end
+    if not target then print("ERROR:Layer '{safe_layer_name}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first.") return end
 
     app.transaction(function()
         local frame = spr.frames[idx]
@@ -548,28 +555,42 @@ async def clear_cel(filename: str = "", *, layer_name: str, frame_index: int) ->
     return f"Failed to clear cel: {output}"
 
 @mcp.tool()
-async def copy_cel(filename: str = "", *, layer_name: str, source_frame: int, target_frame: int, replace: bool = True) -> str:
-    """Copy a cel from one frame to another."""
+async def copy_cel(filename: str = "", *, layer_name: str, source_frame: int, target_frame: int, replace: bool = True, create_target_frame: bool = True) -> str:
+    """Copy a cel from one frame to another.
+
+    Args:
+        filename: Aseprite file to modify (optional; defaults to the session's active file)
+        layer_name: Layer name to target
+        source_frame: Frame index to copy from (1-based)
+        target_frame: Frame index to copy to (1-based)
+        replace: Overwrite the existing cel at the target frame (default True)
+        create_target_frame: Extend the sprite with new frames when target_frame is beyond the current frame count (default True)
+    """
     filename, err = prepare_filename(filename)
     if err:
         return err
 
     safe_layer_name = lua_escape(layer_name)
     replace_flag = "true" if replace else "false"
+    create_frame_flag = "true" if create_target_frame else "false"
     script = f"""
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
     local src_idx = {source_frame}
     local dst_idx = {target_frame}
-    if src_idx < 1 or src_idx > #spr.frames then print("ERROR:Source frame out of range") return end
-    if dst_idx < 1 or dst_idx > #spr.frames then print("ERROR:Target frame out of range") return end
+    if src_idx < 1 or src_idx > #spr.frames then print("ERROR:Source frame {source_frame} out of range (sprite has " .. #spr.frames .. " frame(s), 1-based)") return end
+    if dst_idx < 1 then print("ERROR:Target frame {target_frame} out of range (must be >= 1)") return end
+    if dst_idx > #spr.frames and not {create_frame_flag} then print("ERROR:Target frame {target_frame} out of range (sprite has " .. #spr.frames .. " frame(s), 1-based). Tip: call add_frame first or pass create_target_frame=true.") return end
 
     {FIND_LAYER}
+    {LAYER_NAMES}
     local target = find_layer(spr, "{safe_layer_name}")
-    if not target then print("ERROR:Layer not found") return end
+    if not target then print("ERROR:Layer '{safe_layer_name}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first.") return end
 
+    local frames_added = math.max(0, dst_idx - #spr.frames)
     app.transaction(function()
+        while #spr.frames < dst_idx do spr:newFrame() end
         local src = target:cel(spr.frames[src_idx])
         if not src then return end
         local dst = target:cel(spr.frames[dst_idx])
@@ -584,12 +605,20 @@ async def copy_cel(filename: str = "", *, layer_name: str, source_frame: int, ta
     end)
 
     spr:saveAs(spr.filename)
-    print("OK")
+    print("OK|frames_added=" .. frames_added)
     """
 
     success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
     if success:
-        return f"Cel copied on '{layer_name}' from frame {source_frame} to {target_frame} in {filename}"
+        frames_added = 0
+        for line in output.splitlines():
+            if line.startswith("OK|frames_added="):
+                try:
+                    frames_added = int(line.split("=", 1)[1])
+                except ValueError:
+                    pass
+        note = f" ({frames_added} frame(s) auto-created)" if frames_added else ""
+        return f"Cel copied on '{layer_name}' from frame {source_frame} to frame {target_frame}{note} in {filename}"
     return f"Failed to copy cel: {output}"
 
 @mcp.tool()
@@ -885,8 +914,9 @@ async def tween_cel_positions_eased(filename: str = "", *, layer_name: str, star
     if not spr then print("ERROR:No active sprite") return end
 
     {FIND_LAYER}
+    {LAYER_NAMES}
     local target_layer = find_layer(spr, "{safe_layer_name}")
-    if not target_layer then print("ERROR:Layer not found") return end
+    if not target_layer then print("ERROR:Layer '{safe_layer_name}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first.") return end
 
     local start_idx = {start_frame}
     local end_idx = {end_frame}
@@ -967,8 +997,9 @@ async def oscillate_cel_positions(filename: str = "", *, layer_name: str, start_
     if not spr then print("ERROR:No active sprite") return end
 
     {FIND_LAYER}
+    {LAYER_NAMES}
     local target_layer = find_layer(spr, "{safe_layer_name}")
-    if not target_layer then print("ERROR:Layer not found") return end
+    if not target_layer then print("ERROR:Layer '{safe_layer_name}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first.") return end
 
     local start_idx = {start_frame}
     local end_idx = {end_frame}
@@ -1049,8 +1080,9 @@ async def tween_cel_opacity_eased(filename: str = "", *, layer_name: str, start_
     if not spr then print("ERROR:No active sprite") return end
 
     {FIND_LAYER}
+    {LAYER_NAMES}
     local target_layer = find_layer(spr, "{safe_layer_name}")
-    if not target_layer then print("ERROR:Layer not found") return end
+    if not target_layer then print("ERROR:Layer '{safe_layer_name}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first.") return end
 
     local start_idx = {start_frame}
     local end_idx = {end_frame}
@@ -1143,8 +1175,9 @@ async def tween_cel_scale_eased(filename: str = "", *, layer_name: str, start_fr
     if not spr then print("ERROR:No active sprite") return end
 
     {FIND_LAYER}
+    {LAYER_NAMES}
     local target_layer = find_layer(spr, "{safe_layer_name}")
-    if not target_layer then print("ERROR:Layer not found") return end
+    if not target_layer then print("ERROR:Layer '{safe_layer_name}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first.") return end
 
     local start_idx = {start_frame}
     local end_idx = {end_frame}
@@ -1326,8 +1359,9 @@ async def set_cel_opacity(filename: str = "", *, layer_name: str, frame_index: i
     if idx < 1 or idx > #spr.frames then print("ERROR:Frame index out of range") return end
 
     {FIND_LAYER}
+    {LAYER_NAMES}
     local target = find_layer(spr, "{safe_layer}")
-    if not target then print("ERROR:Layer not found") return end
+    if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first.") return end
 
     local cel = target:cel(spr.frames[idx])
     if not cel then print("ERROR:No cel at that layer/frame") return end

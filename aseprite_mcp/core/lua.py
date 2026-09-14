@@ -54,6 +54,40 @@ local function find_layer(spr, name)
 end
 """
 
+# List every layer name (groups descended into), comma-separated. Used to
+# give "Layer not found" errors actionable context.
+LAYER_NAMES = """
+local function layer_names(spr)
+    local names = {}
+    local function walk(layers)
+        for _, layer in ipairs(layers) do
+            names[#names + 1] = layer.name
+            if layer.isGroup then walk(layer.layers) end
+        end
+    end
+    walk(spr.layers)
+    return table.concat(names, ", ")
+end
+"""
+
+# find_layer + auto-create. Drawing tools embed this instead of FIND_LAYER:
+# when `create` is true and the name is not a "group/child" path (auto-create
+# never fabricates groups), a missing layer is created as a new top-level
+# layer. Returns nil only when the caller must report the failure.
+ENSURE_LAYER = FIND_LAYER + """
+
+local function ensure_layer(spr, name, create)
+    local layer = find_layer(spr, name)
+    if layer then return layer end
+    if create and not string.find(name, "/", 1, true) then
+        layer = spr:newLayer()
+        layer.name = name
+        return layer
+    end
+    return nil
+end
+"""
+
 # Replace a cel's image with a canvas-sized image anchored at (0,0) so
 # sprite-global coordinates can be used directly without cel offsets.
 NORMALIZE_CEL = """

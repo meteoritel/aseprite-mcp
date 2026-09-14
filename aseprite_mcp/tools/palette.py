@@ -270,7 +270,7 @@ async def apply_palette_preset(filename: str = "", *, preset: str) -> str:
     colors = PALETTE_PRESETS.get(preset.lower())
     if colors is None:
         return f"Unknown preset '{preset}'. Available: {', '.join(sorted(PALETTE_PRESETS))}"
-    result = await set_palette(filename, colors)
+    result = await set_palette(filename, colors=colors)
     if result.startswith("Palette set"):
         return f"Palette preset '{preset}' ({len(colors)} colors) applied to {filename}"
     return result

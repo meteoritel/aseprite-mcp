@@ -101,4 +101,7 @@ def test_flip_missing_layer(sprite):
 
 
 def test_draw_line_missing_layer(sprite):
-    failed(run(drawing.draw_line_at(filename=sprite, layer_name="NO_SUCH_LAYER", frame_index=1, x1=0, y1=0, x2=5, y2=5, color="#ffffff", thickness=1)))
+    # create_if_missing is off here: the drawing tools now *create* a missing
+    # top-level layer by default, so the strict path has to be requested to
+    # keep testing that a missing layer fails loudly.
+    failed(run(drawing.draw_line_at(filename=sprite, layer_name="NO_SUCH_LAYER", frame_index=1, x1=0, y1=0, x2=5, y2=5, color="#ffffff", thickness=1, create_if_missing=False)))

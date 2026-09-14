@@ -76,8 +76,12 @@ def test_ambiguous_bare_name_prefers_shallow(nested):
 
 
 def test_bogus_name_still_fails(nested):
-    result = run(drawing.draw_rectangle_at(filename=nested, layer_name="NOPE", frame_index=1, x=0, y=0, width=2, height=2, color="#ffffff", fill=True))
+    # create_if_missing is off here: with it on (the default) a bare name that
+    # resolves nowhere is auto-created, which is a separate test
+    # (tests/test_auto_create.py). Group paths stay strict either way.
+    result = run(drawing.draw_rectangle_at(filename=nested, layer_name="NOPE", frame_index=1, x=0, y=0, width=2, height=2, color="#ffffff", fill=True, create_if_missing=False))
     assert str(result).startswith(("Failed", "ERROR")), result
+    assert "Existing layers:" in str(result), result
 
 
 def test_duplicate_name_across_group_allowed(nested):

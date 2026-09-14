@@ -1,6 +1,8 @@
 from typing import Any, Dict, List
 
 from ..core.colors import parse_hex_color
+from ..core.commands import AsepriteCommand, lua_escape, parse_pixel_xy
+from ..core.lua import ENSURE_LAYER, LAYER_NAMES, NORMALIZE_CEL, PSET
 from ..core.state import prepare_filename
 from .. import mcp
 
@@ -49,8 +51,13 @@ async def draw_pixels(*, filename: str = "", pixels: List[Dict[str, Any]]) -> st
     # offset into cel-local space because cel.image:putPixel uses
     # cel-local coordinates.
     for pixel in pixels:
-        x = pixel.get("x", 0)
-        y = pixel.get("y", 0)
+        xy = parse_pixel_xy(pixel)
+        if xy is None:
+            return (
+                f"Invalid pixel coordinates: x={pixel.get('x')!r}, "
+                f"y={pixel.get('y')!r} — must be integers"
+            )
+        x, y = xy
         rgb = _parse_hex_color(pixel.get("color", "#000000"))
         if rgb is None:
             return f"Invalid color value: {pixel.get('color')}"
@@ -351,7 +358,7 @@ async def draw_pixels_at(
         layer_name: Layer name to target
         frame_index: Frame index starting at 1
         pixels: List of pixel data with x/y/color
-        create_if_missing: Create cel if it does not exist
+        create_if_missing: Create the layer (top-level names only) and cel if they don't exist
     """
     filename, err = prepare_filename(filename)
     if err:
@@ -364,11 +371,12 @@ async def draw_pixels_at(
     if not spr then print("ERROR:No active sprite") return end
 
     local idx = {frame_index}
-    if idx < 1 or idx > #spr.frames then print("ERROR:Frame index out of range") return end
+    if idx < 1 or idx > #spr.frames then print("ERROR:Frame index {frame_index} out of range (sprite has " .. #spr.frames .. " frame(s), 1-based). Tip: call add_frame first.") return end
 
-    {FIND_LAYER}
-    local target = find_layer(spr, "{safe_layer_name}")
-    if not target then print("ERROR:Layer not found") return end
+    {ENSURE_LAYER}
+    {LAYER_NAMES}
+    local target = ensure_layer(spr, "{safe_layer_name}", {create_flag})
+    if not target then print("ERROR:Layer '{safe_layer_name}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first; drawing tools auto-create top-level layers when create_if_missing=true.") return end
 
     app.transaction(function()
         app.activeLayer = target
@@ -384,8 +392,13 @@ async def draw_pixels_at(
         local coy = cel.position.y
     """
     for pixel in pixels:
-        x = pixel.get("x", 0)
-        y = pixel.get("y", 0)
+        xy = parse_pixel_xy(pixel)
+        if xy is None:
+            return (
+                f"Invalid pixel coordinates: x={pixel.get('x')!r}, "
+                f"y={pixel.get('y')!r} — must be integers"
+            )
+        x, y = xy
         rgb = _parse_hex_color(pixel.get("color", "#000000"))
         if rgb is None:
             return f"Invalid color value: {pixel.get('color')}"
@@ -432,7 +445,7 @@ async def draw_line_at(
         y2 (int): The y coordinate of the second point of the line.
         color (str, optional): The color to draw the line with. Defaults to "#000000".
         thickness (int, optional): The thickness of the line. Defaults to 1.
-        create_if_missing (bool, optional): Whether to create the layer if it doesn't exist. Defaults to True.
+        create_if_missing (bool, optional): Create the layer (top-level names only; never group paths) and cel if they don't exist. Defaults to True.
     """
     filename, err = prepare_filename(filename)
     if err:
@@ -478,11 +491,12 @@ async def draw_line_at(
     end
 
     local idx = {frame_index}
-    if idx < 1 or idx > #spr.frames then print("ERROR:Frame index out of range") return end
+    if idx < 1 or idx > #spr.frames then print("ERROR:Frame index {frame_index} out of range (sprite has " .. #spr.frames .. " frame(s), 1-based). Tip: call add_frame first.") return end
 
-    {FIND_LAYER}
-    local target = find_layer(spr, "{safe_layer_name}")
-    if not target then print("ERROR:Layer not found") return end
+    {ENSURE_LAYER}
+    {LAYER_NAMES}
+    local target = ensure_layer(spr, "{safe_layer_name}", {create_flag})
+    if not target then print("ERROR:Layer '{safe_layer_name}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first; drawing tools auto-create top-level layers when create_if_missing=true.") return end
 
     app.transaction(function()
         app.activeLayer = target
@@ -535,7 +549,7 @@ async def draw_rectangle_at(
         height (int): The height of the rectangle.
         color (str, optional): The color to draw the rectangle with. Defaults to "#000000".
         fill (bool, optional): Whether to fill the rectangle. Defaults to False.
-        create_if_missing (bool, optional): Whether to create the layer if it doesn't exist. Defaults to True.
+        create_if_missing (bool, optional): Create the layer (top-level names only; never group paths) and cel if they don't exist. Defaults to True.
     """
     filename, err = prepare_filename(filename)
     if err:
@@ -557,11 +571,12 @@ async def draw_rectangle_at(
     if not spr then print("ERROR:No active sprite") return end
 
     local idx = {frame_index}
-    if idx < 1 or idx > #spr.frames then print("ERROR:Frame index out of range") return end
+    if idx < 1 or idx > #spr.frames then print("ERROR:Frame index {frame_index} out of range (sprite has " .. #spr.frames .. " frame(s), 1-based). Tip: call add_frame first.") return end
 
-    {FIND_LAYER}
-    local target = find_layer(spr, "{safe_layer_name}")
-    if not target then print("ERROR:Layer not found") return end
+    {ENSURE_LAYER}
+    {LAYER_NAMES}
+    local target = ensure_layer(spr, "{safe_layer_name}", {create_flag})
+    if not target then print("ERROR:Layer '{safe_layer_name}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first; drawing tools auto-create top-level layers when create_if_missing=true.") return end
 
     app.transaction(function()
         app.activeLayer = target
@@ -614,7 +629,7 @@ async def draw_circle_at(
         radius (int): The radius of the circle.
         color (str, optional): The color to draw the circle with. Defaults to "#000000".
         fill (bool, optional): Whether to fill the circle. Defaults to False.
-        create_if_missing (bool, optional): Whether to create the layer if it doesn't exist. Defaults to True.
+        create_if_missing (bool, optional): Create the layer (top-level names only; never group paths) and cel if they don't exist. Defaults to True.
     """
     filename, err = prepare_filename(filename)
     if err:
@@ -632,11 +647,12 @@ async def draw_circle_at(
     if not spr then print("ERROR:No active sprite") return end
 
     local idx = {frame_index}
-    if idx < 1 or idx > #spr.frames then print("ERROR:Frame index out of range") return end
+    if idx < 1 or idx > #spr.frames then print("ERROR:Frame index {frame_index} out of range (sprite has " .. #spr.frames .. " frame(s), 1-based). Tip: call add_frame first.") return end
 
-    {FIND_LAYER}
-    local target = find_layer(spr, "{safe_layer_name}")
-    if not target then print("ERROR:Layer not found") return end
+    {ENSURE_LAYER}
+    {LAYER_NAMES}
+    local target = ensure_layer(spr, "{safe_layer_name}", {create_flag})
+    if not target then print("ERROR:Layer '{safe_layer_name}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first; drawing tools auto-create top-level layers when create_if_missing=true.") return end
 
     app.transaction(function()
         app.activeLayer = target
@@ -688,7 +704,7 @@ async def fill_area_at(
         x (int): The x coordinate of the point to start filling from.
         y (int): The y coordinate of the point to start filling from.
         color (str, optional): The color to fill the area with. Defaults to "#000000".
-        create_if_missing (bool, optional): Whether to create the layer if it doesn't exist. Defaults to True.
+        create_if_missing (bool, optional): Create the layer (top-level names only; never group paths) and cel if they don't exist. Defaults to True.
     """
     filename, err = prepare_filename(filename)
     if err:
@@ -706,11 +722,12 @@ async def fill_area_at(
     if not spr then print("ERROR:No active sprite") return end
 
     local idx = {frame_index}
-    if idx < 1 or idx > #spr.frames then print("ERROR:Frame index out of range") return end
+    if idx < 1 or idx > #spr.frames then print("ERROR:Frame index {frame_index} out of range (sprite has " .. #spr.frames .. " frame(s), 1-based). Tip: call add_frame first.") return end
 
-    {FIND_LAYER}
-    local target = find_layer(spr, "{safe_layer_name}")
-    if not target then print("ERROR:Layer not found") return end
+    {ENSURE_LAYER}
+    {LAYER_NAMES}
+    local target = ensure_layer(spr, "{safe_layer_name}", {create_flag})
+    if not target then print("ERROR:Layer '{safe_layer_name}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first; drawing tools auto-create top-level layers when create_if_missing=true.") return end
 
     app.transaction(function()
         app.activeLayer = target
@@ -758,7 +775,7 @@ async def draw_polygon(
         points (List[Dict[str, int]]): The list of points to draw the polygon.
         color (str, optional): The color to draw the polygon with. Defaults to "#000000".
         fill (bool, optional): Whether to fill the polygon. Defaults to False.
-        create_if_missing (bool, optional): Whether to create the layer if it doesn't exist. Defaults to True.
+        create_if_missing (bool, optional): Create the layer (top-level names only; never group paths) and cel if they don't exist. Defaults to True.
     """
     filename, err = prepare_filename(filename)
     if err:
@@ -778,7 +795,8 @@ async def draw_polygon(
     script = f"""
     {NORMALIZE_CEL}
     {PSET}
-    {FIND_LAYER}
+    {ENSURE_LAYER}
+    {LAYER_NAMES}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
@@ -832,10 +850,10 @@ async def draw_polygon(
     end
 
     local idx = {frame_index}
-    if idx < 1 or idx > #spr.frames then print("ERROR:Frame index out of range") return end
+    if idx < 1 or idx > #spr.frames then print("ERROR:Frame index {frame_index} out of range (sprite has " .. #spr.frames .. " frame(s), 1-based). Tip: call add_frame first.") return end
 
-    local target = find_layer(spr, "{safe_layer_name}")
-    if not target then print("ERROR:Layer not found") return end
+    local target = ensure_layer(spr, "{safe_layer_name}", {create_flag})
+    if not target then print("ERROR:Layer '{safe_layer_name}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first; drawing tools auto-create top-level layers when create_if_missing=true.") return end
 
     app.transaction(function()
         app.activeLayer = target
@@ -884,7 +902,7 @@ async def draw_path(
         points (List[Dict[str, int]]): The points to draw the path with.
         color (str, optional): The color to draw the path with. Defaults to "#000000".
         thickness (int, optional): The thickness of the path. Defaults to 1.
-        create_if_missing (bool, optional): Whether to create the layer if it doesn't exist. Defaults to True.
+        create_if_missing (bool, optional): Create the layer (top-level names only; never group paths) and cel if they don't exist. Defaults to True.
     """
     filename, err = prepare_filename(filename)
     if err:
@@ -903,7 +921,8 @@ async def draw_path(
     script = f"""
     {NORMALIZE_CEL}
     {PSET}
-    {FIND_LAYER}
+    {ENSURE_LAYER}
+    {LAYER_NAMES}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
@@ -936,10 +955,10 @@ async def draw_path(
     end
 
     local idx = {frame_index}
-    if idx < 1 or idx > #spr.frames then print("ERROR:Frame index out of range") return end
+    if idx < 1 or idx > #spr.frames then print("ERROR:Frame index {frame_index} out of range (sprite has " .. #spr.frames .. " frame(s), 1-based). Tip: call add_frame first.") return end
 
-    local target = find_layer(spr, "{safe_layer_name}")
-    if not target then print("ERROR:Layer not found") return end
+    local target = ensure_layer(spr, "{safe_layer_name}", {create_flag})
+    if not target then print("ERROR:Layer '{safe_layer_name}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first; drawing tools auto-create top-level layers when create_if_missing=true.") return end
 
     app.transaction(function()
         app.activeLayer = target
@@ -991,7 +1010,7 @@ async def apply_gradient_rect(
         color_start (str): The start color of the gradient.
         color_end (str): The end color of the gradient.
         horizontal (bool, optional): Whether to draw the gradient horizontally. Defaults to True.
-        create_if_missing (bool, optional): Whether to create the layer if it doesn't exist. Defaults to True.
+        create_if_missing (bool, optional): Create the layer (top-level names only; never group paths) and cel if they don't exist. Defaults to True.
     """
     filename, err = prepare_filename(filename)
     if err:
@@ -1015,15 +1034,16 @@ async def apply_gradient_rect(
     script = f"""
     {NORMALIZE_CEL}
     {PSET}
-    {FIND_LAYER}
+    {ENSURE_LAYER}
+    {LAYER_NAMES}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
     local idx = {frame_index}
-    if idx < 1 or idx > #spr.frames then print("ERROR:Frame index out of range") return end
+    if idx < 1 or idx > #spr.frames then print("ERROR:Frame index {frame_index} out of range (sprite has " .. #spr.frames .. " frame(s), 1-based). Tip: call add_frame first.") return end
 
-    local target = find_layer(spr, "{safe_layer_name}")
-    if not target then print("ERROR:Layer not found") return end
+    local target = ensure_layer(spr, "{safe_layer_name}", {create_flag})
+    if not target then print("ERROR:Layer '{safe_layer_name}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first; drawing tools auto-create top-level layers when create_if_missing=true.") return end
 
     app.transaction(function()
         app.activeLayer = target
@@ -1086,7 +1106,7 @@ async def draw_ellipse_at(
         radius_y: Vertical radius in pixels
         color: Hex color code (default "#000000")
         fill: Fill the ellipse instead of outlining it
-        create_if_missing: Create the cel if it does not exist
+        create_if_missing: Create the layer (top-level names only) and cel if they don't exist
     """
     filename, err = prepare_filename(filename)
     if err:
@@ -1106,11 +1126,12 @@ async def draw_ellipse_at(
     if not spr then print("ERROR:No active sprite") return end
 
     local idx = {frame_index}
-    if idx < 1 or idx > #spr.frames then print("ERROR:Frame index out of range") return end
+    if idx < 1 or idx > #spr.frames then print("ERROR:Frame index {frame_index} out of range (sprite has " .. #spr.frames .. " frame(s), 1-based). Tip: call add_frame first.") return end
 
-    {FIND_LAYER}
-    local target = find_layer(spr, "{safe_layer_name}")
-    if not target then print("ERROR:Layer not found") return end
+    {ENSURE_LAYER}
+    {LAYER_NAMES}
+    local target = ensure_layer(spr, "{safe_layer_name}", {create_flag})
+    if not target then print("ERROR:Layer '{safe_layer_name}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first; drawing tools auto-create top-level layers when create_if_missing=true.") return end
 
     app.transaction(function()
         app.activeLayer = target

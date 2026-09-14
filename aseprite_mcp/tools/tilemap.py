@@ -1,6 +1,6 @@
 import json
 from typing import List, Dict, Any
-from ..core.commands import AsepriteCommand, lua_escape
+from ..core.commands import AsepriteCommand, lua_escape, parse_pixel_xy
 from ..core.lua import FIND_LAYER
 from ..core.state import prepare_filename
 from .. import mcp
@@ -105,8 +105,13 @@ async def draw_on_tile(filename: str = "", *, layer_name: str, tile_index: int, 
         if rgb is None:
             return f"Invalid color value: {pixel.get('color')}"
         r, g, b = rgb
-        x = int(pixel.get("x", 0))
-        y = int(pixel.get("y", 0))
+        xy = parse_pixel_xy(pixel)
+        if xy is None:
+            return (
+                f"Invalid pixel coordinates: x={pixel.get('x')!r}, "
+                f"y={pixel.get('y')!r} — must be integers"
+            )
+        x, y = xy
         puts.append(
             f"        put(img, {x}, {y}, app.pixelColor.rgba({r}, {g}, {b}, 255))"
         )

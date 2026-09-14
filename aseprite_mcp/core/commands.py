@@ -19,6 +19,19 @@ def lua_escape(s: str) -> str:
     )
 
 
+def parse_pixel_xy(pixel: dict) -> tuple[int, int] | None:
+    """Coerce a pixel dict's x/y to integers, or None when invalid.
+
+    `pixels` tool arguments are typed Dict[str, Any], so x/y values are
+    not schema-validated before being interpolated into Lua scripts;
+    they must be plain integers there.
+    """
+    try:
+        return int(pixel.get("x", 0)), int(pixel.get("y", 0))
+    except (TypeError, ValueError):
+        return None
+
+
 def reject_traversal(path: str) -> str | None:
     """Reject parent-directory traversal in a user-supplied path.
 
