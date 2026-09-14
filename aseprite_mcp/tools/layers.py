@@ -1,5 +1,5 @@
 from ..core.commands import AsepriteCommand, lua_escape
-from ..core.lua import FIND_LAYER
+from ..core.lua import FIND_LAYER, LAYER_NAMES
 from ..core.state import prepare_filename
 from .. import mcp
 
@@ -42,11 +42,12 @@ async def delete_layer(filename: str = "", *, layer_name: str) -> str:
     safe_layer = lua_escape(layer_name)
     script = f"""
     {FIND_LAYER}
+    {LAYER_NAMES}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
     local target = find_layer(spr, "{safe_layer}")
-    if not target then print("ERROR:Layer not found") return end
+    if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
     if #spr.layers <= 1 then print("ERROR:Cannot delete the only layer") return end
 
     app.transaction(function()
@@ -83,11 +84,12 @@ async def rename_layer(filename: str = "", *, layer_name: str, new_name: str) ->
     safe_new = lua_escape(new_name)
     script = f"""
     {FIND_LAYER}
+    {LAYER_NAMES}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
     local target = find_layer(spr, "{safe_layer}")
-    if not target then print("ERROR:Layer not found") return end
+    if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
 
     app.transaction(function()
         target.name = "{safe_new}"
@@ -129,16 +131,17 @@ async def duplicate_layer(filename: str = "", *, layer_name: str, new_name: str 
     safe_group = lua_escape(group)
     script = f"""
     {FIND_LAYER}
+    {LAYER_NAMES}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
     local src = find_layer(spr, "{safe_layer}")
-    if not src then print("ERROR:Layer not found") return end
+    if not src then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
 
     local parent = nil
     if "{safe_group}" ~= "" then
         parent = find_layer(spr, "{safe_group}")
-        if not parent then print("ERROR:Group not found") return end
+        if not parent then print("ERROR:Group '{safe_group}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_group first, or check get_sprite_info for the exact group names.") return end
         if not parent.isGroup then print("ERROR:Target is not a group") return end
     end
 
@@ -191,11 +194,12 @@ async def reorder_layer(filename: str = "", *, layer_name: str, position: int) -
     safe_layer = lua_escape(layer_name)
     script = f"""
     {FIND_LAYER}
+    {LAYER_NAMES}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
     local target = find_layer(spr, "{safe_layer}")
-    if not target then print("ERROR:Layer not found") return end
+    if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
     if {position} > #spr.layers then print("ERROR:Position out of range") return end
 
     app.transaction(function()
@@ -236,11 +240,12 @@ async def set_layer_blend_mode(filename: str = "", *, layer_name: str, mode: str
     safe_layer = lua_escape(layer_name)
     script = f"""
     {FIND_LAYER}
+    {LAYER_NAMES}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
     local target = find_layer(spr, "{safe_layer}")
-    if not target then print("ERROR:Layer not found") return end
+    if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
 
     app.transaction(function()
         target.blendMode = {blend}
@@ -272,11 +277,12 @@ async def merge_layer_down(filename: str = "", *, layer_name: str) -> str:
     safe_layer = lua_escape(layer_name)
     script = f"""
     {FIND_LAYER}
+    {LAYER_NAMES}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
     local target = find_layer(spr, "{safe_layer}")
-    if not target then print("ERROR:Layer not found") return end
+    if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
     if target.stackIndex <= 1 then print("ERROR:Layer is the bottom layer; nothing to merge into") return end
 
     app.activeLayer = target

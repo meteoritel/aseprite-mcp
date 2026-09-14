@@ -241,14 +241,25 @@ async def extract_palette(
     the resulting palette to the sprite and returns it. NOTE: mutates the
     sprite's palette. Sprite must be in RGB mode.
 
+    `max_colors` is a slot budget, not a promise of that many colours:
+    Aseprite always reserves palette slot 0 for the sprite's transparent
+    colour, and the quantiser's median cut can also come up short. Expect at
+    most max_colors - 1 usable colours, sometimes fewer — and asking for
+    max_colors + 1 does not reliably recover the difference. The returned
+    `palette_size` and `max_colors` make the shortfall visible.
+
     Args:
         filename: Aseprite file to modify (optional; defaults to the
             session's active file)
-        max_colors: palette size cap, 1..256 (fewer if the art has fewer)
+        max_colors: palette slot cap, 1..256 (fewer if the art has fewer)
         with_alpha: include alpha when quantizing
 
     Returns:
-        JSON {colors: [#RRGGBB, ...], count}
+        JSON {colors: [#RRGGBB, ...], count, transparent_index, max_colors,
+        palette_size}. The palette's transparent slot is NOT a colour and is
+        reported separately as transparent_index (null when the palette has
+        none), so `count` (= palette_size - 1 when the slot is present) is
+        the number of usable colours.
     """
     filename, err = prepare_filename(filename)
     if err:
@@ -264,14 +275,43 @@ async def extract_palette(
     end)
     spr:saveAs(spr.filename)
     local pal = spr.palettes[1]
+    -- Slot 0 of an Aseprite palette is conventionally the transparent colour
+    -- (alpha 0). It paints nothing, so listing it as a colour invents a
+    -- duplicate "#000000" whenever the art really contains black; report it
+    -- apart from the colours instead.
+    print("PALETTE_SIZE:" .. #pal)
+    local transparent_index = -1
     for i = 0, #pal - 1 do
         local c = pal:getColor(i)
-        print(string.format("PALETTE:#%02X%02X%02X", c.red, c.green, c.blue))
+        if c.alpha == 0 then
+            if transparent_index < 0 then transparent_index = i end
+        else
+            print(string.format("PALETTE:#%02X%02X%02X", c.red, c.green, c.blue))
+        end
     end
+    print("TRANSPARENT:" .. transparent_index)
     print("OK")
     """
     success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
     if not success:
         return f"Failed to extract palette: {output}"
     colors = [ln[len("PALETTE:"):] for ln in output.splitlines() if ln.startswith("PALETTE:")]
-    return json.dumps({"colors": colors, "count": len(colors)})
+    transparent_index = None
+    palette_size = None
+    for line in output.splitlines():
+        if line.startswith("TRANSPARENT:"):
+            value = int(line[len("TRANSPARENT:"):])
+            transparent_index = value if value >= 0 else None
+        elif line.startswith("PALETTE_SIZE:"):
+            palette_size = int(line[len("PALETTE_SIZE:"):])
+    if palette_size is None:
+        # Reconstruct rather than under-report: the transparent slot is a
+        # real slot even though it never shows up in `colors`.
+        palette_size = len(colors) + (1 if transparent_index is not None else 0)
+    return json.dumps({
+        "colors": colors,
+        "count": len(colors),
+        "transparent_index": transparent_index,
+        "max_colors": max_colors,
+        "palette_size": palette_size,
+    })

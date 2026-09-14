@@ -1,5 +1,5 @@
 from ..core.commands import AsepriteCommand, lua_escape
-from ..core.lua import FIND_LAYER
+from ..core.lua import FIND_LAYER, LAYER_NAMES
 from ..core.state import prepare_filename
 from .. import mcp
 
@@ -31,8 +31,9 @@ async def flip_layer(filename: str = "", *, layer_name: str, frame_index: int, d
     if idx < 1 or idx > #spr.frames then print("ERROR:Frame index out of range") return end
 
     {FIND_LAYER}
+    {LAYER_NAMES}
     local target = find_layer(spr, "{safe_layer}")
-    if not target then print("ERROR:Layer not found") return end
+    if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
 
     local cel = target:cel(spr.frames[idx])
     if not cel then print("ERROR:No cel at that layer/frame") return end
@@ -142,8 +143,9 @@ async def rotate_layer(filename: str = "", *, layer_name: str, frame_index: int,
     if idx < 1 or idx > #spr.frames then print("ERROR:Frame index out of range") return end
 
     {FIND_LAYER}
+    {LAYER_NAMES}
     local target = find_layer(spr, "{safe_layer}")
-    if not target then print("ERROR:Layer not found") return end
+    if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
 
     local cel = target:cel(spr.frames[idx])
     if not cel then print("ERROR:No cel at that layer/frame") return end

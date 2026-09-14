@@ -1,5 +1,5 @@
 from ..core.commands import AsepriteCommand, lua_escape
-from ..core.lua import FIND_LAYER, NORMALIZE_CEL, PSET
+from ..core.lua import FIND_LAYER, LAYER_NAMES, NORMALIZE_CEL, PSET
 from ..core.state import prepare_filename
 from ..core.colors import parse_hex_color
 from .. import mcp
@@ -39,6 +39,7 @@ async def move_region(filename: str = "", *, layer_name: str, frame_index: int, 
     safe_layer = lua_escape(layer_name)
     script = f"""
     {FIND_LAYER}
+    {LAYER_NAMES}
     {NORMALIZE_CEL}
     {PSET}
     local spr = app.activeSprite
@@ -48,7 +49,7 @@ async def move_region(filename: str = "", *, layer_name: str, frame_index: int, 
     if idx < 1 or idx > #spr.frames then print("ERROR:Frame index out of range") return end
 
     local target = find_layer(spr, "{safe_layer}")
-    if not target then print("ERROR:Layer not found") return end
+    if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
 
     app.transaction(function()
         local cel = normalize_cel(spr, target, spr.frames[idx], false)
@@ -125,6 +126,7 @@ async def copy_region(filename: str = "", *, layer_name: str, frame_index: int, 
 
     script = f"""
     {FIND_LAYER}
+    {LAYER_NAMES}
     {NORMALIZE_CEL}
     {PSET}
     local spr = app.activeSprite
@@ -136,9 +138,9 @@ async def copy_region(filename: str = "", *, layer_name: str, frame_index: int, 
     if dst_idx < 1 or dst_idx > #spr.frames then print("ERROR:Target frame index out of range") return end
 
     local src_layer = find_layer(spr, "{safe_layer}")
-    if not src_layer then print("ERROR:Source layer not found") return end
+    if not src_layer then print("ERROR:Source layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
     local dst_layer = find_layer(spr, "{safe_target_layer}")
-    if not dst_layer then print("ERROR:Target layer not found") return end
+    if not dst_layer then print("ERROR:Target layer '{safe_target_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
 
     app.transaction(function()
         local src_cel = normalize_cel(spr, src_layer, spr.frames[src_idx], false)
@@ -208,6 +210,7 @@ async def erase_region(filename: str = "", *, layer_name: str, frame_index: int,
     safe_layer = lua_escape(layer_name)
     script = f"""
     {FIND_LAYER}
+    {LAYER_NAMES}
     {NORMALIZE_CEL}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
@@ -216,7 +219,7 @@ async def erase_region(filename: str = "", *, layer_name: str, frame_index: int,
     if idx < 1 or idx > #spr.frames then print("ERROR:Frame index out of range") return end
 
     local target = find_layer(spr, "{safe_layer}")
-    if not target then print("ERROR:Layer not found") return end
+    if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
 
     app.transaction(function()
         local cel = normalize_cel(spr, target, spr.frames[idx], false)
@@ -267,6 +270,7 @@ async def erase_color(filename: str = "", *, layer_name: str, frame_index: int, 
     safe_layer = lua_escape(layer_name)
     script = f"""
     {FIND_LAYER}
+    {LAYER_NAMES}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
@@ -274,7 +278,7 @@ async def erase_color(filename: str = "", *, layer_name: str, frame_index: int, 
     if idx < 1 or idx > #spr.frames then print("ERROR:Frame index out of range") return end
 
     local target = find_layer(spr, "{safe_layer}")
-    if not target then print("ERROR:Layer not found") return end
+    if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
 
     local cel = target:cel(spr.frames[idx])
     if not cel then print("ERROR:No cel at that layer/frame") return end

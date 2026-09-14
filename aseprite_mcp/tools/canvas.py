@@ -2,7 +2,7 @@ import os
 
 from ..core.commands import AsepriteCommand, lua_escape
 from ..core.state import prepare_filename, set_active_file
-from ..core.lua import FIND_LAYER
+from ..core.lua import FIND_LAYER, LAYER_NAMES
 from .. import mcp
 
 @mcp.tool()
@@ -65,13 +65,14 @@ async def add_layer(filename: str = "", *, layer_name: str, group: str = "") -> 
     safe_group = lua_escape(group)
     script = f"""
     {FIND_LAYER}
+    {LAYER_NAMES}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
     local parent = nil
     if "{safe_group}" ~= "" then
         parent = find_layer(spr, "{safe_group}")
-        if not parent then print("ERROR:Group not found") return end
+        if not parent then print("ERROR:Group '{safe_group}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_group first, or check get_sprite_info for the exact group names.") return end
         if not parent.isGroup then print("ERROR:Target is not a group") return end
     end
 
@@ -114,13 +115,14 @@ async def add_group(filename: str = "", *, group_name: str, parent_group: str = 
     safe_parent = lua_escape(parent_group)
     script = f"""
     {FIND_LAYER}
+    {LAYER_NAMES}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
     local parent = nil
     if "{safe_parent}" ~= "" then
         parent = find_layer(spr, "{safe_parent}")
-        if not parent then print("ERROR:Parent group not found") return end
+        if not parent then print("ERROR:Group '{safe_parent}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_group first, or check get_sprite_info for the exact group names.") return end
         if not parent.isGroup then print("ERROR:Target is not a group") return end
     end
 
@@ -267,6 +269,7 @@ async def set_layer(filename: str = "", *, layer_name: str, create_if_missing: b
     if not spr then print("ERROR:No active sprite") return end
 
     {FIND_LAYER}
+    {LAYER_NAMES}
     local target = find_layer(spr, "{safe_layer_name}")
 
     app.transaction(function()

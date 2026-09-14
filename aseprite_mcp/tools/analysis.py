@@ -4,13 +4,48 @@ from ..core.commands import AsepriteCommand, lua_escape
 from ..core.state import prepare_filename
 from .. import mcp
 
-# Render a frame of the (cloned, flattened) sprite into a canvas-sized
-# RGB image. Used by the analysis tools so layer offsets and trimmed
-# cels do not skew results.
-_FLATTEN_FRAME = """
-local function flatten_frame(clone, frame_idx, bg)
-    local layer = clone.layers[#clone.layers]
-    local img = Image(clone.width, clone.height, ColorMode.RGB)
+# Composite the *visible* layers of one frame into a canvas-sized RGB
+# image. Used by the analysis tools so layer offsets and trimmed cels do
+# not skew results.
+#
+# Sprite:flatten() (Aseprite 1.3.x) merges hidden layers too, so a flattened
+# clone reports colours the player never sees. Rather than re-implementing the
+# renderer — blend modes, group opacity and tilemap rasterisation are all easy
+# to get subtly wrong — drop every invisible layer from a throwaway clone and
+# only then flatten. The merge stays Aseprite's own code, so the result agrees
+# with export_frame pixel for pixel (tests/test_visibility.py asserts that).
+_COMPOSE_FRAME = """
+local function visible_clone(spr)
+    local clone = Sprite(spr)
+
+    -- flatten() needs a layer to produce, and this also keeps the sprite from
+    -- reaching zero layers while the hidden ones are being deleted.
+    local keep = clone:newLayer()
+    keep.name = "__visible_only__"
+
+    local doomed = {}
+    local function scan(layers)
+        for _, layer in ipairs(layers) do
+            if not layer.isVisible then
+                doomed[#doomed + 1] = layer
+            elseif layer.isGroup then
+                -- A hidden group takes its children with it, so do not descend
+                -- into it: they would be collected twice and the second delete
+                -- would fail.
+                scan(layer.layers)
+            end
+        end
+    end
+    scan(clone.layers)
+    for _, layer in ipairs(doomed) do clone:deleteLayer(layer) end
+
+    clone:flatten()
+    return clone
+end
+
+local function compose_frame(spr, frame_idx, bg)
+    local clone = visible_clone(spr)
+    local img = Image(spr.width, spr.height, ColorMode.RGB)
     if bg then
         for py = 0, img.height - 1 do
             for px = 0, img.width - 1 do
@@ -18,6 +53,7 @@ local function flatten_frame(clone, frame_idx, bg)
             end
         end
     end
+    local layer = clone.layers[#clone.layers]
     local cel = layer:cel(clone.frames[frame_idx])
     if cel then
         img:drawImage(cel.image, cel.position)
@@ -65,18 +101,15 @@ async def render_onion_skin(filename: str = "", *, frame_index: int, output_file
 
     safe_out = lua_escape(os.path.abspath(output_filename).replace("\\", "/"))
     script = f"""
-    {_FLATTEN_FRAME}
+    {_COMPOSE_FRAME}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
     local idx = {frame_index}
     if idx < 1 or idx > #spr.frames then print("ERROR:Frame index out of range") return end
 
-    local clone = Sprite(spr)
-    clone:flatten()
-
     local white = app.pixelColor.rgba(255, 255, 255, 255)
-    local comp = Image(clone.width, clone.height, ColorMode.RGB)
+    local comp = Image(spr.width, spr.height, ColorMode.RGB)
     for py = 0, comp.height - 1 do
         for px = 0, comp.width - 1 do
             comp:putPixel(px, py, white)
@@ -87,16 +120,16 @@ async def render_onion_skin(filename: str = "", *, frame_index: int, output_file
     for offset = {before}, 1, -1 do
         local fi = idx - offset
         if fi >= 1 then
-            comp:drawImage(flatten_frame(clone, fi, nil), Point(0, 0), {ghost_opacity}, BlendMode.NORMAL)
+            comp:drawImage(compose_frame(spr, fi, nil), Point(0, 0), {ghost_opacity}, BlendMode.NORMAL)
         end
     end
     for offset = {after}, 1, -1 do
         local fi = idx + offset
-        if fi <= #clone.frames then
-            comp:drawImage(flatten_frame(clone, fi, nil), Point(0, 0), {ghost_opacity}, BlendMode.NORMAL)
+        if fi <= #spr.frames then
+            comp:drawImage(compose_frame(spr, fi, nil), Point(0, 0), {ghost_opacity}, BlendMode.NORMAL)
         end
     end
-    comp:drawImage(flatten_frame(clone, idx, nil), Point(0, 0), 255, BlendMode.NORMAL)
+    comp:drawImage(compose_frame(spr, idx, nil), Point(0, 0), 255, BlendMode.NORMAL)
 
     local s = {scale}
     local big = Image(comp.width * s, comp.height * s, ColorMode.RGB)
@@ -128,9 +161,10 @@ async def render_onion_skin(filename: str = "", *, frame_index: int, output_file
 async def compare_frames(filename: str = "", *, frame_a: int, frame_b: int) -> str:
     """Compare two frames and report how much they differ.
 
-    Flattens the sprite (non-destructively) and diffs the two frames
-    pixel by pixel. Use while animating to confirm a frame actually
-    changed, or that it did not change too much.
+    Composites the *visible* layers (non-destructively) and diffs the two
+    frames pixel by pixel. Use while animating to confirm a frame actually
+    changed, or that it did not change too much. Hidden layers do not
+    count as a change.
 
     Args:
         filename: Aseprite file to read (optional; defaults to the session's active file)
@@ -146,7 +180,7 @@ async def compare_frames(filename: str = "", *, frame_a: int, frame_b: int) -> s
         return err
 
     script = f"""
-    {_FLATTEN_FRAME}
+    {_COMPOSE_FRAME}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
@@ -156,11 +190,8 @@ async def compare_frames(filename: str = "", *, frame_a: int, frame_b: int) -> s
         print("ERROR:Frame index out of range") return
     end
 
-    local clone = Sprite(spr)
-    clone:flatten()
-
-    local img_a = flatten_frame(clone, a, nil)
-    local img_b = flatten_frame(clone, b, nil)
+    local img_a = compose_frame(spr, a, nil)
+    local img_b = compose_frame(spr, b, nil)
 
     local changed = 0
     local min_x, min_y = math.huge, math.huge
@@ -226,9 +257,10 @@ async def compare_frames(filename: str = "", *, frame_a: int, frame_b: int) -> s
 async def get_color_stats(filename: str = "", frame_index: int = 1, top: int = 16) -> str:
     """Report the colors used in a frame and how often each appears.
 
-    Flattens the sprite (non-destructively) and histograms the frame.
-    Use to check palette discipline: too many near-duplicate colors is
-    a common pixel-art mistake.
+    Composites the *visible* layers (non-destructively) and histograms the
+    frame — hidden layers are excluded, so the counts match what a player
+    sees. Use to check palette discipline: too many near-duplicate colors
+    is a common pixel-art mistake.
 
     Args:
         filename: Aseprite file to read (optional; defaults to the session's active file)
@@ -246,16 +278,14 @@ async def get_color_stats(filename: str = "", frame_index: int = 1, top: int = 1
         return "top must be >= 1"
 
     script = f"""
-    {_FLATTEN_FRAME}
+    {_COMPOSE_FRAME}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
     local idx = {frame_index}
     if idx < 1 or idx > #spr.frames then print("ERROR:Frame index out of range") return end
 
-    local clone = Sprite(spr)
-    clone:flatten()
-    local img = flatten_frame(clone, idx, nil)
+    local img = compose_frame(spr, idx, nil)
 
     local counts = {{}}
     local opaque = 0

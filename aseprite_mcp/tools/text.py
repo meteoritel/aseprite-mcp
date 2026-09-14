@@ -13,7 +13,7 @@ from PIL import Image
 from ..core.commands import AsepriteCommand, lua_escape
 from ..core.state import prepare_filename
 from ..core.colors import parse_hex_color
-from ..core.lua import FIND_LAYER, NORMALIZE_CEL
+from ..core.lua import FIND_LAYER, LAYER_NAMES, NORMALIZE_CEL
 from ..core import fonts as fontlib
 from .. import mcp
 
@@ -230,7 +230,7 @@ async def draw_text(filename: str = "", *, text: str, x: int, y: int, font: str,
     create_layer = (
         f'''
         if not target then
-            if not {str(create_if_missing).lower()} then print("ERROR:Layer not found") return end
+            if not {str(create_if_missing).lower()} then print("ERROR:Layer '{lua_escape(layer_name)}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: pass create_if_missing=true (the default) or call add_layer first.") return end
             target = spr:newLayer()
             target.name = "{lua_escape(layer_name)}"
         end''' if layer_name else
@@ -240,6 +240,7 @@ async def draw_text(filename: str = "", *, text: str, x: int, y: int, font: str,
 
     script = f"""
     {FIND_LAYER}
+    {LAYER_NAMES}
     {NORMALIZE_CEL}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end

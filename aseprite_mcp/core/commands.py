@@ -9,10 +9,17 @@ dotenv.load_dotenv(dotenv_path=_ENV_PATH)
 
 
 def lua_escape(s: str) -> str:
-    """Escape a string for safe embedding inside a Lua double-quoted string literal."""
+    """Escape a string for safe embedding inside a Lua string literal.
+
+    Both quote styles are escaped because tool scripts embed layer names in
+    double quotes (`find_layer(spr, "...")`) and echo them back in
+    single-quoted error text (`Layer '...' not found`). Lua accepts \\' and
+    \\" in either style, so escaping both is safe for both.
+    """
     return (
         s.replace("\\", "\\\\")
          .replace('"', '\\"')
+         .replace("'", "\\'")
          .replace("\n", "\\n")
          .replace("\r", "\\r")
          .replace("\0", "\\0")
@@ -79,7 +86,13 @@ class AsepriteCommand:
             )
             return True, result.stdout
         except subprocess.CalledProcessError as e:
-            return False, e.stderr
+            # Batch-mode Aseprite reports Lua errors (runtime and syntax) on
+            # *stdout* and exits non-zero, leaving stderr empty — reporting
+            # only stderr would surface every crash as an empty message.
+            # Keep stdout first: when both streams carry text the script's own
+            # output is the useful half.
+            parts = [p.strip() for p in (e.stdout, e.stderr) if p and p.strip()]
+            return False, "\n".join(parts)
     
     @staticmethod
     def execute_lua_script(script_content, filename=None):

@@ -1,19 +1,24 @@
 import json
 from ..core.commands import AsepriteCommand, lua_escape
-from ..core.lua import FIND_LAYER
+from ..core.lua import FIND_LAYER, LAYER_NAMES
 from ..core.state import prepare_filename
-from .analysis import _FLATTEN_FRAME
+from .analysis import _COMPOSE_FRAME
 from .. import mcp
 
 
 @mcp.tool()
 async def get_pixel_color(filename: str = "", *, x: int, y: int, layer_name: str = "", frame_index: int = 1) -> str:
-    """Read the RGBA color of a single pixel.
+    """Read the RGBA color of a single pixel from one layer's cel.
+
+    This is a single-cel read: it ignores layer visibility and everything
+    drawn above or below. For "what the player sees", use
+    get_composite_pixel instead. Tilemap layers cannot be read this way —
+    their cel stores tile indexes, so the call is refused with a hint.
 
     Args:
         filename: Aseprite file to read (optional; defaults to the session's active file)
-        x: X coordinate
-        y: Y coordinate
+        x: X coordinate (sprite-global)
+        y: Y coordinate (sprite-global)
         layer_name: Layer to read from (uses active layer when empty)
         frame_index: Frame index starting at 1
     """
@@ -32,10 +37,12 @@ async def get_pixel_color(filename: str = "", *, x: int, y: int, layer_name: str
     local cel = nil
     if "{safe_layer}" ~= "" then
         {FIND_LAYER}
+        {LAYER_NAMES}
         local target = find_layer(spr, "{safe_layer}")
-        if not target then print("ERROR:Layer not found") return end
+        if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
+        if target.isTilemap then print("ERROR:Layer '{safe_layer}' is a tilemap layer: its cel stores tile indexes, not pixels, so a per-pixel read would return an index in the red channel instead of a colour. Existing layers: [" .. layer_names(spr) .. "]. Tip: use get_tile_at for the tile index at a grid cell, or get_composite_pixel / get_composite_rect for the rendered colour.") return end
         cel = target:cel(spr.frames[idx])
-        if not cel then print("ERROR:No cel at that layer/frame") return end
+        if not cel then print("ERROR:No cel on layer '{safe_layer}' at frame {frame_index} (sprite has " .. #spr.frames .. " frame(s), 1-based). Tip: call add_frame first, or draw on this layer/frame.") return end
     else
         app.activeFrame = spr.frames[idx]
         cel = app.activeCel
@@ -74,12 +81,16 @@ async def get_pixel_color(filename: str = "", *, x: int, y: int, layer_name: str
 
 @mcp.tool()
 async def get_pixels_rect(filename: str = "", *, x: int, y: int, width: int, height: int, layer_name: str = "", frame_index: int = 1) -> str:
-    """Read all pixel colors in a rectangular region.
+    """Read all pixel colors in a rectangular region from one layer's cel.
+
+    Single-cel read: layer visibility is ignored and nothing above or below
+    is composited in. For "what the player sees", use get_composite_rect.
+    Tilemap layers are refused — their cel stores tile indexes, not pixels.
 
     Args:
         filename: Aseprite file to read (optional; defaults to the session's active file)
-        x: Top-left x coordinate
-        y: Top-left y coordinate
+        x: Top-left x coordinate (sprite-global)
+        y: Top-left y coordinate (sprite-global)
         width: Width of the region
         height: Height of the region
         layer_name: Layer to read from (uses active layer when empty)
@@ -108,10 +119,12 @@ async def get_pixels_rect(filename: str = "", *, x: int, y: int, width: int, hei
     local cel = nil
     if "{safe_layer}" ~= "" then
         {FIND_LAYER}
+        {LAYER_NAMES}
         local target = find_layer(spr, "{safe_layer}")
-        if not target then print("ERROR:Layer not found") return end
+        if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
+        if target.isTilemap then print("ERROR:Layer '{safe_layer}' is a tilemap layer: its cel stores tile indexes, not pixels, so a per-pixel read would return an index in the red channel instead of a colour. Existing layers: [" .. layer_names(spr) .. "]. Tip: use get_tile_at for the tile index at a grid cell, or get_composite_pixel / get_composite_rect for the rendered colour.") return end
         cel = target:cel(spr.frames[idx])
-        if not cel then print("ERROR:No cel at that layer/frame") return end
+        if not cel then print("ERROR:No cel on layer '{safe_layer}' at frame {frame_index} (sprite has " .. #spr.frames .. " frame(s), 1-based). Tip: call add_frame first, or draw on this layer/frame.") return end
     else
         app.activeFrame = spr.frames[idx]
         cel = app.activeCel
@@ -182,14 +195,12 @@ async def get_composite_pixel(filename: str = "", *, x: int, y: int, frame_index
         return err
 
     script = f"""
-    {_FLATTEN_FRAME}
+    {_COMPOSE_FRAME}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
     local idx = {frame_index}
     if idx < 1 or idx > #spr.frames then print("ERROR:Frame index out of range") return end
-    local clone = Sprite(spr)
-    clone:flatten()
-    local img = flatten_frame(clone, idx, nil)
+    local img = compose_frame(spr, idx, nil)
     local r, g, b, a = 0, 0, 0, 0
     if {x} >= 0 and {y} >= 0 and {x} < img.width and {y} < img.height then
         local pv = img:getPixel({x}, {y})
@@ -239,14 +250,12 @@ async def get_composite_rect(filename: str = "", *, x: int, y: int, width: int, 
 
     x_end, y_end = x + width - 1, y + height - 1
     script = f"""
-    {_FLATTEN_FRAME}
+    {_COMPOSE_FRAME}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
     local idx = {frame_index}
     if idx < 1 or idx > #spr.frames then print("ERROR:Frame index out of range") return end
-    local clone = Sprite(spr)
-    clone:flatten()
-    local img = flatten_frame(clone, idx, nil)
+    local img = compose_frame(spr, idx, nil)
     local iw, ih = img.width, img.height
     for py = {y}, {y_end} do
         for px = {x}, {x_end} do

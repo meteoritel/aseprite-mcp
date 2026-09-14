@@ -2,7 +2,7 @@ import colorsys
 import json
 from typing import List
 from ..core.commands import AsepriteCommand, lua_escape
-from ..core.lua import FIND_LAYER
+from ..core.lua import FIND_LAYER, LAYER_NAMES
 from ..core.colors import parse_hex_color
 from ..core.state import prepare_filename
 from .. import mcp
@@ -177,8 +177,9 @@ async def remap_colors_in_cel_range(filename: str = "", *, layer_name: str, star
     end
 
     {FIND_LAYER}
+    {LAYER_NAMES}
     local target = find_layer(spr, "{safe_layer_name}")
-    if not target then print("ERROR:Layer not found") return end
+    if not target then print("ERROR:Layer '{safe_layer_name}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
 
     local source_frame = {source_idx}
     if source_frame == nil then
@@ -352,6 +353,7 @@ async def quantize_to_palette(
     safe_layer = lua_escape(layer_name)
     script = f"""
     {FIND_LAYER}
+    {LAYER_NAMES}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
@@ -368,7 +370,7 @@ async def quantize_to_palette(
     local layers = {{}}
     if "{safe_layer}" ~= "" then
         local target = find_layer(spr, "{safe_layer}")
-        if not target then print("ERROR:Layer not found") return end
+        if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
         table.insert(layers, target)
     else
         for _, layer in ipairs(spr.layers) do

@@ -6,7 +6,7 @@ wrapper resolves + activates the target BEFORE the command, error-first,
 or a filter silently hits the wrong layer. Verified headless under
 `--batch` with `{ui=false}` (T0, 2026-06-18).
 """
-from .lua import FIND_LAYER
+from .lua import FIND_LAYER, LAYER_NAMES
 from .commands import lua_escape
 
 
@@ -35,6 +35,7 @@ def build_native_command_script(
         sel_set = sel_clear = ""
     return f"""
     {FIND_LAYER}
+    {LAYER_NAMES}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
     local idx = {frame_index}
@@ -42,7 +43,7 @@ def build_native_command_script(
     app.activeFrame = spr.frames[idx]
     if "{safe_layer}" ~= "" then
         local target = find_layer(spr, "{safe_layer}")
-        if not target then print("ERROR:Layer not found") return end
+        if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
         app.activeLayer = target
     end
     {sel_set}

@@ -1,7 +1,7 @@
 import json
 from typing import List, Dict, Any
 from ..core.commands import AsepriteCommand, lua_escape, parse_pixel_xy
-from ..core.lua import FIND_LAYER
+from ..core.lua import FIND_LAYER, LAYER_NAMES
 from ..core.state import prepare_filename
 from .. import mcp
 
@@ -45,6 +45,7 @@ async def create_tilemap_layer(filename: str = "", *, layer_name: str, tile_widt
     safe_layer = lua_escape(layer_name)
     script = f"""
     {FIND_LAYER}
+    {LAYER_NAMES}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
@@ -120,11 +121,12 @@ async def draw_on_tile(filename: str = "", *, layer_name: str, tile_index: int, 
     safe_layer = lua_escape(layer_name)
     script = f"""
     {FIND_LAYER}
+    {LAYER_NAMES}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
     local target = find_layer(spr, "{safe_layer}")
-    if not target then print("ERROR:Layer not found") return end
+    if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
     if not target.isTilemap then print("ERROR:Layer is not a tilemap layer") return end
 
     local ts = target.tileset
@@ -189,6 +191,7 @@ async def set_tiles(filename: str = "", *, layer_name: str, frame_index: int, ti
     safe_layer = lua_escape(layer_name)
     script = f"""
     {FIND_LAYER}
+    {LAYER_NAMES}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
@@ -196,7 +199,7 @@ async def set_tiles(filename: str = "", *, layer_name: str, frame_index: int, ti
     if idx < 1 or idx > #spr.frames then print("ERROR:Frame index out of range") return end
 
     local target = find_layer(spr, "{safe_layer}")
-    if not target then print("ERROR:Layer not found") return end
+    if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
     if not target.isTilemap then print("ERROR:Layer is not a tilemap layer") return end
 
     local ts = target.tileset
@@ -282,6 +285,7 @@ async def get_tile_at(filename: str = "", *, layer_name: str, frame_index: int, 
     safe_layer = lua_escape(layer_name)
     script = f"""
     {FIND_LAYER}
+    {LAYER_NAMES}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
@@ -289,7 +293,7 @@ async def get_tile_at(filename: str = "", *, layer_name: str, frame_index: int, 
     if idx < 1 or idx > #spr.frames then print("ERROR:Frame index out of range") return end
 
     local target = find_layer(spr, "{safe_layer}")
-    if not target then print("ERROR:Layer not found") return end
+    if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
     if not target.isTilemap then print("ERROR:Layer is not a tilemap layer") return end
 
     local grid = spr.gridBounds
@@ -337,11 +341,12 @@ async def get_tilemap_info(filename: str = "", *, layer_name: str) -> str:
     safe_layer = lua_escape(layer_name)
     script = f"""
     {FIND_LAYER}
+    {LAYER_NAMES}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
     local target = find_layer(spr, "{safe_layer}")
-    if not target then print("ERROR:Layer not found") return end
+    if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
     if not target.isTilemap then print("ERROR:Layer is not a tilemap layer") return end
 
     local ts = target.tileset

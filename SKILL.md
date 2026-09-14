@@ -1,115 +1,34 @@
-# Aseprite MCP — Usage Guide for AI Assistants
+# Aseprite MCP — AI 助手使用指南
 
-Read this once at session start. It explains how file handling works so you
-never have to guess where files land or when `filename` is required.
+## 文件处理
 
-## The `filename` parameter is optional almost everywhere
+- 所有涉及精灵文件的工具都接受可选的 `filename`。第一个指明文件的调用会把它记为会话的**活跃文件**；后续调用可省略 `filename` 直接作用于它。会话中途再次传入 `filename` 即可切换文件。
+- `create_canvas` 是例外：其 `filename` **必填**且必须是**绝对路径**（如 `"D:/art/sprites/coin.aseprite"`），相对路径会被拒绝。
+- 其它工具中，绝对路径按原样使用，而相对路径基于 `ASERITE_MCP_WORKSPACE`（若客户端已设置）或 server 的工作目录解析 —— 因此优先使用绝对路径，且导出时 `output_filename` / `data_filename` 一律传绝对路径。
+- 所有位置都拒绝父目录穿越（`..`）。
 
-Every tool that touches a sprite file accepts a `filename` parameter, and it
-is **optional**. The session keeps track of one *active file*:
+## 图层与帧
 
-1. `create_canvas` — or any tool with an explicit `filename` — anchors that
-   file as the active file.
-2. Later calls may **omit `filename`** entirely; they act on the active file.
-3. To switch files mid-session, just pass `filename` explicitly again.
+- 帧号在**所有位置都是 1-based**。
+- **绘图类工具会自动创建图层和 cel**（`create_if_missing=true` 时，这是默认值）：`draw_pixels_at`、`draw_line_at`、`draw_rectangle_at`、`draw_circle_at`、`draw_ellipse_at`、`fill_area_at`、`draw_polygon`、`draw_path`、`apply_gradient_rect`、`apply_dither_pattern`、`apply_dither_gradient`、`draw_text`。因此可以直接对一个尚不存在的图层名作画。
+- 自动创建**只处理顶层图层名**。含 `/` 的名字会被当作 `group/child` 路径解析，永远不会被凭空创建 —— 请先调用 `add_layer(group=…)` / `add_group(…)`。
+- **其余多数工具要求图层已存在** —— 特效、变换、选区、tilemap、调色板、像素读取、多数动画操作。请先调用 `add_layer(layer_name=…)`，或用 `get_sprite_info()` 查询现有图层名。
+- `copy_cel` 可以扩展精灵：当 `create_target_frame=true`（默认值）且 `target_frame` 超出末尾时，会自动补齐缺失的帧，并在回复中说明补了几帧。传 `false` 则改为报错。
 
-If you call a file tool with no `filename` before anything was anchored, you
-get a friendly error — call `create_canvas` first, or pass `filename`.
+## 读取像素：先选对工具族
 
-## `create_canvas` requires an absolute path
+- `get_pixel_color` / `get_pixels_rect` 读取**单个图层自己的 cel** —— 无论该图层是否隐藏，也不管其上方和下方的任何内容。
+- `get_composite_pixel` / `get_composite_rect` / `get_color_stats` / `compare_frames` / `render_onion_skin` 读取**实际可见的结果**：`isVisible=false` 的图层会被排除，因此像素值与导出的 PNG 一致（`render_onion_skin` 会额外在画面及其幽灵帧下铺一层白底）。做配色、对比度、明度检查时用这几个。
+- **tilemap 图层无法逐像素读取** —— tilemap 的 cel 存的是瓦片索引而非像素。上述两个工具会拒绝执行；请用 `get_tile_at` 读取某个格子的瓦片索引，或用 `get_composite_*` 读取渲染后的颜色。
+- `extract_palette(max_colors=N)` 能给出的颜色**最多是 N−1**：Aseprite 固定把调色板 0 号槽留给精灵的透明色（即返回值里的 `transparent_index`），且量化器有时还填不满。`max_colors` 是槽位预算而非承诺 —— 真实槽位数看 `palette_size`，别按 `max_colors` 去规划配色。
 
-`create_canvas` is the one exception: its `filename` is **required** and must
-be an **absolute path** (e.g. `"D:/art/sprites/coin.aseprite"`). Relative
-paths are rejected with an error. This guarantees the new canvas lands
-exactly where the user intends instead of silently inside the MCP server's
-own folder. Decide the destination before calling and spell it out in full.
-
-## Where files are written
-
-- Passing an **absolute path** always writes exactly there. This is the most
-  predictable option — prefer it whenever you know the target directory
-  (and it is mandatory for `create_canvas`).
-- Passing a **relative path** to any other tool resolves against the
-  server's workspace directory:
-  - `ASERITE_MCP_WORKSPACE` environment variable, if the client set one
-    (usually your project folder);
-  - otherwise the server's working directory. Relative export paths can
-    therefore end up inside the server folder — prefer absolute paths here
-    too.
-- Parent-directory traversal (`..`) is rejected everywhere.
-- Export/copy outputs (`output_filename`, `data_filename`) follow the same
-  rule, so pass absolute paths to control where exports land.
-
-## Layers and frames: what gets auto-created
-
-Drawing tools create what they need, so you rarely have to prepare the
-sprite by hand first:
-
-- **Drawing tools auto-create both the layer and the cel** when
-  `create_if_missing=true` (the default). This covers `draw_pixels_at`,
-  `draw_line_at`, `draw_rectangle_at`, `draw_circle_at`, `draw_ellipse_at`,
-  `fill_area_at`, `draw_polygon`, `draw_path`, `apply_gradient_rect` and
-  `draw_text`. You can draw straight onto a name that does not exist yet:
-
-  ```
-  create_canvas(32, 32, filename="D:/art/coin.aseprite")
-  draw_circle_at(layer_name="coin", frame_index=1, center_x=16, center_y=16, radius=8)
-  # layer "coin" and its cel are created on the way in
-  ```
-
-  Auto-create only handles **top-level** layer names. A name containing `/`
-  is read as a `group/child` path and is never fabricated — call
-  `add_layer(group=...)` / `add_group(...)` first.
-
-- **Non-drawing tools require the layer to already exist.** Effects,
-  transforms, selections, pixel reads, palettes, tilemaps and most
-  animation operations (`set_cel_opacity`, `clear_cel`, tween tools, …) do
-  **not** create layers. Call `add_layer(layer_name=...)` first, or check
-  `get_sprite_info()` for the exact names.
-
-- **`copy_cel` grows the sprite when needed.** If `target_frame` is past
-  the last frame and `create_target_frame=true` (the default), the missing
-  frames are appended automatically; the reply says how many were added.
-  Pass `create_target_frame=false` to get an error instead.
-
-- Frame indexes are **1-based** everywhere.
-
-## Recommended workflow
+## 典型工作流
 
 ```
-create_canvas(width, height, filename="D:/art/sprites/coin.aseprite")  # anchors
-draw_pixels_at(layer_name="coin", frame_index=1, pixels=[...])  # layer + cel auto-created
-add_frames(count=3)         # a second frame only if you need one
-set_tag(name="spin", from_frame=1, to_frame=4)
-export_sprite(output_filename="D:/art/sprites/coin.png")   # absolute → exact spot
+create_canvas(32, 32, filename="D:/art/sprites/coin.aseprite")   # 记为活跃文件
+draw_circle_at(layer_name="coin", frame_index=1, center_x=16, center_y=16, radius=8)
+add_frames(count=3)                        # 只在需要更多帧时调用
+export_sprite(output_filename="D:/art/sprites/coin.png")
 ```
 
-Useful extras:
-
-- `get_sprite_info(filename)` shows size, frames, layers and tags of a file.
-  Call it whenever a name or frame index is uncertain — it is cheaper than
-  guessing and retrying.
-- Tools that only read (analysis, pixel_read, quality) also fall back to the
-  active file, so you can inspect without repeating the path.
-- `run_lua_script(filename=...)` opens the active file too when `filename`
-  is omitted.
-
-## Error messages are self-correcting
-
-When something is wrong (no active file, file not found, bad path, unknown
-layer, frame out of range) the tool returns a plain-text message that tells
-you what to do next. Layer and frame errors include the sprite's **current
-state** so you can correct yourself in one step:
-
-```
-Failed to draw circle: Layer 'coin' not found. Existing layers: [Layer 1, body].
-Tip: call add_layer first; drawing tools auto-create top-level layers when
-create_if_missing=true.
-```
-
-```
-Failed to copy cel: Target frame 5 out of range (sprite has 2 frame(s), 1-based).
-Tip: call add_frame first or pass create_target_frame=true.
-```
-
-Read the message and retry; do not guess alternative paths.
+当图层名或帧号不确定时先调用 `get_sprite_info()` —— 比猜测后重试更划算。

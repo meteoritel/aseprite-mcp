@@ -1,5 +1,5 @@
 from ..core.commands import AsepriteCommand, lua_escape
-from ..core.lua import FIND_LAYER, NORMALIZE_CEL, PSET, HSL
+from ..core.lua import ENSURE_LAYER, FIND_LAYER, LAYER_NAMES, NORMALIZE_CEL, PSET, HSL
 from ..core.colors import parse_hex_color
 from ..core.state import prepare_filename
 from .. import mcp
@@ -41,15 +41,16 @@ async def outline_cel(filename: str = "", *, layer_name: str, frame_index: int, 
     safe_layer = lua_escape(layer_name)
     script = f"""
     {FIND_LAYER}
+    {LAYER_NAMES}
     {NORMALIZE_CEL}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
     local idx = {frame_index}
-    if idx < 1 or idx > #spr.frames then print("ERROR:Frame index out of range") return end
+    if idx < 1 or idx > #spr.frames then print("ERROR:Frame index {frame_index} out of range (sprite has " .. #spr.frames .. " frame(s), 1-based). Tip: call add_frame first.") return end
 
     local target = find_layer(spr, "{safe_layer}")
-    if not target then print("ERROR:Layer not found") return end
+    if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
 
     app.transaction(function()
         local cel = normalize_cel(spr, target, spr.frames[idx], false)
@@ -119,14 +120,15 @@ async def replace_color(filename: str = "", *, layer_name: str, frame_index: int
     safe_layer = lua_escape(layer_name)
     script = f"""
     {FIND_LAYER}
+    {LAYER_NAMES}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
     local idx = {frame_index}
-    if idx < 1 or idx > #spr.frames then print("ERROR:Frame index out of range") return end
+    if idx < 1 or idx > #spr.frames then print("ERROR:Frame index {frame_index} out of range (sprite has " .. #spr.frames .. " frame(s), 1-based). Tip: call add_frame first.") return end
 
     local target = find_layer(spr, "{safe_layer}")
-    if not target then print("ERROR:Layer not found") return end
+    if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
 
     local cel = target:cel(spr.frames[idx])
     if not cel then print("ERROR:No cel at that layer/frame") return end
@@ -199,15 +201,16 @@ async def adjust_hsl(filename: str = "", *, layer_name: str, frame_index: int, h
     safe_layer = lua_escape(layer_name)
     script = f"""
     {FIND_LAYER}
+    {LAYER_NAMES}
     {HSL}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
     local idx = {frame_index}
-    if idx < 1 or idx > #spr.frames then print("ERROR:Frame index out of range") return end
+    if idx < 1 or idx > #spr.frames then print("ERROR:Frame index {frame_index} out of range (sprite has " .. #spr.frames .. " frame(s), 1-based). Tip: call add_frame first.") return end
 
     local target = find_layer(spr, "{safe_layer}")
-    if not target then print("ERROR:Layer not found") return end
+    if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
 
     local cel = target:cel(spr.frames[idx])
     if not cel then print("ERROR:No cel at that layer/frame") return end
@@ -266,7 +269,8 @@ async def apply_dither_gradient(filename: str = "", *, layer_name: str, frame_in
         color_start: Hex color at the start of the gradient
         color_end: Hex color at the end of the gradient
         horizontal: Run the gradient left-to-right instead of top-to-bottom
-        create_if_missing: Create the cel if it does not exist
+        create_if_missing: Create the layer (top-level names only; never group
+            paths) and cel if they don't exist
     """
     filename, err = prepare_filename(filename)
     if err:
@@ -286,17 +290,18 @@ async def apply_dither_gradient(filename: str = "", *, layer_name: str, frame_in
 
     safe_layer = lua_escape(layer_name)
     script = f"""
-    {FIND_LAYER}
+    {ENSURE_LAYER}
+    {LAYER_NAMES}
     {NORMALIZE_CEL}
     {PSET}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
     local idx = {frame_index}
-    if idx < 1 or idx > #spr.frames then print("ERROR:Frame index out of range") return end
+    if idx < 1 or idx > #spr.frames then print("ERROR:Frame index {frame_index} out of range (sprite has " .. #spr.frames .. " frame(s), 1-based). Tip: call add_frame first.") return end
 
-    local target = find_layer(spr, "{safe_layer}")
-    if not target then print("ERROR:Layer not found") return end
+    local target = ensure_layer(spr, "{safe_layer}", {create})
+    if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first; dither tools auto-create top-level layers when create_if_missing=true.") return end
 
     local bayer = {{
         {{ 0,  8,  2, 10}},
@@ -358,7 +363,8 @@ async def apply_dither_pattern(filename: str = "", *, layer_name: str, frame_ind
         color_a: Base hex color
         color_b: Mixed-in hex color
         density: Fraction of color_b, 0.0-1.0 (default 0.5)
-        create_if_missing: Create the cel if it does not exist
+        create_if_missing: Create the layer (top-level names only; never group
+            paths) and cel if they don't exist
     """
     filename, err = prepare_filename(filename)
     if err:
@@ -378,17 +384,18 @@ async def apply_dither_pattern(filename: str = "", *, layer_name: str, frame_ind
 
     safe_layer = lua_escape(layer_name)
     script = f"""
-    {FIND_LAYER}
+    {ENSURE_LAYER}
+    {LAYER_NAMES}
     {NORMALIZE_CEL}
     {PSET}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
     local idx = {frame_index}
-    if idx < 1 or idx > #spr.frames then print("ERROR:Frame index out of range") return end
+    if idx < 1 or idx > #spr.frames then print("ERROR:Frame index {frame_index} out of range (sprite has " .. #spr.frames .. " frame(s), 1-based). Tip: call add_frame first.") return end
 
-    local target = find_layer(spr, "{safe_layer}")
-    if not target then print("ERROR:Layer not found") return end
+    local target = ensure_layer(spr, "{safe_layer}", {create})
+    if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first; dither tools auto-create top-level layers when create_if_missing=true.") return end
 
     local bayer = {{
         {{ 0,  8,  2, 10}},
