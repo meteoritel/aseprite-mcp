@@ -1,5 +1,6 @@
 import os
 from ..core.commands import AsepriteCommand, lua_escape, reject_traversal
+from ..core.state import set_active_file
 from ..core.lua import FIND_LAYER
 from .. import mcp
 
@@ -28,6 +29,7 @@ async def create_canvas(width: int, height: int, filename: str = "canvas.aseprit
     success, output = AsepriteCommand.execute_lua_script_checked(script)
 
     if success:
+        set_active_file(filename)
         return f"Canvas created successfully: {filename}"
     else:
         return f"Failed to create canvas: {output}"

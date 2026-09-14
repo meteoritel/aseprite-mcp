@@ -3,6 +3,7 @@ from typing import List, Dict, Any
 from ..core.commands import AsepriteCommand, lua_escape
 from ..core.lua import FIND_LAYER, NORMALIZE_CEL, PSET
 from ..core.colors import parse_hex_color
+from ..core.state import NO_ACTIVE_FILE_ERROR, resolve_filename, set_active_file
 from .. import mcp
 
 
@@ -75,20 +76,24 @@ async def draw_pixels(filename: str, pixels: List[Dict[str, Any]]) -> str:
         return f"Failed to draw pixels: {output}"
 
 @mcp.tool()
-async def draw_line(filename: str, x1: int, y1: int, x2: int, y2: int, color: str = "#000000", thickness: int = 1) -> str:
+async def draw_line(x1: int, y1: int, x2: int, y2: int, color: str = "#000000", thickness: int = 1, filename: str = "") -> str:
     """Draw a line on the canvas.
 
     Args:
-        filename: Name of the Aseprite file to modify
         x1: Starting x coordinate
         y1: Starting y coordinate
         x2: Ending x coordinate
         y2: Ending y coordinate
         color: Hex color code (default: "#000000")
         thickness: Line thickness in pixels (default: 1)
+        filename: Name of the Aseprite file to modify (optional; defaults to the session's active file)
     """
+    filename = resolve_filename(filename)
+    if filename is None:
+        return NO_ACTIVE_FILE_ERROR
     if not os.path.exists(filename):
         return f"File {filename} not found"
+    set_active_file(filename)
 
     rgb = _parse_hex_color(color)
     if rgb is None:
@@ -159,20 +164,24 @@ async def draw_line(filename: str, x1: int, y1: int, x2: int, y2: int, color: st
         return f"Failed to draw line: {output}"
 
 @mcp.tool()
-async def draw_rectangle(filename: str, x: int, y: int, width: int, height: int, color: str = "#000000", fill: bool = False) -> str:
+async def draw_rectangle(x: int, y: int, width: int, height: int, color: str = "#000000", fill: bool = False, filename: str = "") -> str:
     """Draw a rectangle on the canvas.
 
     Args:
-        filename: Name of the Aseprite file to modify
         x: Top-left x coordinate
         y: Top-left y coordinate
         width: Width of the rectangle in pixels (must be > 0)
         height: Height of the rectangle in pixels (must be > 0)
         color: Hex color code (default: "#000000")
         fill: Whether to fill the rectangle (default: False)
+        filename: Name of the Aseprite file to modify (optional; defaults to the session's active file)
     """
+    filename = resolve_filename(filename)
+    if filename is None:
+        return NO_ACTIVE_FILE_ERROR
     if not os.path.exists(filename):
         return f"File {filename} not found"
+    set_active_file(filename)
     if width <= 0 or height <= 0:
         return "Width and height must be > 0"
 
@@ -222,17 +231,21 @@ async def draw_rectangle(filename: str, x: int, y: int, width: int, height: int,
         return f"Failed to draw rectangle: {output}"
 
 @mcp.tool()
-async def fill_area(filename: str, x: int, y: int, color: str = "#000000") -> str:
+async def fill_area(x: int, y: int, color: str = "#000000", filename: str = "") -> str:
     """Fill an area with color using the paint bucket tool.
 
     Args:
-        filename: Name of the Aseprite file to modify
         x: X coordinate to fill from
         y: Y coordinate to fill from
         color: Hex color code (default: "#000000")
+        filename: Name of the Aseprite file to modify (optional; defaults to the session's active file)
     """
+    filename = resolve_filename(filename)
+    if filename is None:
+        return NO_ACTIVE_FILE_ERROR
     if not os.path.exists(filename):
         return f"File {filename} not found"
+    set_active_file(filename)
 
     rgb = _parse_hex_color(color)
     if rgb is None:
@@ -274,19 +287,23 @@ async def fill_area(filename: str, x: int, y: int, color: str = "#000000") -> st
         return f"Failed to fill area: {output}"
 
 @mcp.tool()
-async def draw_circle(filename: str, center_x: int, center_y: int, radius: int, color: str = "#000000", fill: bool = False) -> str:
+async def draw_circle(center_x: int, center_y: int, radius: int, color: str = "#000000", fill: bool = False, filename: str = "") -> str:
     """Draw a circle on the canvas.
 
     Args:
-        filename: Name of the Aseprite file to modify
         center_x: X coordinate of circle center
         center_y: Y coordinate of circle center
         radius: Radius of the circle in pixels
         color: Hex color code (default: "#000000")
         fill: Whether to fill the circle (default: False)
+        filename: Name of the Aseprite file to modify (optional; defaults to the session's active file)
     """
+    filename = resolve_filename(filename)
+    if filename is None:
+        return NO_ACTIVE_FILE_ERROR
     if not os.path.exists(filename):
         return f"File {filename} not found"
+    set_active_file(filename)
 
     rgb = _parse_hex_color(color)
     if rgb is None:
