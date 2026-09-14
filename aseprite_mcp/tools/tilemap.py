@@ -1,8 +1,8 @@
 import json
-import os
 from typing import List, Dict, Any
 from ..core.commands import AsepriteCommand, lua_escape
 from ..core.lua import FIND_LAYER
+from ..core.state import prepare_filename
 from .. import mcp
 
 
@@ -22,12 +22,7 @@ def _parse_hex_color(value: str) -> tuple[int, int, int] | None:
 
 
 @mcp.tool()
-async def create_tilemap_layer(
-    filename: str,
-    layer_name: str,
-    tile_width: int,
-    tile_height: int,
-) -> str:
+async def create_tilemap_layer(filename: str = "", *, layer_name: str, tile_width: int, tile_height: int) -> str:
     """Create a tilemap layer with its own tileset.
 
     Sets the sprite grid to the tile size and adds a tilemap layer.
@@ -35,13 +30,15 @@ async def create_tilemap_layer(
     draw_on_tile (which creates tiles on demand).
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the
+            session's active file)
         layer_name: Name for the new tilemap layer
         tile_width: Tile width in pixels
         tile_height: Tile height in pixels
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if tile_width <= 0 or tile_height <= 0:
         return "Tile dimensions must be > 0"
 
@@ -80,26 +77,23 @@ async def create_tilemap_layer(
 
 
 @mcp.tool()
-async def draw_on_tile(
-    filename: str,
-    layer_name: str,
-    tile_index: int,
-    pixels: List[Dict[str, Any]],
-) -> str:
+async def draw_on_tile(filename: str = "", *, layer_name: str, tile_index: int, pixels: List[Dict[str, Any]]) -> str:
     """Draw pixels onto a tile in a tilemap layer's tileset.
 
     Coordinates are tile-local (0,0 = tile top-left). When tile_index
     equals the current tile count, a new tile is appended automatically.
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the
+            session's active file)
         layer_name: Tilemap layer whose tileset to edit
         tile_index: Tile to draw on (1 = first real tile; 0 is reserved
             for the empty tile and cannot be drawn on)
         pixels: List of {"x": int, "y": int, "color": "#RRGGBB"}
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if tile_index < 1:
         return "tile_index must be >= 1 (tile 0 is the reserved empty tile)"
     if not pixels:
@@ -163,23 +157,20 @@ async def draw_on_tile(
 
 
 @mcp.tool()
-async def set_tiles(
-    filename: str,
-    layer_name: str,
-    frame_index: int,
-    tiles: List[Dict[str, Any]],
-) -> str:
+async def set_tiles(filename: str = "", *, layer_name: str, frame_index: int, tiles: List[Dict[str, Any]]) -> str:
     """Place tiles on a tilemap layer by grid position.
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the
+            session's active file)
         layer_name: Tilemap layer to edit
         frame_index: Frame index starting at 1
         tiles: List of {"col": int, "row": int, "tile_index": int}
             (col/row are grid coordinates; tile_index 0 clears the cell)
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if not tiles:
         return "Tiles list cannot be empty"
 
@@ -265,17 +256,12 @@ async def set_tiles(
 
 
 @mcp.tool()
-async def get_tile_at(
-    filename: str,
-    layer_name: str,
-    frame_index: int,
-    col: int,
-    row: int,
-) -> str:
+async def get_tile_at(filename: str = "", *, layer_name: str, frame_index: int, col: int, row: int) -> str:
     """Read which tile is placed at a grid position.
 
     Args:
-        filename: Aseprite file to read
+        filename: Aseprite file to read (optional; defaults to the
+            session's active file)
         layer_name: Tilemap layer to read
         frame_index: Frame index starting at 1
         col: Grid column (0-based)
@@ -284,8 +270,9 @@ async def get_tile_at(
     Returns:
         JSON with {col, row, tile_index} (0 = empty).
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     safe_layer = lua_escape(layer_name)
     script = f"""
@@ -326,19 +313,21 @@ async def get_tile_at(
 
 
 @mcp.tool()
-async def get_tilemap_info(filename: str, layer_name: str) -> str:
+async def get_tilemap_info(filename: str = "", *, layer_name: str) -> str:
     """Get tilemap layer info: tile size, tile count, and map dimensions.
 
     Args:
-        filename: Aseprite file to read
+        filename: Aseprite file to read (optional; defaults to the
+            session's active file)
         layer_name: Tilemap layer to inspect
 
     Returns:
         JSON with tile_width, tile_height, tile_count (real tiles,
         excluding the empty tile 0), map_cols, map_rows.
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     safe_layer = lua_escape(layer_name)
     script = f"""

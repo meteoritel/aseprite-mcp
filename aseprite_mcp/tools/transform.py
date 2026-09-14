@@ -1,26 +1,22 @@
-import os
 from ..core.commands import AsepriteCommand, lua_escape
 from ..core.lua import FIND_LAYER
+from ..core.state import prepare_filename
 from .. import mcp
 
 
 @mcp.tool()
-async def flip_layer(
-    filename: str,
-    layer_name: str,
-    frame_index: int,
-    direction: str = "horizontal",
-) -> str:
+async def flip_layer(filename: str = "", *, layer_name: str, frame_index: int, direction: str = "horizontal") -> str:
     """Flip a layer's image horizontally or vertically.
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the session's active file)
         layer_name: Layer name to flip
         frame_index: Frame index starting at 1
         direction: "horizontal" or "vertical"
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if direction not in ("horizontal", "vertical"):
         return "direction must be 'horizontal' or 'vertical'"
 
@@ -77,22 +73,18 @@ async def flip_layer(
 
 
 @mcp.tool()
-async def rotate_layer(
-    filename: str,
-    layer_name: str,
-    frame_index: int,
-    angle: int = 90,
-) -> str:
+async def rotate_layer(filename: str = "", *, layer_name: str, frame_index: int, angle: int = 90) -> str:
     """Rotate a layer's image 90, 180, or 270 degrees clockwise.
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the session's active file)
         layer_name: Layer name to rotate
         frame_index: Frame index starting at 1
         angle: Rotation angle: 90, 180, or 270 (clockwise)
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if angle not in (90, 180, 270):
         return "angle must be 90, 180, or 270"
 
@@ -172,16 +164,17 @@ async def rotate_layer(
 
 
 @mcp.tool()
-async def resize_canvas(filename: str, width: int, height: int) -> str:
+async def resize_canvas(filename: str = "", *, width: int, height: int) -> str:
     """Scale the canvas and all its content to new dimensions.
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the session's active file)
         width: New canvas width in pixels
         height: New canvas height in pixels
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if width <= 0 or height <= 0:
         return "Width and height must be > 0"
 
@@ -204,18 +197,19 @@ async def resize_canvas(filename: str, width: int, height: int) -> str:
 
 
 @mcp.tool()
-async def crop_canvas(filename: str, x: int, y: int, width: int, height: int) -> str:
+async def crop_canvas(filename: str = "", *, x: int, y: int, width: int, height: int) -> str:
     """Crop the canvas to the given rectangle, discarding content outside it.
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the session's active file)
         x: Left edge of the crop area
         y: Top edge of the crop area
         width: Width of the crop area
         height: Height of the crop area
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if width <= 0 or height <= 0:
         return "Width and height must be > 0"
 

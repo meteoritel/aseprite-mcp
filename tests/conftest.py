@@ -48,7 +48,7 @@ def sprite(request, base_dir):
     """A fresh 32x32 sprite per test module with a painted 'body' layer."""
     name = request.module.__name__.removeprefix("tests.").removeprefix("test_")
     path = f"{BASE}/{name}.aseprite"
-    ok(run(canvas.create_canvas(32, 32, path)))
-    ok(run(canvas.add_layer(path, "body")))
-    ok(run(drawing.draw_rectangle_at(path, "body", 1, 8, 8, 16, 16, "#D04648", True)))
+    ok(run(canvas.create_canvas(width=32, height=32, filename=path)))
+    ok(run(canvas.add_layer(filename=path, layer_name="body")))
+    ok(run(drawing.draw_rectangle_at(filename=path, layer_name="body", frame_index=1, x=8, y=8, width=16, height=16, color="#D04648", fill=True)))
     return path

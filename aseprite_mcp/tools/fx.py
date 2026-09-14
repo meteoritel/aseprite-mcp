@@ -1,7 +1,7 @@
-import os
 from ..core.commands import AsepriteCommand, lua_escape
 from ..core.lua import FIND_LAYER, NORMALIZE_CEL, PSET, HSL
 from ..core.colors import parse_hex_color
+from ..core.state import prepare_filename
 from .. import mcp
 
 
@@ -12,13 +12,7 @@ def _parse_hex_color(value: str) -> tuple[int, int, int] | None:
 
 
 @mcp.tool()
-async def outline_cel(
-    filename: str,
-    layer_name: str,
-    frame_index: int,
-    color: str = "#000000",
-    include_diagonals: bool = False,
-) -> str:
+async def outline_cel(filename: str = "", *, layer_name: str, frame_index: int, color: str = "#000000", include_diagonals: bool = False) -> str:
     """Add a 1px outline around all opaque pixels of a cel.
 
     Transparent pixels adjacent to opaque pixels are filled with the
@@ -26,15 +20,17 @@ async def outline_cel(
     background.
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the
+            session's active file)
         layer_name: Layer to outline
         frame_index: Frame index starting at 1
         color: Outline hex color (default black)
         include_diagonals: Also outline diagonal neighbors for a thicker,
             rounded outline (default False)
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     rgb = _parse_hex_color(color)
     if rgb is None:
@@ -95,26 +91,21 @@ async def outline_cel(
 
 
 @mcp.tool()
-async def replace_color(
-    filename: str,
-    layer_name: str,
-    frame_index: int,
-    from_color: str,
-    to_color: str,
-    tolerance: int = 0,
-) -> str:
+async def replace_color(filename: str = "", *, layer_name: str, frame_index: int, from_color: str, to_color: str, tolerance: int = 0) -> str:
     """Replace one color with another in a cel, preserving alpha.
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the
+            session's active file)
         layer_name: Layer to operate on
         frame_index: Frame index starting at 1
         from_color: Hex color to replace, e.g. "#FF0000"
         to_color: Replacement hex color
         tolerance: Per-channel tolerance 0-255 (default 0 = exact match)
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     src = _parse_hex_color(from_color)
     dst = _parse_hex_color(to_color)
@@ -179,14 +170,7 @@ async def replace_color(
 
 
 @mcp.tool()
-async def adjust_hsl(
-    filename: str,
-    layer_name: str,
-    frame_index: int,
-    hue_shift: float = 0,
-    saturation_shift: float = 0,
-    lightness_shift: float = 0,
-) -> str:
+async def adjust_hsl(filename: str = "", *, layer_name: str, frame_index: int, hue_shift: float = 0, saturation_shift: float = 0, lightness_shift: float = 0) -> str:
     """Shift hue, saturation, and lightness of all opaque pixels in a cel.
 
     Useful for creating palette-swapped variants and shading: e.g. darken
@@ -194,15 +178,17 @@ async def adjust_hsl(
     scenes.
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the
+            session's active file)
         layer_name: Layer to adjust
         frame_index: Frame index starting at 1
         hue_shift: Degrees to rotate hue, -360 to 360
         saturation_shift: Saturation delta, -100 to 100
         lightness_shift: Lightness delta, -100 to 100
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if not (-360 <= hue_shift <= 360):
         return "hue_shift must be between -360 and 360"
     if not (-100 <= saturation_shift <= 100):
@@ -261,19 +247,7 @@ async def adjust_hsl(
 
 
 @mcp.tool()
-async def apply_dither_gradient(
-    filename: str,
-    layer_name: str,
-    frame_index: int,
-    x: int,
-    y: int,
-    width: int,
-    height: int,
-    color_start: str,
-    color_end: str,
-    horizontal: bool = False,
-    create_if_missing: bool = True,
-) -> str:
+async def apply_dither_gradient(filename: str = "", *, layer_name: str, frame_index: int, x: int, y: int, width: int, height: int, color_start: str, color_end: str, horizontal: bool = False, create_if_missing: bool = True) -> str:
     """Fill a rectangle with a two-color gradient using Bayer 4x4 ordered dithering.
 
     This is the classic pixel-art way to blend two colors without
@@ -281,7 +255,8 @@ async def apply_dither_gradient(
     color_start (top/left) to color_end (bottom/right).
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the
+            session's active file)
         layer_name: Layer to draw on
         frame_index: Frame index starting at 1
         x: Left edge of the rectangle
@@ -293,8 +268,9 @@ async def apply_dither_gradient(
         horizontal: Run the gradient left-to-right instead of top-to-bottom
         create_if_missing: Create the cel if it does not exist
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if width <= 0 or height <= 0:
         return "Width and height must be > 0"
 
@@ -363,19 +339,7 @@ async def apply_dither_gradient(
 
 
 @mcp.tool()
-async def apply_dither_pattern(
-    filename: str,
-    layer_name: str,
-    frame_index: int,
-    x: int,
-    y: int,
-    width: int,
-    height: int,
-    color_a: str,
-    color_b: str,
-    density: float = 0.5,
-    create_if_missing: bool = True,
-) -> str:
+async def apply_dither_pattern(filename: str = "", *, layer_name: str, frame_index: int, x: int, y: int, width: int, height: int, color_a: str, color_b: str, density: float = 0.5, create_if_missing: bool = True) -> str:
     """Fill a rectangle with a uniform Bayer-dithered mix of two colors.
 
     density controls the ratio: 0.0 = all color_a, 0.5 = checkerboard,
@@ -383,7 +347,8 @@ async def apply_dither_pattern(
     mid-tones between two palette colors.
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the
+            session's active file)
         layer_name: Layer to draw on
         frame_index: Frame index starting at 1
         x: Left edge of the rectangle
@@ -395,8 +360,9 @@ async def apply_dither_pattern(
         density: Fraction of color_b, 0.0-1.0 (default 0.5)
         create_if_missing: Create the cel if it does not exist
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if width <= 0 or height <= 0:
         return "Width and height must be > 0"
     if not (0 <= density <= 1):

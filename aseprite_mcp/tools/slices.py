@@ -1,6 +1,6 @@
 import json
-import os
 from ..core.commands import AsepriteCommand, lua_escape
+from ..core.state import prepare_filename
 from .. import mcp
 
 _FIND_SLICE = """
@@ -14,26 +14,21 @@ end
 
 
 @mcp.tool()
-async def create_slice(
-    filename: str,
-    name: str,
-    x: int,
-    y: int,
-    width: int,
-    height: int,
-) -> str:
+async def create_slice(filename: str = "", *, name: str, x: int, y: int, width: int, height: int) -> str:
     """Create a named slice (a rectangular region usable by game engines).
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the
+            session's active file)
         name: Slice name
         x: Left edge of the slice
         y: Top edge of the slice
         width: Slice width
         height: Slice height
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if width <= 0 or height <= 0:
         return "Width and height must be > 0"
     if not name:
@@ -63,29 +58,24 @@ async def create_slice(
 
 
 @mcp.tool()
-async def set_slice_center(
-    filename: str,
-    name: str,
-    x: int,
-    y: int,
-    width: int,
-    height: int,
-) -> str:
+async def set_slice_center(filename: str = "", *, name: str, x: int, y: int, width: int, height: int) -> str:
     """Set a slice's 9-patch center rectangle (relative to the slice origin).
 
     The center defines the stretchable region for 9-patch scaling in
     game engines.
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the
+            session's active file)
         name: Slice name
         x: Center-rect left edge, relative to the slice
         y: Center-rect top edge, relative to the slice
         width: Center-rect width
         height: Center-rect height
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if width <= 0 or height <= 0:
         return "Width and height must be > 0"
 
@@ -113,17 +103,19 @@ async def set_slice_center(
 
 
 @mcp.tool()
-async def set_slice_pivot(filename: str, name: str, x: int, y: int) -> str:
+async def set_slice_pivot(filename: str = "", *, name: str, x: int, y: int) -> str:
     """Set a slice's pivot point (relative to the slice origin).
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the
+            session's active file)
         name: Slice name
         x: Pivot x, relative to the slice
         y: Pivot y, relative to the slice
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     safe_name = lua_escape(name)
     script = f"""
@@ -149,14 +141,19 @@ async def set_slice_pivot(filename: str, name: str, x: int, y: int) -> str:
 
 
 @mcp.tool()
-async def list_slices(filename: str) -> str:
+async def list_slices(filename: str = "") -> str:
     """List all slices with their bounds, 9-patch centers, and pivots.
+
+    Args:
+        filename: Aseprite file to read (optional; defaults to the
+            session's active file)
 
     Returns:
         JSON array of {name, x, y, width, height, center?, pivot?}.
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     # Emit one JSON object per slice (name via Lua %q) instead of a
     # '|'-delimited line, so a '|' (or comma/colon) in a slice name can no
@@ -195,15 +192,17 @@ async def list_slices(filename: str) -> str:
 
 
 @mcp.tool()
-async def delete_slice(filename: str, name: str) -> str:
+async def delete_slice(filename: str = "", *, name: str) -> str:
     """Delete a slice by name.
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the
+            session's active file)
         name: Slice name to delete
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     safe_name = lua_escape(name)
     script = f"""

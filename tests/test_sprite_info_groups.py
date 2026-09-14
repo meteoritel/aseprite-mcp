@@ -7,9 +7,9 @@ from aseprite_mcp.tools import animation, canvas
 
 
 def test_get_sprite_info_enumerates_group_children(sprite):
-    ok(run(canvas.add_group(sprite, "grp")))
-    ok(run(canvas.add_layer(sprite, "child", "grp")))
-    layers = json.loads(run(animation.get_sprite_info(sprite)))["layers"]
+    ok(run(canvas.add_group(filename=sprite, group_name="grp")))
+    ok(run(canvas.add_layer(filename=sprite, layer_name="child", group="grp")))
+    layers = json.loads(run(animation.get_sprite_info(filename=sprite)))["layers"]
     names = [l["name"] for l in layers]
     assert "grp" in names and "child" in names  # nested layer enumerated
     child = next(l for l in layers if l["name"] == "child")

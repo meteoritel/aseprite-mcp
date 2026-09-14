@@ -1,6 +1,6 @@
-import os
 from ..core.commands import AsepriteCommand, lua_escape
 from ..core.lua import FIND_LAYER, NORMALIZE_CEL, PSET
+from ..core.state import prepare_filename
 from ..core.colors import parse_hex_color
 from .. import mcp
 
@@ -12,17 +12,7 @@ def _parse_hex_color(value: str) -> tuple[int, int, int] | None:
 
 
 @mcp.tool()
-async def move_region(
-    filename: str,
-    layer_name: str,
-    frame_index: int,
-    x: int,
-    y: int,
-    width: int,
-    height: int,
-    dest_x: int,
-    dest_y: int,
-) -> str:
+async def move_region(filename: str = "", *, layer_name: str, frame_index: int, x: int, y: int, width: int, height: int, dest_x: int, dest_y: int) -> str:
     """Cut a rectangular region of pixels and paste it at a new position.
 
     Coordinates are sprite-global. The source area is left transparent.
@@ -30,7 +20,7 @@ async def move_region(
     source pixels do not overwrite destination pixels.
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the session's active file)
         layer_name: Layer to operate on
         frame_index: Frame index starting at 1
         x: Left edge of the source region
@@ -40,8 +30,9 @@ async def move_region(
         dest_x: New left edge for the region
         dest_y: New top edge for the region
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if width <= 0 or height <= 0:
         return "Width and height must be > 0"
 
@@ -103,26 +94,14 @@ async def move_region(
 
 
 @mcp.tool()
-async def copy_region(
-    filename: str,
-    layer_name: str,
-    frame_index: int,
-    x: int,
-    y: int,
-    width: int,
-    height: int,
-    dest_x: int,
-    dest_y: int,
-    target_layer_name: str = "",
-    target_frame_index: int = 0,
-) -> str:
+async def copy_region(filename: str = "", *, layer_name: str, frame_index: int, x: int, y: int, width: int, height: int, dest_x: int, dest_y: int, target_layer_name: str = "", target_frame_index: int = 0) -> str:
     """Copy a rectangular region of pixels to another position, layer, or frame.
 
     Coordinates are sprite-global. Fully transparent source pixels do not
     overwrite destination pixels. The destination cel is created when missing.
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the session's active file)
         layer_name: Source layer
         frame_index: Source frame index starting at 1
         x: Left edge of the source region
@@ -134,8 +113,9 @@ async def copy_region(
         target_layer_name: Destination layer (default: same as source)
         target_frame_index: Destination frame (default: same as source)
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if width <= 0 or height <= 0:
         return "Width and height must be > 0"
 
@@ -205,21 +185,13 @@ async def copy_region(
 
 
 @mcp.tool()
-async def erase_region(
-    filename: str,
-    layer_name: str,
-    frame_index: int,
-    x: int,
-    y: int,
-    width: int,
-    height: int,
-) -> str:
+async def erase_region(filename: str = "", *, layer_name: str, frame_index: int, x: int, y: int, width: int, height: int) -> str:
     """Erase (make transparent) a rectangular region of pixels.
 
     Coordinates are sprite-global.
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the session's active file)
         layer_name: Layer to operate on
         frame_index: Frame index starting at 1
         x: Left edge of the region
@@ -227,8 +199,9 @@ async def erase_region(
         width: Region width
         height: Region height
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if width <= 0 or height <= 0:
         return "Width and height must be > 0"
 
@@ -270,24 +243,19 @@ async def erase_region(
 
 
 @mcp.tool()
-async def erase_color(
-    filename: str,
-    layer_name: str,
-    frame_index: int,
-    color: str,
-    tolerance: int = 0,
-) -> str:
+async def erase_color(filename: str = "", *, layer_name: str, frame_index: int, color: str, tolerance: int = 0) -> str:
     """Make all pixels of a given color transparent (like a magic eraser).
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the session's active file)
         layer_name: Layer to operate on
         frame_index: Frame index starting at 1
         color: Hex color to erase, e.g. "#FF00FF"
         tolerance: Per-channel tolerance 0-255 (default 0 = exact match)
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     rgb = _parse_hex_color(color)
     if rgb is None:

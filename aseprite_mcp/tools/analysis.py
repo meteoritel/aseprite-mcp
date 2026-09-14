@@ -1,6 +1,7 @@
 import json
 import os
-from ..core.commands import AsepriteCommand, lua_escape, reject_traversal
+from ..core.commands import AsepriteCommand, lua_escape
+from ..core.state import prepare_filename
 from .. import mcp
 
 # Render a frame of the (cloned, flattened) sprite into a canvas-sized
@@ -27,15 +28,7 @@ end
 
 
 @mcp.tool()
-async def render_onion_skin(
-    filename: str,
-    frame_index: int,
-    output_filename: str,
-    before: int = 1,
-    after: int = 1,
-    scale: int = 4,
-    ghost_opacity: int = 100,
-) -> str:
+async def render_onion_skin(filename: str = "", *, frame_index: int, output_filename: str, before: int = 1, after: int = 1, scale: int = 4, ghost_opacity: int = 100) -> str:
     """Render a frame with neighboring frames as translucent onion-skin ghosts.
 
     Produces a PNG of the given frame composited over ghosted copies of
@@ -45,7 +38,7 @@ async def render_onion_skin(
     positions line up.
 
     Args:
-        filename: Aseprite file to read
+        filename: Aseprite file to read (optional; defaults to the session's active file)
         frame_index: Frame to render, starting at 1
         output_filename: Output PNG path
         before: Number of previous frames to ghost (default 1)
@@ -53,17 +46,20 @@ async def render_onion_skin(
         scale: Integer nearest-neighbor scale factor (default 4)
         ghost_opacity: Opacity of ghost frames, 0-255 (default 100)
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
+    if not output_filename:
+        return "output_filename is required"
+    output_filename, err = prepare_filename(output_filename, must_exist=False, anchor=False)
+    if err:
+        return err
     if scale < 1 or scale > 64:
         return "scale must be between 1 and 64"
     if not (0 <= ghost_opacity <= 255):
         return "ghost_opacity must be between 0 and 255"
     if before < 0 or after < 0:
         return "before and after must be >= 0"
-    err = reject_traversal(output_filename)
-    if err:
-        return err
     if not output_filename.lower().endswith(".png"):
         output_filename = f"{output_filename}.png"
 
@@ -129,7 +125,7 @@ async def render_onion_skin(
 
 
 @mcp.tool()
-async def compare_frames(filename: str, frame_a: int, frame_b: int) -> str:
+async def compare_frames(filename: str = "", *, frame_a: int, frame_b: int) -> str:
     """Compare two frames and report how much they differ.
 
     Flattens the sprite (non-destructively) and diffs the two frames
@@ -137,7 +133,7 @@ async def compare_frames(filename: str, frame_a: int, frame_b: int) -> str:
     changed, or that it did not change too much.
 
     Args:
-        filename: Aseprite file to read
+        filename: Aseprite file to read (optional; defaults to the session's active file)
         frame_a: First frame index, starting at 1
         frame_b: Second frame index, starting at 1
 
@@ -145,8 +141,9 @@ async def compare_frames(filename: str, frame_a: int, frame_b: int) -> str:
         JSON with changed pixel count, total pixels, percent changed,
         and the bounding box of the changed region.
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     script = f"""
     {_FLATTEN_FRAME}
@@ -226,7 +223,7 @@ async def compare_frames(filename: str, frame_a: int, frame_b: int) -> str:
 
 
 @mcp.tool()
-async def get_color_stats(filename: str, frame_index: int = 1, top: int = 16) -> str:
+async def get_color_stats(filename: str = "", frame_index: int = 1, top: int = 16) -> str:
     """Report the colors used in a frame and how often each appears.
 
     Flattens the sprite (non-destructively) and histograms the frame.
@@ -234,7 +231,7 @@ async def get_color_stats(filename: str, frame_index: int = 1, top: int = 16) ->
     a common pixel-art mistake.
 
     Args:
-        filename: Aseprite file to read
+        filename: Aseprite file to read (optional; defaults to the session's active file)
         frame_index: Frame to analyze, starting at 1 (default 1)
         top: How many of the most-used colors to list (default 16)
 
@@ -242,8 +239,9 @@ async def get_color_stats(filename: str, frame_index: int = 1, top: int = 16) ->
         JSON with unique color count, opaque pixel count, and the top
         colors with usage counts.
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if top < 1:
         return "top must be >= 1"
 

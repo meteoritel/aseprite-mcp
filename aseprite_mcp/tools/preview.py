@@ -3,6 +3,7 @@ import subprocess
 import sys
 import tempfile
 import signal
+from ..core.state import get_workspace_dir, resolve_path
 from .. import mcp
 
 def _pid_path(port: int) -> str:
@@ -24,13 +25,14 @@ def _pid_is_running(pid: int) -> bool:
         return False
 
 @mcp.tool()
-async def start_preview_server(directory: str, port: int = 8000) -> str:
+async def start_preview_server(directory: str = "", port: int = 8000) -> str:
     """Start a simple HTTP server to preview exported sprites.
 
     Args:
-        directory: Directory to serve
+        directory: Directory to serve (optional; defaults to the workspace directory)
         port: Port to bind (default 8000)
     """
+    directory = resolve_path(directory) if directory else get_workspace_dir()
     if not os.path.isdir(directory):
         return f"Directory {directory} not found"
 

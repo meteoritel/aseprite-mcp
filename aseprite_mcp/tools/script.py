@@ -1,5 +1,5 @@
-import os
 from ..core.commands import AsepriteCommand
+from ..core.state import get_active_file, prepare_filename
 from .. import mcp
 
 
@@ -26,12 +26,20 @@ async def run_lua_script(script: str, filename: str = "") -> str:
 
     Args:
         script: Lua source code to execute
-        filename: Optional Aseprite file to open before running
+        filename: Aseprite file to open before running (optional; defaults to
+            the session's active file, or no file when nothing is anchored)
     """
     if not script.strip():
         return "Script cannot be empty"
-    if filename and not os.path.exists(filename):
-        return f"File {filename} not found"
+    if filename:
+        filename, err = prepare_filename(filename)
+        if err:
+            return err
+    else:
+        # No filename given: fall back to the active file so the script
+        # sees it as app.activeSprite. Still allow None (script without
+        # any sprite) when nothing is anchored.
+        filename = get_active_file()
 
     success, output = AsepriteCommand.execute_lua_script(script, filename or None)
     if success:

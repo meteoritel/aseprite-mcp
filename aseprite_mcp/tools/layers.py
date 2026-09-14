@@ -1,6 +1,6 @@
-import os
 from ..core.commands import AsepriteCommand, lua_escape
 from ..core.lua import FIND_LAYER
+from ..core.state import prepare_filename
 from .. import mcp
 
 _BLEND_MODES = {
@@ -27,15 +27,17 @@ _BLEND_MODES = {
 
 
 @mcp.tool()
-async def delete_layer(filename: str, layer_name: str) -> str:
+async def delete_layer(filename: str = "", *, layer_name: str) -> str:
     """Delete a layer by name.
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the
+            session's active file)
         layer_name: Name of the layer to delete
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     safe_layer = lua_escape(layer_name)
     script = f"""
@@ -62,16 +64,18 @@ async def delete_layer(filename: str, layer_name: str) -> str:
 
 
 @mcp.tool()
-async def rename_layer(filename: str, layer_name: str, new_name: str) -> str:
+async def rename_layer(filename: str = "", *, layer_name: str, new_name: str) -> str:
     """Rename a layer.
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the
+            session's active file)
         layer_name: Current layer name
         new_name: New layer name
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if not new_name:
         return "New name cannot be empty"
 
@@ -100,9 +104,7 @@ async def rename_layer(filename: str, layer_name: str, new_name: str) -> str:
 
 
 @mcp.tool()
-async def duplicate_layer(
-    filename: str, layer_name: str, new_name: str = "", group: str = ""
-) -> str:
+async def duplicate_layer(filename: str = "", *, layer_name: str, new_name: str = "", group: str = "") -> str:
     """Duplicate a layer with all its cels across every frame.
 
     The copy inherits the source's opacity and blend mode. By default it is
@@ -110,14 +112,16 @@ async def duplicate_layer(
     group instead.
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the
+            session's active file)
         layer_name: Layer to duplicate, by name or "group/subgroup/layer" path
         new_name: Name for the copy (default: "<layer_name> copy")
         group: Optional group to place the copy inside, by name or
             "group/subgroup" path (default: directly above the source)
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     final_name = new_name or f"{layer_name} copy"
     safe_layer = lua_escape(layer_name)
@@ -169,16 +173,18 @@ async def duplicate_layer(
 
 
 @mcp.tool()
-async def reorder_layer(filename: str, layer_name: str, position: int) -> str:
+async def reorder_layer(filename: str = "", *, layer_name: str, position: int) -> str:
     """Move a layer to a new position in the layer stack.
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the
+            session's active file)
         layer_name: Layer to move
         position: Target stack position, 1-based where 1 is the bottom layer
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if position < 1:
         return "Position must be >= 1"
 
@@ -207,19 +213,21 @@ async def reorder_layer(filename: str, layer_name: str, position: int) -> str:
 
 
 @mcp.tool()
-async def set_layer_blend_mode(filename: str, layer_name: str, mode: str) -> str:
+async def set_layer_blend_mode(filename: str = "", *, layer_name: str, mode: str) -> str:
     """Set a layer's blend mode.
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the
+            session's active file)
         layer_name: Layer to modify
         mode: One of: normal, darken, multiply, color_burn, lighten, screen,
             color_dodge, addition, overlay, soft_light, hard_light,
             difference, exclusion, subtract, divide, hue, saturation,
             color, luminosity
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     blend = _BLEND_MODES.get(mode.lower())
     if blend is None:
@@ -249,15 +257,17 @@ async def set_layer_blend_mode(filename: str, layer_name: str, mode: str) -> str
 
 
 @mcp.tool()
-async def merge_layer_down(filename: str, layer_name: str) -> str:
+async def merge_layer_down(filename: str = "", *, layer_name: str) -> str:
     """Merge a layer into the layer directly below it.
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the
+            session's active file)
         layer_name: Layer to merge down (must not be the bottom layer)
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     safe_layer = lua_escape(layer_name)
     script = f"""
@@ -283,14 +293,16 @@ async def merge_layer_down(filename: str, layer_name: str) -> str:
 
 
 @mcp.tool()
-async def flatten_sprite(filename: str) -> str:
+async def flatten_sprite(filename: str = "") -> str:
     """Flatten all layers into a single layer.
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the
+            session's active file)
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     script = """
     local spr = app.activeSprite

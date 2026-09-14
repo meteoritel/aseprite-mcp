@@ -1,21 +1,34 @@
 import os
-from ..core.commands import AsepriteCommand, lua_escape, reject_traversal
-from ..core.state import set_active_file
+
+from ..core.commands import AsepriteCommand, lua_escape
+from ..core.state import prepare_filename, set_active_file
 from ..core.lua import FIND_LAYER
 from .. import mcp
 
 @mcp.tool()
-async def create_canvas(width: int, height: int, filename: str = "canvas.aseprite") -> str:
+async def create_canvas(width: int, height: int, *, filename: str) -> str:
     """Create a new Aseprite canvas with specified dimensions.
 
     Args:
         width: Width of the canvas in pixels
         height: Height of the canvas in pixels
-        filename: Name of the output file (default: canvas.aseprite)
+        filename: REQUIRED. Absolute path for the output file, e.g.
+            "D:/art/sprites/coin.aseprite". Relative paths are rejected, so
+            the canvas can never silently land in the server's own folder.
     """
     if width <= 0 or height <= 0:
         return "Width and height must be > 0"
-    err = reject_traversal(filename)
+    # Hard requirement: an absolute path. A relative path would resolve
+    # against the server's workspace (its own folder), silently dropping
+    # the canvas somewhere the caller never intended.
+    if not os.path.isabs(filename):
+        return (
+            "create_canvas requires an ABSOLUTE filename, e.g. "
+            f"'D:/art/sprites/coin.aseprite'. Got: '{filename}'"
+        )
+    # anchor=False: only anchor after the canvas actually exists on disk,
+    # so a failed create does not point the active file at a missing file.
+    filename, err = prepare_filename(filename, must_exist=False, anchor=False)
     if err:
         return err
 
@@ -30,22 +43,23 @@ async def create_canvas(width: int, height: int, filename: str = "canvas.aseprit
 
     if success:
         set_active_file(filename)
-        return f"Canvas created successfully: {filename}"
+        return f"Canvas created and anchored as active file: {filename}. Subsequent tool calls may omit filename."
     else:
         return f"Failed to create canvas: {output}"
 
 @mcp.tool()
-async def add_layer(filename: str, layer_name: str, group: str = "") -> str:
+async def add_layer(filename: str = "", *, layer_name: str, group: str = "") -> str:
     """Add a new layer to the Aseprite file.
 
     Args:
-        filename: Name of the Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the session's active file)
         layer_name: Name of the new layer
         group: Optional group to place the new layer inside, by name or
             "group/subgroup" path (default: top level)
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     safe_layer_name = lua_escape(layer_name)
     safe_group = lua_escape(group)
@@ -80,20 +94,21 @@ async def add_layer(filename: str, layer_name: str, group: str = "") -> str:
         return f"Failed to add layer: {output}"
 
 @mcp.tool()
-async def add_group(filename: str, group_name: str, parent_group: str = "") -> str:
+async def add_group(filename: str = "", *, group_name: str, parent_group: str = "") -> str:
     """Add a new, empty group layer.
 
     Combine with add_layer(group=...) / duplicate_layer(group=...) to build a
     grouped layer structure.
 
     Args:
-        filename: Name of the Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the session's active file)
         group_name: Name of the new group
         parent_group: Optional existing group to nest the new group inside, by
             name or "group/subgroup" path (default: top level)
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     safe_group = lua_escape(group_name)
     safe_parent = lua_escape(parent_group)
@@ -127,14 +142,15 @@ async def add_group(filename: str, group_name: str, parent_group: str = "") -> s
     return f"Failed to create group: {output}"
 
 @mcp.tool()
-async def add_frame(filename: str) -> str:
+async def add_frame(filename: str = "") -> str:
     """Add a new frame to the Aseprite file.
 
     Args:
-        filename: Name of the Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the session's active file)
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     
     script = """
     local spr = app.activeSprite
@@ -156,15 +172,16 @@ async def add_frame(filename: str) -> str:
         return f"Failed to add frame: {output}"
 
 @mcp.tool()
-async def set_frame(filename: str, frame_index: int) -> str:
+async def set_frame(filename: str = "", *, frame_index: int) -> str:
     """Set the active frame by index (1-based).
 
     Args:
-        filename: Name of the Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the session's active file)
         frame_index: Frame index starting at 1
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     script = f"""
     local spr = app.activeSprite
@@ -191,16 +208,17 @@ async def set_frame(filename: str, frame_index: int) -> str:
         return f"Failed to set frame: {output}"
 
 @mcp.tool()
-async def set_frame_duration(filename: str, frame_index: int, duration_ms: int) -> str:
+async def set_frame_duration(filename: str = "", *, frame_index: int, duration_ms: int) -> str:
     """Set the duration of a frame in milliseconds.
 
     Args:
-        filename: Name of the Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the session's active file)
         frame_index: Frame index starting at 1
         duration_ms: Duration in milliseconds
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if duration_ms <= 0:
         return "Duration must be > 0"
 
@@ -229,16 +247,17 @@ async def set_frame_duration(filename: str, frame_index: int, duration_ms: int) 
         return f"Failed to set frame duration: {output}"
 
 @mcp.tool()
-async def set_layer(filename: str, layer_name: str, create_if_missing: bool = False) -> str:
+async def set_layer(filename: str = "", *, layer_name: str, create_if_missing: bool = False) -> str:
     """Set the active layer by name.
 
     Args:
-        filename: Name of the Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the session's active file)
         layer_name: Layer name to activate
         create_if_missing: Create layer if it does not exist
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     create_flag = "true" if create_if_missing else "false"
     safe_layer_name = lua_escape(layer_name)

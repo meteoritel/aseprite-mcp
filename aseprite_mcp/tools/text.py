@@ -11,6 +11,7 @@ from typing import Optional
 from PIL import Image
 
 from ..core.commands import AsepriteCommand, lua_escape
+from ..core.state import prepare_filename
 from ..core.colors import parse_hex_color
 from ..core.lua import FIND_LAYER, NORMALIZE_CEL
 from ..core import fonts as fontlib
@@ -117,35 +118,14 @@ async def measure_text(
 
 
 @mcp.tool()
-async def draw_text(
-    filename: str,
-    text: str,
-    x: int,
-    y: int,
-    font: str,
-    size: int = 1,
-    color: str = "#FFFFFF",
-    layer_name: Optional[str] = None,
-    frame_index: int = 1,
-    anchor: str = "topleft",
-    letter_spacing: int = 0,
-    bold: int = 0,
-    outline_color: Optional[str] = None,
-    outline_width: int = 1,
-    outline_diagonal: bool = True,
-    shadow_color: Optional[str] = None,
-    shadow_dx: int = 1,
-    shadow_dy: int = 1,
-    antialias: bool = False,
-    create_if_missing: bool = True,
-) -> str:
+async def draw_text(filename: str = "", *, text: str, x: int, y: int, font: str, size: int = 1, color: str = "#FFFFFF", layer_name: Optional[str] = None, frame_index: int = 1, anchor: str = "topleft", letter_spacing: int = 0, bold: int = 0, outline_color: Optional[str] = None, outline_width: int = 1, outline_diagonal: bool = True, shadow_color: Optional[str] = None, shadow_dx: int = 1, shadow_dy: int = 1, antialias: bool = False, create_if_missing: bool = True) -> str:
     """Draw text onto a sprite.
 
     Glyphs are rasterised outside Aseprite and composited in, because the
     Lua API has no text drawing of its own.
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the session's active file)
         text: String to draw
         x: X coordinate of the anchor point
         y: Y coordinate of the anchor point
@@ -172,8 +152,9 @@ async def draw_text(
         antialias: Keep greyscale edges instead of hard pixels (default False)
         create_if_missing: Create the layer/cel if absent (default True)
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if anchor not in _ANCHORS:
         return f"Invalid anchor '{anchor}'. Expected one of: {', '.join(sorted(_ANCHORS))}"
 

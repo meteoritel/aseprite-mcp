@@ -1,30 +1,25 @@
 import json
-import os
 from ..core.commands import AsepriteCommand, lua_escape
 from ..core.lua import FIND_LAYER
+from ..core.state import prepare_filename
 from .analysis import _FLATTEN_FRAME
 from .. import mcp
 
 
 @mcp.tool()
-async def get_pixel_color(
-    filename: str,
-    x: int,
-    y: int,
-    layer_name: str = "",
-    frame_index: int = 1,
-) -> str:
+async def get_pixel_color(filename: str = "", *, x: int, y: int, layer_name: str = "", frame_index: int = 1) -> str:
     """Read the RGBA color of a single pixel.
 
     Args:
-        filename: Aseprite file to read
+        filename: Aseprite file to read (optional; defaults to the session's active file)
         x: X coordinate
         y: Y coordinate
         layer_name: Layer to read from (uses active layer when empty)
         frame_index: Frame index starting at 1
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     safe_layer = lua_escape(layer_name)
     script = f"""
@@ -78,19 +73,11 @@ async def get_pixel_color(
 
 
 @mcp.tool()
-async def get_pixels_rect(
-    filename: str,
-    x: int,
-    y: int,
-    width: int,
-    height: int,
-    layer_name: str = "",
-    frame_index: int = 1,
-) -> str:
+async def get_pixels_rect(filename: str = "", *, x: int, y: int, width: int, height: int, layer_name: str = "", frame_index: int = 1) -> str:
     """Read all pixel colors in a rectangular region.
 
     Args:
-        filename: Aseprite file to read
+        filename: Aseprite file to read (optional; defaults to the session's active file)
         x: Top-left x coordinate
         y: Top-left y coordinate
         width: Width of the region
@@ -101,8 +88,9 @@ async def get_pixels_rect(
     Returns:
         JSON array of {x, y, hex, r, g, b, a} objects
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if width <= 0 or height <= 0:
         return "Width and height must be > 0"
 
@@ -176,7 +164,7 @@ async def get_pixels_rect(
 
 
 @mcp.tool()
-async def get_composite_pixel(filename: str, x: int, y: int, frame_index: int = 1) -> str:
+async def get_composite_pixel(filename: str = "", *, x: int, y: int, frame_index: int = 1) -> str:
     """Read the RGBA colour VISIBLE at a pixel (flattened composite of all layers).
 
     Unlike get_pixel_color (which reads a single cel), this composites every
@@ -184,13 +172,14 @@ async def get_composite_pixel(filename: str, x: int, y: int, frame_index: int = 
     clone. Essential for value/CVD QA on grouped/multi-layer scenes.
 
     Args:
-        filename: Aseprite file to read
+        filename: Aseprite file to read (optional; defaults to the session's active file)
         x: X coordinate (sprite-global)
         y: Y coordinate (sprite-global)
         frame_index: Frame index starting at 1
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     script = f"""
     {_FLATTEN_FRAME}
@@ -225,21 +214,14 @@ async def get_composite_pixel(filename: str, x: int, y: int, frame_index: int = 
 
 
 @mcp.tool()
-async def get_composite_rect(
-    filename: str,
-    x: int,
-    y: int,
-    width: int,
-    height: int,
-    frame_index: int = 1,
-) -> str:
+async def get_composite_rect(filename: str = "", *, x: int, y: int, width: int, height: int, frame_index: int = 1) -> str:
     """Read VISIBLE RGBA over a rectangle (flattened composite of all layers).
 
     The rectangular counterpart of get_composite_pixel — reads the composited
     pixels every visible layer produces, not a single cel.
 
     Args:
-        filename: Aseprite file to read
+        filename: Aseprite file to read (optional; defaults to the session's active file)
         x: Top-left x (sprite-global)
         y: Top-left y (sprite-global)
         width: Region width
@@ -249,8 +231,9 @@ async def get_composite_rect(
     Returns:
         JSON array of {x, y, hex, r, g, b, a} objects
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if width <= 0 or height <= 0:
         return "Width and height must be > 0"
 

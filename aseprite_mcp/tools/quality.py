@@ -1,7 +1,7 @@
-import os
 import json
 from typing import List
 from ..core.commands import AsepriteCommand, lua_escape
+from ..core.state import prepare_filename
 from .. import mcp
 
 def _parse_layer_frame_ranges(layer_frame_ranges: List[str] | None) -> str:
@@ -54,15 +54,11 @@ def _parse_overlap_pairs(overlap_pairs: List[str] | None) -> str:
     return "{" + ",".join([f"{{\"{a}\",\"{b}\"}}" for a, b in pairs]) + "}"
 
 @mcp.tool()
-async def ensure_layers_present(
-    filename: str,
-    layer_names: List[str],
-    start_frame: int = 1,
-    end_frame: int | None = None
-) -> str:
+async def ensure_layers_present(filename: str = "", *, layer_names: List[str], start_frame: int = 1, end_frame: int | None = None) -> str:
     """Ensure cels exist for layers across a frame range."""
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if not layer_names:
         return "Layer names list cannot be empty"
 
@@ -125,18 +121,14 @@ async def ensure_layers_present(
     return f"Failed to ensure cels: {output}"
 
 @mcp.tool()
-async def validate_scene(
-    filename: str,
-    required_layers: List[str],
-    start_frame: int = 1,
-    end_frame: int | None = None
-) -> str:
+async def validate_scene(filename: str = "", *, required_layers: List[str], start_frame: int = 1, end_frame: int | None = None) -> str:
     """Validate presence of layers and cels across a frame range.
 
     Returns JSON with missing layers and missing cels.
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if not required_layers:
         return "Required layers list cannot be empty"
 
@@ -212,7 +204,7 @@ async def validate_scene(
 
 @mcp.tool()
 async def audit_animation(
-    filename: str,
+    filename: str = "",
     start_frame: int = 1,
     end_frame: int | None = None,
     layer_names: List[str] | None = None,
@@ -229,8 +221,9 @@ async def audit_animation(
     layer_frame_ranges format: ["layer:1-8,17-24", "clouds:1-12"]
     Returns JSON for AI consumption (summary, overlaps, out_of_range, optional cels).
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if start_frame < 1:
         return "Start frame must be >= 1"
     if end_frame is not None and end_frame < start_frame:
@@ -448,7 +441,7 @@ async def audit_animation(
 
 @mcp.tool()
 async def animation_sanitize(
-    filename: str,
+    filename: str = "",
     start_frame: int = 1,
     end_frame: int | None = None,
     layer_names: List[str] | None = None,
@@ -471,8 +464,9 @@ async def animation_sanitize(
     ignore_full_canvas_overlaps: skip overlap checks when a cel is full canvas
     Returns JSON for AI consumption (summary, layer_stats, alerts, overlaps).
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if start_frame < 1:
         return "Start frame must be >= 1"
     if end_frame is not None and end_frame < start_frame:

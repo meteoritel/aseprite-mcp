@@ -59,7 +59,7 @@ def _system_truetype():
 # ── discovery / errors ────────────────────────────────────────────────
 
 def test_unknown_font_is_reported():
-    out = run(text.measure_text("ABC", "definitely-not-a-font"))
+    out = run(text.measure_text(text="ABC", font="definitely-not-a-font"))
     assert out.startswith("ERROR")
     assert "not found" in out
 
@@ -70,20 +70,20 @@ def test_list_fonts_never_raises():
 
 
 def test_bitmap_font_rejects_zero_size(bitmap_font):
-    out = run(text.measure_text("A", bitmap_font, 0))
+    out = run(text.measure_text(text="A", font=bitmap_font, size=0))
     assert out.startswith("ERROR")
     assert "scale factor" in out
 
 
 def test_rejects_bad_anchor(sprite, bitmap_font):
-    out = run(text.draw_text(sprite, "A", 0, 0, bitmap_font, anchor="middle"))
+    out = run(text.draw_text(filename=sprite, text="A", x=0, y=0, font=bitmap_font, anchor="middle"))
     assert "Invalid anchor" in out
 
 
 # ── measurement ───────────────────────────────────────────────────────
 
 def test_measure_matches_the_fixture_geometry(bitmap_font):
-    out = run(text.measure_text("A", bitmap_font, 1))
+    out = run(text.measure_text(text="A", font=bitmap_font, size=1))
     # 4px of ink, +1 letter_gap of advance; 5 inked rows, all above the baseline.
     assert "width=4" in out
     assert "height=5" in out
@@ -92,16 +92,16 @@ def test_measure_matches_the_fixture_geometry(bitmap_font):
 
 
 def test_measure_scales_with_size(bitmap_font):
-    one = run(text.measure_text("AB", bitmap_font, 1))
-    two = run(text.measure_text("AB", bitmap_font, 2))
+    one = run(text.measure_text(text="AB", font=bitmap_font, size=1))
+    two = run(text.measure_text(text="AB", font=bitmap_font, size=2))
     assert "height=5" in one and "height=10" in two
     # advance per glyph is 4px of ink + 1px letter_gap.
     assert "advance_width=10" in one and "advance_width=20" in two
 
 
 def test_letter_spacing_widens_the_advance(bitmap_font):
-    tight = run(text.measure_text("AB", bitmap_font, 1, letter_spacing=0))
-    loose = run(text.measure_text("AB", bitmap_font, 1, letter_spacing=3))
+    tight = run(text.measure_text(text="AB", font=bitmap_font, size=1, letter_spacing=0))
+    loose = run(text.measure_text(text="AB", font=bitmap_font, size=1, letter_spacing=3))
     assert "advance_width=10" in tight
     assert "advance_width=13" in loose
 
@@ -123,8 +123,8 @@ def test_glyphs_share_a_baseline(bitmap_font):
 
 def test_unmapped_characters_are_skipped(bitmap_font):
     """An unknown codepoint contributes nothing rather than raising."""
-    assert run(text.measure_text("A?", bitmap_font, 1)) == \
-           run(text.measure_text("A", bitmap_font, 1))
+    assert run(text.measure_text(text="A?", font=bitmap_font, size=1)) == \
+           run(text.measure_text(text="A", font=bitmap_font, size=1))
 
 
 def test_overrides_replace_a_sheet_glyph(tmp_path, bitmap_font):
@@ -145,40 +145,33 @@ def test_overrides_replace_a_sheet_glyph(tmp_path, bitmap_font):
 # ── drawing ───────────────────────────────────────────────────────────
 
 def test_draw_text_puts_ink_on_the_canvas(sprite, bitmap_font):
-    out = ok(run(text.draw_text(sprite, "O", 4, 4, bitmap_font, size=1,
-                                color="#FF0000", layer_name="body")))
+    out = ok(run(text.draw_text(filename=sprite, text="O", x=4, y=4, font=bitmap_font, size=1, color="#FF0000", layer_name="body")))
     assert "Drew" in out
     # 'O' has ink at (1,0) of its box, which lands at (5,4) on the sprite.
-    px = ok(run(pixel_read.get_pixel_color(sprite, 5, 4, "body", 1)))
+    px = ok(run(pixel_read.get_pixel_color(filename=sprite, x=5, y=4, layer_name="body", frame_index=1)))
     assert "#ff0000" in px.lower()
 
 
 def test_topleft_anchor_places_the_box_at_the_point(sprite, bitmap_font):
-    out = ok(run(text.draw_text(sprite, "B", 10, 10, bitmap_font, size=1,
-                                color="#00FF00", layer_name="body")))
+    out = ok(run(text.draw_text(filename=sprite, text="B", x=10, y=10, font=bitmap_font, size=1, color="#00FF00", layer_name="body")))
     assert "at (10, 10)" in out
 
 
 def test_center_anchor_is_offset_by_half_the_box(sprite, bitmap_font):
-    out = ok(run(text.draw_text(sprite, "B", 20, 20, bitmap_font, size=1,
-                                color="#0000FF", layer_name="body",
-                                anchor="center")))
+    out = ok(run(text.draw_text(filename=sprite, text="B", x=20, y=20, font=bitmap_font, size=1, color="#0000FF", layer_name="body", anchor="center")))
     # box is 4x5, so the top-left lands 2 left and 2 up of the anchor.
     assert "at (18, 18)" in out
 
 
 def test_outline_grows_the_stamp_but_not_the_box(sprite, bitmap_font):
-    plain = ok(run(text.draw_text(sprite, "O", 4, 14, bitmap_font, size=1,
-                                  color="#FFFFFF", layer_name="body")))
-    outlined = ok(run(text.draw_text(sprite, "O", 14, 14, bitmap_font, size=1,
-                                     color="#FFFFFF", layer_name="body",
-                                     outline_color="#000000")))
+    plain = ok(run(text.draw_text(filename=sprite, text="O", x=4, y=14, font=bitmap_font, size=1, color="#FFFFFF", layer_name="body")))
+    outlined = ok(run(text.draw_text(filename=sprite, text="O", x=14, y=14, font=bitmap_font, size=1, color="#FFFFFF", layer_name="body", outline_color="#000000")))
     assert "text box 4x5" in plain and "text box 4x5" in outlined
     assert "stamp 4x5" in plain and "stamp 6x7" in outlined
 
 
 def test_empty_text_is_a_no_op(sprite, bitmap_font):
-    out = run(text.draw_text(sprite, "", 0, 0, bitmap_font))
+    out = run(text.draw_text(filename=sprite, text="", x=0, y=0, font=bitmap_font))
     assert out.startswith("OK")
 
 

@@ -1,10 +1,10 @@
 import colorsys
 import json
-import os
 from typing import List
 from ..core.commands import AsepriteCommand, lua_escape
 from ..core.lua import FIND_LAYER
 from ..core.colors import parse_hex_color
+from ..core.state import prepare_filename
 from .. import mcp
 
 # Well-known retro/pixel-art palettes.
@@ -49,10 +49,16 @@ def _parse_hex_color(value: str) -> tuple[int, int, int] | None:
     return rgba[:3] if rgba else None
 
 @mcp.tool()
-async def get_palette(filename: str) -> str:
-    """Get the active sprite palette as a JSON array of hex colors."""
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+async def get_palette(filename: str = "") -> str:
+    """Get the active sprite palette as a JSON array of hex colors.
+
+    Args:
+        filename: Aseprite file to read (optional; defaults to the
+            session's active file)
+    """
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     script = """
     local spr = app.activeSprite
@@ -82,10 +88,17 @@ async def get_palette(filename: str) -> str:
     return f"Failed to get palette: {output}"
 
 @mcp.tool()
-async def set_palette(filename: str, colors: List[str]) -> str:
-    """Set the active sprite palette using a list of hex colors."""
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+async def set_palette(filename: str = "", *, colors: List[str]) -> str:
+    """Set the active sprite palette using a list of hex colors.
+
+    Args:
+        filename: Aseprite file to modify (optional; defaults to the
+            session's active file)
+        colors: List of #RRGGBB hex colors
+    """
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if not colors:
         return "Colors list cannot be empty"
 
@@ -117,19 +130,12 @@ async def set_palette(filename: str, colors: List[str]) -> str:
     return f"Failed to set palette: {output}"
 
 @mcp.tool()
-async def remap_colors_in_cel_range(
-    filename: str,
-    layer_name: str,
-    start_frame: int,
-    end_frame: int,
-    mappings: List[dict],
-    create_missing_cels: bool = False,
-    source_frame_index: int | None = None
-) -> str:
+async def remap_colors_in_cel_range(filename: str = "", *, layer_name: str, start_frame: int, end_frame: int, mappings: List[dict], create_missing_cels: bool = False, source_frame_index: int | None = None) -> str:
     """Remap colors in a layer across a frame range using explicit mappings.
 
     Args:
-        filename (str): The path to the Aseprite file.
+        filename (str): The path to the Aseprite file (optional; defaults
+            to the session's active file).
         layer_name (str): The name of the layer to remap colors in.
         start_frame (int): The start frame index to remap colors in.
         end_frame (int): The end frame index to remap colors in.
@@ -137,8 +143,9 @@ async def remap_colors_in_cel_range(
         create_missing_cels (bool, optional): Whether to create missing cels. Defaults to False.
         source_frame_index (int | None, optional): The source frame index to use for remapping. Defaults to None.
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if not mappings:
         return "Mappings list cannot be empty"
 
@@ -244,17 +251,22 @@ async def list_palette_presets() -> str:
 
 
 @mcp.tool()
-async def apply_palette_preset(filename: str, preset: str) -> str:
+async def apply_palette_preset(filename: str = "", *, preset: str) -> str:
     """Set the sprite palette to a built-in retro preset.
 
     This only sets the palette; existing pixels keep their colors.
     Use quantize_to_palette afterwards to snap pixels to the new palette.
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the
+            session's active file)
         preset: One of: gameboy, monochrome, grayscale_4, cga, pico8, c64,
             dawnbringer16, dawnbringer32
     """
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
+
     colors = PALETTE_PRESETS.get(preset.lower())
     if colors is None:
         return f"Unknown preset '{preset}'. Available: {', '.join(sorted(PALETTE_PRESETS))}"
@@ -315,7 +327,7 @@ async def generate_color_ramp(
 
 @mcp.tool()
 async def quantize_to_palette(
-    filename: str,
+    filename: str = "",
     layer_name: str = "",
     start_frame: int = 1,
     end_frame: int = 0,
@@ -327,13 +339,15 @@ async def quantize_to_palette(
     or set_palette to make existing art conform to the palette.
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the
+            session's active file)
         layer_name: Layer to quantize (empty = all top-level layers)
         start_frame: First frame to process (default 1)
         end_frame: Last frame to process (default 0 = last frame)
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     safe_layer = lua_escape(layer_name)
     script = f"""
@@ -427,15 +441,17 @@ async def quantize_to_palette(
 
 
 @mcp.tool()
-async def set_color_mode(filename: str, mode: str) -> str:
+async def set_color_mode(filename: str = "", *, mode: str) -> str:
     """Convert the sprite's color mode.
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the
+            session's active file)
         mode: "rgb", "grayscale", or "indexed"
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if mode.lower() not in ("rgb", "grayscale", "indexed"):
         return "mode must be 'rgb', 'grayscale', or 'indexed'"
 

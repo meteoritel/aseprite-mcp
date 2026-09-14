@@ -280,6 +280,43 @@ Batch-mode equivalents of what a human artist gets from the Aseprite UI.
 |------|-------------|
 | `run_lua_script` | Execute arbitrary Aseprite Lua ([API docs](https://www.aseprite.org/api/)) in batch mode. The escape hatch when no dedicated tool fits: one script can batch many operations into a single Aseprite launch. Remember to `spr:saveAs(spr.filename)` and `print()` your results. ⚠️ Runs unrestricted code on the host — only pass scripts you trust. |
 
+## Workspace & Filenames
+
+Every tool that touches a sprite file takes an **optional** `filename`, with
+one exception: `create_canvas` **requires** `filename` as an absolute path
+and rejects relative paths, so a new canvas always lands exactly where the
+caller intends instead of inside the server's own folder.
+
+The session tracks one *active file*: the first call that names a file
+(`create_canvas`, or any explicit `filename`) anchors it, and later calls may
+omit `filename` entirely. Pass `filename` again at any time to switch files.
+
+Relative paths on other tools resolve against the
+workspace directory:
+
+1. the `ASERITE_MCP_WORKSPACE` environment variable, if set;
+2. otherwise the server's working directory.
+
+To keep generated files inside your AI project folder, set the variable
+per-project in the client config (Claude Code `.mcp.json` example):
+
+```json
+{
+  "mcpServers": {
+    "aseprite": {
+      "command": "uv",
+      "args": ["--directory", "/path/to/aseprite_mcp", "run", "-m", "aseprite_mcp"],
+      "env": { "ASERITE_MCP_WORKSPACE": "${workspaceFolder}" }
+    }
+  }
+}
+```
+
+Absolute paths are always used as-is, and `..` traversal is rejected. The
+server also exposes the same rules as its MCP `instructions` (loaded from
+[SKILL.md](SKILL.md)), so capable clients show them to the model at connect
+time.
+
 ## Recommended Workflow for LLMs
 
 1. **Plan the palette first**: `generate_color_ramp` for each material (skin, armor, blade), or `apply_palette_preset` for a retro look.

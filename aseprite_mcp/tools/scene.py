@@ -1,12 +1,13 @@
-import os
 from typing import List
-from ..core.commands import AsepriteCommand, lua_escape, reject_traversal
+from ..core.commands import AsepriteCommand, lua_escape
 from ..core.lua import FIND_LAYER
+from ..core.state import prepare_filename
 from .. import mcp
 
 @mcp.tool()
 async def copy_layers_between_sprites(
-    source_filename: str,
+    *,
+    source_filename: str = "",
     target_filename: str,
     layer_names: List[str],
     replace: bool = True,
@@ -15,21 +16,20 @@ async def copy_layers_between_sprites(
     """Copy layers by name from a source sprite to a target sprite.
 
     Args:
-        source_filename: Source .aseprite file
-        target_filename: Target .aseprite file
+        source_filename: Source .aseprite file (optional; defaults to the session's active file)
+        target_filename: Target .aseprite file (must already exist)
         layer_names: List of layer names to copy
         replace: Overwrite existing cels in target layers
         create_missing_frames: Add frames to target if needed
     """
-    if not os.path.exists(source_filename):
-        return f"File {source_filename} not found"
-    if not os.path.exists(target_filename):
-        return f"File {target_filename} not found"
-    if not layer_names:
-        return "Layer names list cannot be empty"
-    err = reject_traversal(source_filename) or reject_traversal(target_filename)
+    source_filename, err = prepare_filename(source_filename)
     if err:
         return err
+    target_filename, err = prepare_filename(target_filename, anchor=False)
+    if err:
+        return err
+    if not layer_names:
+        return "Layer names list cannot be empty"
 
     src_path = lua_escape(source_filename.replace("\\", "/"))
     dst_path = lua_escape(target_filename.replace("\\", "/"))

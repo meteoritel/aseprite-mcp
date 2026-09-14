@@ -1,20 +1,21 @@
-import os
 import json
 from ..core.commands import AsepriteCommand, lua_escape
+from ..core.state import prepare_filename
 from ..core.lua import FIND_LAYER
 from .. import mcp
 
 @mcp.tool()
-async def add_frames(filename: str, count: int, duration_ms: int | None = None) -> str:
+async def add_frames(filename: str = "", *, count: int, duration_ms: int | None = None) -> str:
     """Add multiple frames to a sprite and optionally set their duration.
 
     Args:
-        filename: Name of the Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the session's active file)
         count: Number of frames to add
         duration_ms: Optional duration for each new frame in milliseconds
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     if count < 1:
         return "Count must be >= 1"
@@ -44,15 +45,16 @@ async def add_frames(filename: str, count: int, duration_ms: int | None = None) 
     return f"Failed to add frames: {output}"
 
 @mcp.tool()
-async def set_frame_duration_all(filename: str, duration_ms: int) -> str:
+async def set_frame_duration_all(filename: str = "", *, duration_ms: int) -> str:
     """Set the duration of all frames in milliseconds.
 
     Args:
-        filename: Name of the Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the session's active file)
         duration_ms: Duration in milliseconds
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if duration_ms <= 0:
         return "Duration must be > 0"
 
@@ -76,16 +78,17 @@ async def set_frame_duration_all(filename: str, duration_ms: int) -> str:
     return f"Failed to set frame durations: {output}"
 
 @mcp.tool()
-async def set_layer_visibility(filename: str, layer_name: str, visible: bool = True) -> str:
+async def set_layer_visibility(filename: str = "", *, layer_name: str, visible: bool = True) -> str:
     """Set layer visibility by name.
 
     Args:
-        filename: Name of the Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the session's active file)
         layer_name: Layer name to target
         visible: Whether the layer should be visible
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     safe_layer_name = lua_escape(layer_name)
     visible_flag = "true" if visible else "false"
@@ -111,16 +114,17 @@ async def set_layer_visibility(filename: str, layer_name: str, visible: bool = T
     return f"Failed to set layer visibility: {output}"
 
 @mcp.tool()
-async def set_layer_opacity(filename: str, layer_name: str, opacity: int) -> str:
+async def set_layer_opacity(filename: str = "", *, layer_name: str, opacity: int) -> str:
     """Set layer opacity by name (0-255).
 
     Args:
-        filename: Name of the Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the session's active file)
         layer_name: Layer name to target
         opacity: Opacity value 0-255
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if opacity < 0 or opacity > 255:
         return "Opacity must be between 0 and 255"
 
@@ -147,14 +151,15 @@ async def set_layer_opacity(filename: str, layer_name: str, opacity: int) -> str
     return f"Failed to set layer opacity: {output}"
 
 @mcp.tool()
-async def get_sprite_info(filename: str) -> str:
+async def get_sprite_info(filename: str = "") -> str:
     """Return sprite info as JSON string (size, color mode, frame durations, layers, tags).
 
     Args:
-        filename: Name of the Aseprite file to inspect
+        filename: Aseprite file to inspect (optional; defaults to the session's active file)
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     # NOTE: batch mode discards Lua `return` values — output MUST go through print().
     script = """
@@ -212,17 +217,18 @@ async def get_sprite_info(filename: str) -> str:
     return f"Failed to get sprite info: {output}"
 
 @mcp.tool()
-async def duplicate_frame_range(filename: str, start_frame: int, end_frame: int, times: int = 1) -> str:
+async def duplicate_frame_range(filename: str = "", *, start_frame: int, end_frame: int, times: int = 1) -> str:
     """Duplicate a frame range and append copies to the end.
 
     Args:
-        filename: Name of the Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the session's active file)
         start_frame: Starting frame index (1-based)
         end_frame: Ending frame index (1-based, inclusive)
         times: Number of times to append the range (default: 1)
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if times < 1:
         return "Times must be >= 1"
 
@@ -266,19 +272,11 @@ async def duplicate_frame_range(filename: str, start_frame: int, end_frame: int,
     return f"Failed to duplicate frame range: {output}"
 
 @mcp.tool()
-async def set_cel_position(
-    filename: str,
-    layer_name: str,
-    frame_index: int,
-    x: int,
-    y: int,
-    create_if_missing: bool = False,
-    source_frame_index: int | None = None
-) -> str:
+async def set_cel_position(filename: str = "", *, layer_name: str, frame_index: int, x: int, y: int, create_if_missing: bool = False, source_frame_index: int | None = None) -> str:
     """Set a cel's position in a specific layer and frame.
 
     Args:
-        filename: Name of the Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the session's active file)
         layer_name: Layer name to target
         frame_index: Frame index starting at 1
         x: X position in pixels
@@ -286,8 +284,9 @@ async def set_cel_position(
         create_if_missing: Create the cel if it does not exist
         source_frame_index: Optional frame to copy the cel image from
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     safe_layer_name = lua_escape(layer_name)
     source_idx = "nil" if source_frame_index is None else str(source_frame_index)
@@ -340,22 +339,11 @@ async def set_cel_position(
     return f"Failed to set cel position: {output}"
 
 @mcp.tool()
-async def tween_cel_positions(
-    filename: str,
-    layer_name: str,
-    start_frame: int,
-    end_frame: int,
-    start_x: int,
-    start_y: int,
-    end_x: int,
-    end_y: int,
-    create_missing_cels: bool = False,
-    source_frame_index: int | None = None
-) -> str:
+async def tween_cel_positions(filename: str = "", *, layer_name: str, start_frame: int, end_frame: int, start_x: int, start_y: int, end_x: int, end_y: int, create_missing_cels: bool = False, source_frame_index: int | None = None) -> str:
     """Tween cel positions linearly across a frame range.
 
     Args:
-        filename: Name of the Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the session's active file)
         layer_name: Layer name to target
         start_frame: Starting frame index (1-based)
         end_frame: Ending frame index (1-based, inclusive)
@@ -366,8 +354,9 @@ async def tween_cel_positions(
         create_missing_cels: Create missing cels during tween
         source_frame_index: Optional frame to copy the cel image from
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     safe_layer_name = lua_escape(layer_name)
     create_flag = "true" if create_missing_cels else "false"
@@ -428,26 +417,20 @@ async def tween_cel_positions(
     return f"Failed to tween cel positions: {output}"
 
 @mcp.tool()
-async def offset_cel_positions(
-    filename: str,
-    layer_name: str,
-    start_frame: int,
-    end_frame: int,
-    dx: int,
-    dy: int
-) -> str:
+async def offset_cel_positions(filename: str = "", *, layer_name: str, start_frame: int, end_frame: int, dx: int, dy: int) -> str:
     """Offset cel positions by a delta across a frame range.
 
     Args:
-        filename: Name of the Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the session's active file)
         layer_name: Layer name to target
         start_frame: Starting frame index (1-based)
         end_frame: Ending frame index (1-based, inclusive)
         dx: X delta in pixels
         dy: Y delta in pixels
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     safe_layer_name = lua_escape(layer_name)
     script = f"""
@@ -485,24 +468,19 @@ async def offset_cel_positions(
     return f"Failed to offset cel positions: {output}"
 
 @mcp.tool()
-async def create_cel(
-    filename: str,
-    layer_name: str,
-    frame_index: int,
-    x: int = 0,
-    y: int = 0
-) -> str:
+async def create_cel(filename: str = "", *, layer_name: str, frame_index: int, x: int = 0, y: int = 0) -> str:
     """Create an empty cel on a layer/frame.
 
     Args:
-        filename: Name of the Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the session's active file)
         layer_name: Layer name to target
         frame_index: Frame index starting at 1
         x: X position in pixels
         y: Y position in pixels
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     safe_layer_name = lua_escape(layer_name)
     script = f"""
@@ -534,10 +512,11 @@ async def create_cel(
     return f"Failed to create cel: {output}"
 
 @mcp.tool()
-async def clear_cel(filename: str, layer_name: str, frame_index: int) -> str:
+async def clear_cel(filename: str = "", *, layer_name: str, frame_index: int) -> str:
     """Delete a cel on a layer/frame."""
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     safe_layer_name = lua_escape(layer_name)
     script = f"""
@@ -569,16 +548,11 @@ async def clear_cel(filename: str, layer_name: str, frame_index: int) -> str:
     return f"Failed to clear cel: {output}"
 
 @mcp.tool()
-async def copy_cel(
-    filename: str,
-    layer_name: str,
-    source_frame: int,
-    target_frame: int,
-    replace: bool = True
-) -> str:
+async def copy_cel(filename: str = "", *, layer_name: str, source_frame: int, target_frame: int, replace: bool = True) -> str:
     """Copy a cel from one frame to another."""
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     safe_layer_name = lua_escape(layer_name)
     replace_flag = "true" if replace else "false"
@@ -619,15 +593,11 @@ async def copy_cel(
     return f"Failed to copy cel: {output}"
 
 @mcp.tool()
-async def copy_frame(
-    filename: str,
-    source_frame: int,
-    target_frame: int | None = None,
-    overwrite: bool = True
-) -> str:
+async def copy_frame(filename: str = "", *, source_frame: int, target_frame: int | None = None, overwrite: bool = True) -> str:
     """Copy all cels from a source frame to a target frame (or append)."""
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     overwrite_flag = "true" if overwrite else "false"
     target_idx = "nil" if target_frame is None else str(target_frame)
@@ -680,24 +650,19 @@ async def copy_frame(
     return f"Failed to copy frame: {output}"
 
 @mcp.tool()
-async def propagate_frame_to_range(
-    filename: str,
-    source_frame: int,
-    start_frame: int,
-    end_frame: int,
-    overwrite: bool = True
-) -> str:
+async def propagate_frame_to_range(filename: str = "", *, source_frame: int, start_frame: int, end_frame: int, overwrite: bool = True) -> str:
     """Copy all layers from a source frame to a range of frames.
 
     Args:
-        filename: Name of the Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the session's active file)
         source_frame: Frame index to copy from (1-based)
         start_frame: Start frame index (1-based)
         end_frame: End frame index (1-based, inclusive)
         overwrite: Whether to overwrite existing cels (default: True)
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     overwrite_flag = "true" if overwrite else "false"
 
@@ -751,19 +716,14 @@ async def propagate_frame_to_range(
     return f"Failed to propagate frame range: {output}"
 
 @mcp.tool()
-async def set_tag(
-    filename: str,
-    name: str,
-    from_frame: int,
-    to_frame: int,
-    direction: str = "forward"
-) -> str:
+async def set_tag(filename: str = "", *, name: str, from_frame: int, to_frame: int, direction: str = "forward") -> str:
     """Create or update an animation tag on the sprite.
 
     direction: forward | reverse | pingpong | pingpong_reverse
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     ani_dirs = {
         "forward": "AniDir.FORWARD",
@@ -809,15 +769,16 @@ async def set_tag(
 
 @mcp.tool()
 async def set_onion_skin(
-    filename: str,
+    filename: str = "",
     enabled: bool = True,
     before: int = 2,
     after: int = 2,
     opacity: int = 128
 ) -> str:
     """Configure onion skin settings for Aseprite."""
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if before < 0 or after < 0:
         return "Before/after must be >= 0"
     if opacity < 0 or opacity > 255:
@@ -829,26 +790,20 @@ async def set_onion_skin(
     )
 
 @mcp.tool()
-async def propagate_cels(
-    filename: str,
-    layer_names: list[str],
-    source_frame: int,
-    start_frame: int,
-    end_frame: int,
-    replace: bool = True
-) -> str:
+async def propagate_cels(filename: str = "", *, layer_names: list[str], source_frame: int, start_frame: int, end_frame: int, replace: bool = True) -> str:
     """Copy cels from a source frame to a range of frames for specific layers.
 
     Args:
-        filename: Name of the Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the session's active file)
         layer_names: List of layer names to copy
         source_frame: Frame index to copy from (1-based)
         start_frame: Start frame index (1-based)
         end_frame: End frame index (1-based, inclusive)
         replace: Whether to overwrite existing cels (default: True)
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if not layer_names:
         return "Layer names list cannot be empty"
 
@@ -911,22 +866,11 @@ async def propagate_cels(
     return f"Failed to propagate cels: {output}"
 
 @mcp.tool()
-async def tween_cel_positions_eased(
-    filename: str,
-    layer_name: str,
-    start_frame: int,
-    end_frame: int,
-    start_x: int,
-    start_y: int,
-    end_x: int,
-    end_y: int,
-    easing: str = "smoothstep",
-    create_missing_cels: bool = False,
-    source_frame_index: int | None = None
-) -> str:
+async def tween_cel_positions_eased(filename: str = "", *, layer_name: str, start_frame: int, end_frame: int, start_x: int, start_y: int, end_x: int, end_y: int, easing: str = "smoothstep", create_missing_cels: bool = False, source_frame_index: int | None = None) -> str:
     """Tween cel positions with easing across a frame range."""
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     easing = (easing or "smoothstep").lower().strip()
     if easing not in {"linear", "ease_in", "ease_out", "ease_in_out", "smoothstep"}:
@@ -1008,21 +952,11 @@ async def tween_cel_positions_eased(
     return f"Failed to tween cel positions with easing: {output}"
 
 @mcp.tool()
-async def oscillate_cel_positions(
-    filename: str,
-    layer_name: str,
-    start_frame: int,
-    end_frame: int,
-    amplitude_x: int = 0,
-    amplitude_y: int = 0,
-    cycles: float = 1.0,
-    phase_deg: float = 0.0,
-    create_missing_cels: bool = False,
-    source_frame_index: int | None = None
-) -> str:
+async def oscillate_cel_positions(filename: str = "", *, layer_name: str, start_frame: int, end_frame: int, amplitude_x: int = 0, amplitude_y: int = 0, cycles: float = 1.0, phase_deg: float = 0.0, create_missing_cels: bool = False, source_frame_index: int | None = None) -> str:
     """Oscillate cel positions across a frame range using a sine wave."""
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     safe_layer_name = lua_escape(layer_name)
     create_flag = "true" if create_missing_cels else "false"
@@ -1094,20 +1028,11 @@ async def oscillate_cel_positions(
     return f"Failed to oscillate cel positions: {output}"
 
 @mcp.tool()
-async def tween_cel_opacity_eased(
-    filename: str,
-    layer_name: str,
-    start_frame: int,
-    end_frame: int,
-    start_opacity: int,
-    end_opacity: int,
-    easing: str = "smoothstep",
-    create_missing_cels: bool = False,
-    source_frame_index: int | None = None
-) -> str:
+async def tween_cel_opacity_eased(filename: str = "", *, layer_name: str, start_frame: int, end_frame: int, start_opacity: int, end_opacity: int, easing: str = "smoothstep", create_missing_cels: bool = False, source_frame_index: int | None = None) -> str:
     """Tween cel opacity with easing across a frame range."""
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if start_opacity < 0 or start_opacity > 255 or end_opacity < 0 or end_opacity > 255:
         return "Opacity must be between 0 and 255"
 
@@ -1192,22 +1117,11 @@ async def tween_cel_opacity_eased(
     return f"Failed to tween cel opacity with easing: {output}"
 
 @mcp.tool()
-async def tween_cel_scale_eased(
-    filename: str,
-    layer_name: str,
-    start_frame: int,
-    end_frame: int,
-    start_scale: float,
-    end_scale: float,
-    easing: str = "smoothstep",
-    anchor: str = "center",
-    replace: bool = True,
-    create_missing_cels: bool = True,
-    source_frame_index: int | None = None
-) -> str:
+async def tween_cel_scale_eased(filename: str = "", *, layer_name: str, start_frame: int, end_frame: int, start_scale: float, end_scale: float, easing: str = "smoothstep", anchor: str = "center", replace: bool = True, create_missing_cels: bool = True, source_frame_index: int | None = None) -> str:
     """Tween cel scale with easing across a frame range."""
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if start_scale <= 0 or end_scale <= 0:
         return "Scale must be > 0"
 
@@ -1317,15 +1231,16 @@ async def tween_cel_scale_eased(
 
 
 @mcp.tool()
-async def delete_frame(filename: str, frame_index: int) -> str:
+async def delete_frame(filename: str = "", *, frame_index: int) -> str:
     """Delete a frame by index.
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the session's active file)
         frame_index: Frame index starting at 1
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     script = f"""
     local spr = app.activeSprite
@@ -1350,15 +1265,16 @@ async def delete_frame(filename: str, frame_index: int) -> str:
 
 
 @mcp.tool()
-async def delete_tag(filename: str, name: str) -> str:
+async def delete_tag(filename: str = "", *, name: str) -> str:
     """Delete an animation tag by name.
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the session's active file)
         name: Tag name to delete
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     safe_name = lua_escape(name)
     script = f"""
@@ -1386,22 +1302,18 @@ async def delete_tag(filename: str, name: str) -> str:
 
 
 @mcp.tool()
-async def set_cel_opacity(
-    filename: str,
-    layer_name: str,
-    frame_index: int,
-    opacity: int,
-) -> str:
+async def set_cel_opacity(filename: str = "", *, layer_name: str, frame_index: int, opacity: int) -> str:
     """Set the opacity of a single cel (0-255).
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the session's active file)
         layer_name: Layer containing the cel
         frame_index: Frame index starting at 1
         opacity: Opacity 0 (transparent) to 255 (opaque)
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if not (0 <= opacity <= 255):
         return "Opacity must be between 0 and 255"
 

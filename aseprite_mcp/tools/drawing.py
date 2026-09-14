@@ -1,9 +1,7 @@
-import os
-from typing import List, Dict, Any
-from ..core.commands import AsepriteCommand, lua_escape
-from ..core.lua import FIND_LAYER, NORMALIZE_CEL, PSET
+from typing import Any, Dict, List
+
 from ..core.colors import parse_hex_color
-from ..core.state import NO_ACTIVE_FILE_ERROR, resolve_filename, set_active_file
+from ..core.state import prepare_filename
 from .. import mcp
 
 
@@ -13,17 +11,18 @@ def _parse_hex_color(value: str) -> tuple[int, int, int, int] | None:
 
 
 @mcp.tool()
-async def draw_pixels(filename: str, pixels: List[Dict[str, Any]]) -> str:
+async def draw_pixels(*, filename: str = "", pixels: List[Dict[str, Any]]) -> str:
     """Draw pixels on the canvas with specified colors.
 
     Args:
-        filename: Name of the Aseprite file to modify
+        filename: Name of the Aseprite file to modify (optional; defaults to the session's active file)
         pixels: List of pixel data, each containing:
             {"x": int, "y": int, "color": str}
             where color is a hex code like "#FF0000"
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     script = """
     local spr = app.activeSprite
@@ -88,12 +87,9 @@ async def draw_line(x1: int, y1: int, x2: int, y2: int, color: str = "#000000", 
         thickness: Line thickness in pixels (default: 1)
         filename: Name of the Aseprite file to modify (optional; defaults to the session's active file)
     """
-    filename = resolve_filename(filename)
-    if filename is None:
-        return NO_ACTIVE_FILE_ERROR
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
-    set_active_file(filename)
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     rgb = _parse_hex_color(color)
     if rgb is None:
@@ -176,12 +172,9 @@ async def draw_rectangle(x: int, y: int, width: int, height: int, color: str = "
         fill: Whether to fill the rectangle (default: False)
         filename: Name of the Aseprite file to modify (optional; defaults to the session's active file)
     """
-    filename = resolve_filename(filename)
-    if filename is None:
-        return NO_ACTIVE_FILE_ERROR
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
-    set_active_file(filename)
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if width <= 0 or height <= 0:
         return "Width and height must be > 0"
 
@@ -240,12 +233,9 @@ async def fill_area(x: int, y: int, color: str = "#000000", filename: str = "") 
         color: Hex color code (default: "#000000")
         filename: Name of the Aseprite file to modify (optional; defaults to the session's active file)
     """
-    filename = resolve_filename(filename)
-    if filename is None:
-        return NO_ACTIVE_FILE_ERROR
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
-    set_active_file(filename)
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     rgb = _parse_hex_color(color)
     if rgb is None:
@@ -298,12 +288,9 @@ async def draw_circle(center_x: int, center_y: int, radius: int, color: str = "#
         fill: Whether to fill the circle (default: False)
         filename: Name of the Aseprite file to modify (optional; defaults to the session's active file)
     """
-    filename = resolve_filename(filename)
-    if filename is None:
-        return NO_ACTIVE_FILE_ERROR
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
-    set_active_file(filename)
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     rgb = _parse_hex_color(color)
     if rgb is None:
@@ -350,7 +337,8 @@ async def draw_circle(center_x: int, center_y: int, radius: int, color: str = "#
 
 @mcp.tool()
 async def draw_pixels_at(
-    filename: str,
+    *,
+    filename: str = "",
     layer_name: str,
     frame_index: int,
     pixels: List[Dict[str, Any]],
@@ -359,14 +347,15 @@ async def draw_pixels_at(
     """Draw pixels on a specific layer/frame.
 
     Args:
-        filename: Name of the Aseprite file to modify
+        filename: Name of the Aseprite file to modify (optional; defaults to the session's active file)
         layer_name: Layer name to target
         frame_index: Frame index starting at 1
         pixels: List of pixel data with x/y/color
         create_if_missing: Create cel if it does not exist
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     safe_layer_name = lua_escape(layer_name)
     create_flag = "true" if create_if_missing else "false"
@@ -419,7 +408,8 @@ async def draw_pixels_at(
 
 @mcp.tool()
 async def draw_line_at(
-    filename: str,
+    *,
+    filename: str = "",
     layer_name: str,
     frame_index: int,
     x1: int,
@@ -433,7 +423,7 @@ async def draw_line_at(
     """Draw a line on a specific layer/frame.
 
     Args:
-        filename (str): The path to the Aseprite file.
+        filename (str): The path to the Aseprite file (optional; defaults to the session's active file).
         layer_name (str): The name of the layer to draw on.
         frame_index (int): The index of the frame to draw on.
         x1 (int): The x coordinate of the first point of the line.
@@ -444,8 +434,9 @@ async def draw_line_at(
         thickness (int, optional): The thickness of the line. Defaults to 1.
         create_if_missing (bool, optional): Whether to create the layer if it doesn't exist. Defaults to True.
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     rgb = _parse_hex_color(color)
     if rgb is None:
@@ -520,7 +511,8 @@ async def draw_line_at(
 
 @mcp.tool()
 async def draw_rectangle_at(
-    filename: str,
+    *,
+    filename: str = "",
     layer_name: str,
     frame_index: int,
     x: int,
@@ -534,7 +526,7 @@ async def draw_rectangle_at(
     """Draw a rectangle on a specific layer/frame.
 
     Args:
-        filename (str): The path to the Aseprite file.
+        filename (str): The path to the Aseprite file (optional; defaults to the session's active file).
         layer_name (str): The name of the layer to draw on.
         frame_index (int): The index of the frame to draw on.
         x (int): The x coordinate of the top-left corner of the rectangle.
@@ -545,8 +537,9 @@ async def draw_rectangle_at(
         fill (bool, optional): Whether to fill the rectangle. Defaults to False.
         create_if_missing (bool, optional): Whether to create the layer if it doesn't exist. Defaults to True.
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if width <= 0 or height <= 0:
         return "Width and height must be > 0"
 
@@ -599,7 +592,8 @@ async def draw_rectangle_at(
 
 @mcp.tool()
 async def draw_circle_at(
-    filename: str,
+    *,
+    filename: str = "",
     layer_name: str,
     frame_index: int,
     center_x: int,
@@ -612,7 +606,7 @@ async def draw_circle_at(
     """Draw a circle on a specific layer/frame.
 
     Args:
-        filename (str): The path to the Aseprite file.
+        filename (str): The path to the Aseprite file (optional; defaults to the session's active file).
         layer_name (str): The name of the layer to draw on.
         frame_index (int): The index of the frame to draw on.
         center_x (int): The x coordinate of the center of the circle.
@@ -622,8 +616,9 @@ async def draw_circle_at(
         fill (bool, optional): Whether to fill the circle. Defaults to False.
         create_if_missing (bool, optional): Whether to create the layer if it doesn't exist. Defaults to True.
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     rgb = _parse_hex_color(color)
     if rgb is None:
@@ -675,7 +670,8 @@ async def draw_circle_at(
 
 @mcp.tool()
 async def fill_area_at(
-    filename: str,
+    *,
+    filename: str = "",
     layer_name: str,
     frame_index: int,
     x: int,
@@ -686,7 +682,7 @@ async def fill_area_at(
     """Fill an area on a specific layer/frame.
 
     Args:
-        filename (str): The path to the Aseprite file.
+        filename (str): The path to the Aseprite file (optional; defaults to the session's active file).
         layer_name (str): The name of the layer to draw on.
         frame_index (int): The index of the frame to draw on.
         x (int): The x coordinate of the point to start filling from.
@@ -694,8 +690,9 @@ async def fill_area_at(
         color (str, optional): The color to fill the area with. Defaults to "#000000".
         create_if_missing (bool, optional): Whether to create the layer if it doesn't exist. Defaults to True.
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
 
     rgb = _parse_hex_color(color)
     if rgb is None:
@@ -743,7 +740,8 @@ async def fill_area_at(
 
 @mcp.tool()
 async def draw_polygon(
-    filename: str,
+    *,
+    filename: str = "",
     layer_name: str,
     frame_index: int,
     points: List[Dict[str, int]],
@@ -754,7 +752,7 @@ async def draw_polygon(
     """Draw a polygon on a specific layer/frame.
 
     Args:
-        filename (str): The path to the Aseprite file.
+        filename (str): The path to the Aseprite file (optional; defaults to the session's active file).
         layer_name (str): The name of the layer to draw on.
         frame_index (int): The index of the frame to draw on.
         points (List[Dict[str, int]]): The list of points to draw the polygon.
@@ -762,8 +760,9 @@ async def draw_polygon(
         fill (bool, optional): Whether to fill the polygon. Defaults to False.
         create_if_missing (bool, optional): Whether to create the layer if it doesn't exist. Defaults to True.
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if len(points) < 3:
         return "Polygon requires at least 3 points"
 
@@ -867,7 +866,8 @@ async def draw_polygon(
 
 @mcp.tool()
 async def draw_path(
-    filename: str,
+    *,
+    filename: str = "",
     layer_name: str,
     frame_index: int,
     points: List[Dict[str, int]],
@@ -878,7 +878,7 @@ async def draw_path(
     """Draw a path using a polyline on a specific layer/frame.
 
     Args:
-        filename (str): The path to the Aseprite file.
+        filename (str): The path to the Aseprite file (optional; defaults to the session's active file).
         layer_name (str): The name of the layer to draw on.
         frame_index (int): The index of the frame to draw on.
         points (List[Dict[str, int]]): The points to draw the path with.
@@ -886,8 +886,9 @@ async def draw_path(
         thickness (int, optional): The thickness of the path. Defaults to 1.
         create_if_missing (bool, optional): Whether to create the layer if it doesn't exist. Defaults to True.
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if len(points) < 2:
         return "Path requires at least 2 points"
 
@@ -964,7 +965,8 @@ async def draw_path(
 
 @mcp.tool()
 async def apply_gradient_rect(
-    filename: str,
+    *,
+    filename: str = "",
     layer_name: str,
     frame_index: int,
     x: int,
@@ -979,7 +981,7 @@ async def apply_gradient_rect(
     """Apply a linear gradient fill to a rectangle.
 
     Args:
-        filename (str): The path to the Aseprite file.
+        filename (str): The path to the Aseprite file (optional; defaults to the session's active file).
         layer_name (str): The name of the layer to draw on.
         frame_index (int): The index of the frame to draw on.
         x (int): The x coordinate of the rectangle to draw on.
@@ -991,8 +993,9 @@ async def apply_gradient_rect(
         horizontal (bool, optional): Whether to draw the gradient horizontally. Defaults to True.
         create_if_missing (bool, optional): Whether to create the layer if it doesn't exist. Defaults to True.
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if width <= 0 or height <= 0:
         return "Width and height must be > 0"
 
@@ -1059,7 +1062,8 @@ async def apply_gradient_rect(
 
 @mcp.tool()
 async def draw_ellipse_at(
-    filename: str,
+    *,
+    filename: str = "",
     layer_name: str,
     frame_index: int,
     center_x: int,
@@ -1073,7 +1077,7 @@ async def draw_ellipse_at(
     """Draw an ellipse on a specific layer/frame.
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the session's active file)
         layer_name: Layer to draw on
         frame_index: Frame index starting at 1
         center_x: Ellipse center x
@@ -1084,8 +1088,9 @@ async def draw_ellipse_at(
         fill: Fill the ellipse instead of outlining it
         create_if_missing: Create the cel if it does not exist
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if radius_x <= 0 or radius_y <= 0:
         return "radius_x and radius_y must be > 0"
 

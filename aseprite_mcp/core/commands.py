@@ -1,3 +1,4 @@
+import re
 import subprocess
 import tempfile
 import os
@@ -24,14 +25,15 @@ def reject_traversal(path: str) -> str | None:
     Returns an error message string when the path contains a `..`
     component, or None when the path looks safe.
 
-    The check works on normalized path components, so it does not
-    false-positive on filenames like `foo..bar.aseprite` (the previous
-    `'..' in path` substring check did). Absolute paths and tilde
+    The check runs on the RAW path split into components on both
+    separators — normalizing first would let os.path.normpath collapse an
+    embedded `..` and hide it. Filenames like `foo..bar.aseprite` (dots
+    inside a component) are not false positives. Absolute paths and tilde
     expansion are not rejected here: this function targets traversal
     only, not access scoping.
     """
-    parts = os.path.normpath(path).replace("\\", "/").split("/")
-    if ".." in parts:
+    components = [p for p in re.split(r"[\\/]+", path) if p not in ("", ".")]
+    if ".." in components:
         return "Invalid filename: parent directory traversal not allowed"
     return None
 
@@ -51,7 +53,17 @@ class AsepriteCommand:
         """
         try:
             cmd = [os.getenv('ASEPRITE_PATH', 'aseprite')] + args
-            result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+            # Aseprite writes UTF-8 to stdout/stderr. Decode explicitly:
+            # text=True alone would use the Windows ANSI code page (GBK),
+            # garbling any non-ASCII output (paths, layer names, errors).
+            result = subprocess.run(
+                cmd,
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
             return True, result.stdout
         except subprocess.CalledProcessError as e:
             return False, e.stderr
@@ -67,8 +79,14 @@ class AsepriteCommand:
         Returns:
             tuple: (success, output)
         """
-        # Create a temporary file for the script
-        with tempfile.NamedTemporaryFile(suffix='.lua', delete=False, mode='w') as tmp:
+        # Create a temporary file for the script. Aseprite reads Lua files
+        # as UTF-8; without an explicit encoding the file would be written
+        # in the Windows ANSI code page (GBK), so any non-ASCII path in the
+        # script (e.g. Chinese filenames) would end up as mojibake and the
+        # file would be saved to the wrong location.
+        with tempfile.NamedTemporaryFile(
+            suffix='.lua', delete=False, mode='w', encoding='utf-8'
+        ) as tmp:
             tmp.write(script_content)
             script_path = tmp.name
         

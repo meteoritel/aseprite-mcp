@@ -9,10 +9,10 @@ quantize_to_palette stay) per the "deprecate, don't break" policy.
 General value (upstream-able): nothing Chimera-specific here.
 """
 import json
-import os
 
 from ..core.commands import AsepriteCommand, lua_escape
 from ..core.native import build_native_command_script
+from ..core.state import prepare_filename
 from .fx import _parse_hex_color
 from .. import mcp
 
@@ -39,7 +39,7 @@ def _region(x: int, y: int, width: int, height: int):
 
 @mcp.tool()
 async def outline_native(
-    filename: str,
+    filename: str = "",
     layer_name: str = "",
     frame_index: int = 1,
     color: str = "#000000",
@@ -52,15 +52,17 @@ async def outline_native(
     placement + a circle/square brush. Works best on a full-canvas cel.
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the
+            session's active file)
         layer_name: layer to outline (empty = active layer)
         frame_index: 1-based frame
         color: outline colour as #RRGGBB
         place: "outside" or "inside"
         matrix: "circle" or "square"
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     rgb = _parse_hex_color(color)
     if not rgb:
         return "Invalid color (expected #RRGGBB)"
@@ -80,7 +82,7 @@ async def outline_native(
 
 @mcp.tool()
 async def adjust_hsl_native(
-    filename: str,
+    filename: str = "",
     layer_name: str = "",
     frame_index: int = 1,
     hue: int = 0,
@@ -94,7 +96,8 @@ async def adjust_hsl_native(
     """Native Hue/Saturation/Lightness filter (engine-quality vs adjust_hsl).
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the
+            session's active file)
         layer_name: layer to adjust (empty = active layer)
         frame_index: 1-based frame
         hue: -180..180 (degrees)
@@ -102,8 +105,9 @@ async def adjust_hsl_native(
         lightness: -100..100
         x, y, width, height: optional region (width>0 & height>0 to scope)
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if not (-180 <= hue <= 180):
         return "hue must be -180..180"
     if not (-100 <= saturation <= 100) or not (-100 <= lightness <= 100):
@@ -120,7 +124,7 @@ async def adjust_hsl_native(
 
 @mcp.tool()
 async def adjust_brightness_contrast(
-    filename: str,
+    filename: str = "",
     layer_name: str = "",
     frame_index: int = 1,
     brightness: int = 0,
@@ -133,15 +137,17 @@ async def adjust_brightness_contrast(
     """Native Brightness/Contrast filter (app.command.BrightnessContrast).
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the
+            session's active file)
         layer_name: layer to adjust (empty = active layer)
         frame_index: 1-based frame
         brightness: -100..100
         contrast: -100..100
         x, y, width, height: optional region (width>0 & height>0 to scope)
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if not (-100 <= brightness <= 100) or not (-100 <= contrast <= 100):
         return "brightness and contrast must be -100..100"
     cmd = (f'        app.command.BrightnessContrast{{ui=false, '
@@ -156,7 +162,7 @@ async def adjust_brightness_contrast(
 
 @mcp.tool()
 async def invert_colors(
-    filename: str,
+    filename: str = "",
     layer_name: str = "",
     frame_index: int = 1,
     x: int = 0,
@@ -167,13 +173,15 @@ async def invert_colors(
     """Native colour inversion (app.command.InvertColor).
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the
+            session's active file)
         layer_name: layer to invert (empty = active layer)
         frame_index: 1-based frame
         x, y, width, height: optional region (width>0 & height>0 to scope)
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     cmd = "        app.command.InvertColor{ui=false}"
     script = build_native_command_script(cmd, layer_name, frame_index,
                                          _region(x, y, width, height))
@@ -184,28 +192,21 @@ async def invert_colors(
 
 
 @mcp.tool()
-async def apply_convolution(
-    filename: str,
-    matrix: str,
-    layer_name: str = "",
-    frame_index: int = 1,
-    x: int = 0,
-    y: int = 0,
-    width: int = 0,
-    height: int = 0,
-) -> str:
+async def apply_convolution(filename: str = "", *, matrix: str, layer_name: str = "", frame_index: int = 1, x: int = 0, y: int = 0, width: int = 0, height: int = 0) -> str:
     """Native convolution filter (blur / sharpen / edge / emboss …).
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the
+            session's active file)
         matrix: a built-in matrix name (see list_convolution_matrices),
             e.g. "blur-3x3", "sharpen-3x3", "edges-find", "misc-emboss"
         layer_name: layer to filter (empty = active layer)
         frame_index: 1-based frame
         x, y, width, height: optional region (width>0 & height>0 to scope)
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if matrix not in CONVOLUTION_MATRICES:
         return (f"Unknown matrix {matrix!r}; call list_convolution_matrices for "
                 f"the {len(CONVOLUTION_MATRICES)} valid names")
@@ -230,7 +231,7 @@ async def list_convolution_matrices() -> str:
 
 @mcp.tool()
 async def extract_palette(
-    filename: str,
+    filename: str = "",
     max_colors: int = 16,
     with_alpha: bool = False,
 ) -> str:
@@ -241,15 +242,17 @@ async def extract_palette(
     sprite's palette. Sprite must be in RGB mode.
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the
+            session's active file)
         max_colors: palette size cap, 1..256 (fewer if the art has fewer)
         with_alpha: include alpha when quantizing
 
     Returns:
         JSON {colors: [#RRGGBB, ...], count}
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if not (1 <= max_colors <= 256):
         return "max_colors must be 1..256"
     wa = "true" if with_alpha else "false"

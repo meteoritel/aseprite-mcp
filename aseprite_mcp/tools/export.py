@@ -1,24 +1,30 @@
 import glob
 import os
-from ..core.commands import AsepriteCommand, lua_escape, reject_traversal
+from ..core.commands import AsepriteCommand, lua_escape
 from ..core.lua import FIND_LAYER, NORMALIZE_CEL
+from ..core.state import prepare_filename
 from .. import mcp
 
 @mcp.tool()
-async def export_sprite(filename: str, output_filename: str, format: str = "png") -> str:
+async def export_sprite(*, filename: str = "", output_filename: str, format: str = "png") -> str:
     """Export the Aseprite file to another format.
 
     Args:
-        filename: Name of the Aseprite file to export
+        filename: Name of the Aseprite file to export (optional; defaults to the session's active file)
         output_filename: Name of the output file
         format: Output format (default: "png", can be "png", "gif", "jpg", etc.)
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
-    
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
+
     # Make sure format is lowercase
     format = format.lower()
-    
+
+    output_filename, err = prepare_filename(output_filename, must_exist=False, anchor=False)
+    if err:
+        return err
+
     # Ensure output filename has the correct extension
     if not output_filename.lower().endswith(f".{format}"):
         output_filename = f"{output_filename}.{format}"
@@ -49,23 +55,24 @@ async def export_sprite(filename: str, output_filename: str, format: str = "png"
         return f"Failed to export sprite: {output}"
 
 @mcp.tool()
-async def copy_sprite(filename: str, output_filename: str, overwrite: bool = False) -> str:
+async def copy_sprite(*, filename: str = "", output_filename: str, overwrite: bool = False) -> str:
     """Copy a sprite to a new Aseprite file.
 
     Args:
-        filename: Name of the Aseprite file to copy
+        filename: Name of the Aseprite file to copy (optional; defaults to the session's active file)
         output_filename: Name of the output .aseprite file
         overwrite: Whether to overwrite if output exists
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
+
+    output_filename, err = prepare_filename(output_filename, must_exist=False, anchor=False)
+    if err:
+        return err
 
     if not output_filename.lower().endswith(".aseprite"):
         output_filename = f"{output_filename}.aseprite"
-
-    err = reject_traversal(output_filename)
-    if err:
-        return err
 
     if os.path.exists(output_filename) and not overwrite:
         return f"Output file {output_filename} already exists"
@@ -90,7 +97,8 @@ async def copy_sprite(filename: str, output_filename: str, overwrite: bool = Fal
 
 @mcp.tool()
 async def export_frame(
-    filename: str,
+    *,
+    filename: str = "",
     frame_index: int,
     output_filename: str,
     scale: int = 1,
@@ -101,16 +109,17 @@ async def export_frame(
     open the PNG to inspect the result, then keep iterating.
 
     Args:
-        filename: Aseprite file to export
+        filename: Aseprite file to export (optional; defaults to the session's active file)
         frame_index: Frame index starting at 1
         output_filename: Output PNG path
         scale: Integer nearest-neighbor scale factor (default 1)
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if scale < 1 or scale > 64:
         return "scale must be between 1 and 64"
-    err = reject_traversal(output_filename)
+    output_filename, err = prepare_filename(output_filename, must_exist=False, anchor=False)
     if err:
         return err
     if not output_filename.lower().endswith(".png"):
@@ -141,7 +150,8 @@ async def export_frame(
 
 @mcp.tool()
 async def export_spritesheet(
-    filename: str,
+    *,
+    filename: str = "",
     output_filename: str,
     sheet_type: str = "horizontal",
     data_filename: str = "",
@@ -154,7 +164,7 @@ async def export_spritesheet(
     """Export frames as a sprite sheet, optionally with a JSON data file.
 
     Args:
-        filename: Aseprite file to export
+        filename: Aseprite file to export (optional; defaults to the session's active file)
         output_filename: Output sheet image path (PNG)
         sheet_type: Layout: "horizontal", "vertical", "rows", "columns", or "packed"
         data_filename: Optional path for a JSON metadata file
@@ -164,8 +174,9 @@ async def export_spritesheet(
         data_format: JSON format for the data file: "json-array" (default) or "json-hash"
         list_tags: Include animation tag metadata in the JSON data file (default: False)
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if sheet_type not in ("horizontal", "vertical", "rows", "columns", "packed"):
         return "sheet_type must be one of: horizontal, vertical, rows, columns, packed"
     if scale < 1 or scale > 64:
@@ -174,7 +185,7 @@ async def export_spritesheet(
         return "padding must be >= 0"
     if data_format not in ("json-array", "json-hash"):
         return "data_format must be 'json-array' or 'json-hash'"
-    err = reject_traversal(output_filename)
+    output_filename, err = prepare_filename(output_filename, must_exist=False, anchor=False)
     if err:
         return err
     if not output_filename.lower().endswith(".png"):
@@ -214,7 +225,7 @@ async def export_spritesheet(
     if padding > 0:
         args += ["--shape-padding", str(padding)]
     if data_filename:
-        err = reject_traversal(data_filename)
+        data_filename, err = prepare_filename(data_filename, must_exist=False, anchor=False)
         if err:
             return err
         args += ["--data", data_filename, "--format", data_format]
@@ -239,20 +250,22 @@ async def export_spritesheet(
 
 @mcp.tool()
 async def export_layers(
-    filename: str,
+    *,
+    filename: str = "",
     output_directory: str,
     include_hidden: bool = False,
 ) -> str:
     """Export each layer as its own PNG file named <layer>.png.
 
     Args:
-        filename: Aseprite file to export
+        filename: Aseprite file to export (optional; defaults to the session's active file)
         output_directory: Directory for the per-layer PNGs (created if missing)
         include_hidden: Also export hidden layers (default False)
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
-    err = reject_traversal(output_directory)
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
+    output_directory, err = prepare_filename(output_directory, must_exist=False, anchor=False)
     if err:
         return err
     os.makedirs(output_directory, exist_ok=True)
@@ -277,7 +290,8 @@ async def export_layers(
 
 @mcp.tool()
 async def export_tag(
-    filename: str,
+    *,
+    filename: str = "",
     tag_name: str,
     output_filename: str,
     scale: int = 1,
@@ -285,16 +299,17 @@ async def export_tag(
     """Export the frames of an animation tag as a GIF or PNG sequence.
 
     Args:
-        filename: Aseprite file to export
+        filename: Aseprite file to export (optional; defaults to the session's active file)
         tag_name: Animation tag to export
         output_filename: Output path; .gif gives an animation, .png a sequence
         scale: Integer scale factor (default 1)
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
     if scale < 1 or scale > 64:
         return "scale must be between 1 and 64"
-    err = reject_traversal(output_filename)
+    output_filename, err = prepare_filename(output_filename, must_exist=False, anchor=False)
     if err:
         return err
 
@@ -334,7 +349,8 @@ async def export_tag(
 
 @mcp.tool()
 async def import_image_as_layer(
-    filename: str,
+    *,
+    filename: str = "",
     image_path: str,
     layer_name: str,
     frame_index: int = 1,
@@ -348,17 +364,19 @@ async def import_image_as_layer(
     is in RGB color mode.
 
     Args:
-        filename: Aseprite file to modify
+        filename: Aseprite file to modify (optional; defaults to the session's active file)
         image_path: Image file to import
         layer_name: Layer to place the image on
         frame_index: Frame index starting at 1 (default 1)
         x: X position for the image's top-left corner (default 0)
         y: Y position for the image's top-left corner (default 0)
     """
-    if not os.path.exists(filename):
-        return f"File {filename} not found"
-    if not os.path.exists(image_path):
-        return f"Image {image_path} not found"
+    filename, err = prepare_filename(filename)
+    if err:
+        return err
+    image_path, err = prepare_filename(image_path, anchor=False)
+    if err:
+        return err
 
     safe_layer = lua_escape(layer_name)
     safe_image = lua_escape(os.path.abspath(image_path).replace("\\", "/"))
