@@ -8,6 +8,7 @@ from . import scene
 from . import guide
 from . import quality
 from . import pixel_read
+from . import sprite_map
 from . import transform
 from . import layers
 from . import selection

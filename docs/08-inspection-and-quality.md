@@ -37,6 +37,8 @@ docstring 对单 cel 族的描述很直白（[`pixel_read.py:13-15`](../aseprite
 
 **该用哪个**：做配色/对比度/明度检查、判断"玩家实际看到什么"时，一律用合成族。想检查某个具体图层的原始数据（例如确认某个像素到底写没写进去）才用单 cel 族。
 
+还有第三种读法：`get_sprite_map` 把一块矩形读成**字符网格**（紧凑、且 `rows`/`palette` 可原样回灌给 `draw_sprite_map`）。它归 [03 §三](03-painting.md#字符网格sprite-map)，因为它必须与写入端共享同一套格式约定。要逐像素断言用 `get_pixels_rect`；要"看整体形状 + 改一处"用 `get_sprite_map`。
+
 ### 坐标与越界
 
 对外一律 **sprite 全局坐标**，内部减去 cel 偏移转成 cel-local（[`pixel_read.py:53-55`](../aseprite_mcp/tools/pixel_read.py#L53)）：

@@ -1,18 +1,18 @@
 # 03 · 绘图与像素编辑
 
-> 把像素画到画布上、把已有像素搬走或改色、以及文本栅格化与调色板。
-> 覆盖源文件：[`tools/drawing.py`](../aseprite_mcp/tools/drawing.py) · [`tools/selection.py`](../aseprite_mcp/tools/selection.py) · [`tools/transform.py`](../aseprite_mcp/tools/transform.py) · [`tools/text.py`](../aseprite_mcp/tools/text.py) · [`tools/palette.py`](../aseprite_mcp/tools/palette.py) · [`core/fonts.py`](../aseprite_mcp/core/fonts.py)
+> 把像素画到画布上（含按字符网格批量作画）、把已有像素搬走或改色、以及文本栅格化与调色板。
+> 覆盖源文件：[`tools/drawing.py`](../aseprite_mcp/tools/drawing.py) · [`tools/sprite_map.py`](../aseprite_mcp/tools/sprite_map.py) · [`tools/selection.py`](../aseprite_mcp/tools/selection.py) · [`tools/transform.py`](../aseprite_mcp/tools/transform.py) · [`tools/text.py`](../aseprite_mcp/tools/text.py) · [`tools/palette.py`](../aseprite_mcp/tools/palette.py) · [`core/fonts.py`](../aseprite_mcp/core/fonts.py)
 
 ## 职责边界
 
-**负责**：图元的绘制、像素的搬移与擦除、图像级几何变换（翻转/旋转/缩放/裁剪）、文本的栅格化与合成、调色板读写与色彩量化。
+**负责**：图元的绘制、按字符网格的批量绘制与回读、像素的搬移与擦除、图像级几何变换（翻转/旋转/缩放/裁剪）、文本的栅格化与合成、调色板读写与色彩量化。
 
 **不负责**：
 
 - 图层本身的创建/删除/排序/混合模式 → [04 · 画布、图层与跨文件复制](04-layers-and-canvas.md)
 - 帧与 cel 的生命周期、补间 → [05 · 动画](05-animation.md)
 - 描边、换色、HSL、抖动、原生滤镜 → [06 · 特效与网格结构](06-effects-and-tilemap.md)（注意 `drawing.py` 只负责"画"，"改"归 06）
-- 读取像素 → [08 · 读取、分析与质量校验](08-inspection-and-quality.md)
+- 读取像素 → [08 · 读取、分析与质量校验](08-inspection-and-quality.md)。**一个例外**：`get_sprite_map` 作为 `draw_sprite_map` 的逆运算留在本文（[§三](#字符网格sprite-map)），因为这对工具的读写必须共享同一套格式约定
 
 ---
 
@@ -35,7 +35,7 @@ legacy 工具在 `app.activeCel` 为空时会尝试补救（切到第 1 层第 1
 
 | 机制 | 用法 | 谁在用 |
 |---|---|---|
-| **`img:putPixel` 直写** | Python 为每个像素生成一行 Lua，直接在 `cel.image` 上写 | `draw_pixels(_at)`、线、多边形、路径、渐变、选区、变换 |
+| **`img:putPixel` 直写** | Python 为每个像素生成一行 Lua，直接在 `cel.image` 上写 | `draw_pixels(_at)`、`draw_sprite_map`、线、多边形、路径、渐变、选区、变换 |
 | **`app.useTool{...}`** | 让 Aseprite 自己的工具引擎画，Python 只传工具名与两个点 | `draw_rectangle(_at)`、`draw_circle(_at)`、`draw_ellipse_at`、`fill_area(_at)` |
 
 `app.useTool` 的调用形态（[`drawing.py:213-219`](../aseprite_mcp/tools/drawing.py#L213)）：
@@ -140,6 +140,8 @@ end
 | 工具 | 机制 | 关键参数 |
 |---|---|---|
 | `draw_pixels` / `draw_pixels_at` | putPixel | `pixels=[{x,y,color}]`、`layer_name`、`frame_index` |
+| `draw_sprite_map` | putPixel（字符网格整批） | `rows=[str]`、`palette={char:hex}`、`x,y`、`mirror_x/y`、`erase_transparent` |
+| `get_sprite_map` | 单 cel 或合成读取（字符网格整批） | `x,y,width,height`、`palette`（回灌）、`max_colors`、`composite` |
 | `draw_line` / `draw_line_at` | putPixel + Bresenham | `x1,y1,x2,y2`、`thickness` |
 | `draw_rectangle` / `draw_rectangle_at` | useTool | `x,y,width,height`、`fill` |
 | `draw_circle` / `draw_circle_at` | useTool | `center_x,center_y,radius`、`fill` |
@@ -159,7 +161,7 @@ end
 | `remap_colors_in_cel_range` | putPixel 精确替换 | `mappings=[{from,to}]`、`tolerance` |
 | `set_color_mode` | `app.command.ChangePixelFormat` | `mode ∈ {rgb, grayscale, indexed}` |
 
-完整签名与参数说明见 [reference/tools.md](reference/tools.md#drawingpy)。
+完整签名与参数说明见 [reference/tools.md](reference/tools.md#drawingpy)（`sprite_map.py` 见 [该节](reference/tools.md#sprite_mappy)）。
 
 ### 多边形的扫描线填充
 
@@ -175,6 +177,38 @@ local r = math.floor({sr} + ({er} - {sr}) * t + 0.5)
 ```
 
 `w == 1` 时 `t = 0`，避免除零。`horizontal=False` 改用 `iy / (h - 1)`。
+
+### 字符网格（sprite map）
+
+[`sprite_map.py`](../aseprite_mcp/tools/sprite_map.py) 只有两个工具，且互为逆运算：`draw_sprite_map` 把一张字符网格整批画下去，`get_sprite_map` 把一块矩形读成同一格式。它存在的理由是**体积与坐标系**：
+
+| 表示 | 16×16 精灵的输入体积 | 坐标从哪来 |
+|---|---|---|
+| `draw_pixels_at` 的 `pixels=[{x,y,color}]` | ~256 个对象、约 7–9 KB | 每个像素自己写 |
+| `draw_sprite_map` 的 `rows=[str]` | 16 行、约 400 B | **行号即 y、列偏移即 x** |
+
+一次工具调用就是一个 Aseprite 进程（[01 §1](01-lua-bridge.md)），所以"一次调用画完"比"逐像素调用"省的是进程启动，而字符网格省掉的是让模型在一个 256 格的虚拟位图上心算索引。
+
+`rows` 是一组**等长**字符串（自上而下），`palette` 把每个字符映到颜色；`transparent`（默认 `"."`）表示空格。三者在 `_parse_sprite_map`（[`sprite_map.py:38`](../aseprite_mcp/tools/sprite_map.py#L38)）里**在任何 Lua 生成之前**校验完：行必须等长、字符必须属于 `palette` 或是 `transparent`、`palette` 的值必须是合法十六进制、`palette` 不得包含 `transparent` 字符（那个字符被保留）。错误信息会指出具体是第几行第几列。
+
+**字符本身从不进入 Lua。** 脚本里只有解析后的 `pset(img, x, y, Color(r, g, b, a))` —— 所以不存在的注入面。
+
+**两个语义开关**，都容易踩：
+
+- `erase_transparent`（[`:195`](../aseprite_mcp/tools/sprite_map.py#L195)）——默认 **false 表示 `"."` 单元格跳过**，与其它绘图工具"不破坏已有像素"的约定一致；置 true 才对空格发 `Color(0,0,0,0)`。**回灌一张改过的 map 时必须置 true**，否则"把某个像素改成 `"."`"这个删除操作会被静默忽略，读-改-写 无法闭环。
+- `mirror_x` / `mirror_y`（[`:208-214`](../aseprite_mcp/tools/sprite_map.py#L208)）——**原地镜像**，网格宽度不变：每个单元格额外画到它的水平/垂直反射位置。画对称精灵时写满整宽、把远端一半留成 `transparent`，镜像会补上另一半。它不是"半宽翻倍"。
+
+`get_sprite_map` 复用 `_COMPOSE_FRAME`（`composite=True` 时读可见合成，否则读单 cel），返回 JSON，字段名与 `draw_sprite_map` 的参数**同名同形**，所以读出的 `rows` / `palette` / `transparent` 可以直接回灌。另外给一个 `columns` 字段（如 `"0123456789abcdef"`）当列标尺，免得去数字符位置。
+
+字符分配规则决定了它能否做 diff：
+
+- 传 `palette` → 用调用方的字符，**字符跨调用稳定**，两张 map 可以逐字符对比。
+- 不传 → 按颜色升序自动分配（确定性，但增删颜色会重排）。
+- 字符表是 `_AUTO_ALPHABET`（[`:29`](../aseprite_mcp/tools/sprite_map.py#L29)）的 62 个字符，`"."` 被排除。颜色数超过剩余槽位会**报错并提示 `max_colors`**，不会静默截断。
+- `max_colors > 0` 时走 `_quantise`（[`:110`](../aseprite_mcp/tools/sprite_map.py#L110)）：保留出现次数最多的 N 色，其余按 RGB 距离平方吸附到最近的保留色。这是抗锯齿精灵能读回成合法 map 的出口。
+- alpha 用 `alpha_threshold`（默认 128）切：`< threshold` 一律算空格；`>= threshold` 的颜色按 `_hex_of`（[`:102`](../aseprite_mcp/tools/sprite_map.py#L102)）写成 `#RRGGBB`，**仅当 alpha 不满 255 时才写 8 位** `#RRGGBBAA`，所以往返无损。
+
+> 与 [08 §1](08-inspection-and-quality.md#一两族读取工具) 的分工：`get_pixels_rect` 返回逐点 JSON（精确、体积大、适合逐像素断言），`get_sprite_map` 返回字符网格（紧凑、可回灌、适合"看整体 + 改一处"）。两者都是单 cel 读取，都不看图层可见性 —— 除非 `composite=True`。
 
 ---
 
@@ -368,6 +402,9 @@ ns = min(1.0, max(0.0, s - t * 0.15))   # 暗侧更饱和，亮侧更灰
 | `draw_text` 与 `ENSURE_LAYER` 是两套建层逻辑 | 行为一致但代码重复 |
 | legacy 工具不自动建层 | `draw_rectangle` 与 `draw_rectangle_at` 在这个语义上不同 |
 | 文本走 PIL | 这是 `pillow` 成为运行时依赖的原因；也让文本渲染与 Aseprite 版本无关 |
+| `draw_sprite_map` 的 `"."` 默认是**跳过**不是擦除 | 想让"改成 `"."`"变成删除必须传 `erase_transparent=true`，否则读-改-写 丢改动 |
+| `mirror_x/y` 是原地镜像 | 网格宽度不变；它不把半宽网格翻倍，"画半个精灵"要写满整宽 |
+| 字符表只有 62 格 | 颜色数超出会报错并要求 `max_colors`；`"."` 被保留，不能出现在 `palette` 里 |
 
 ---
 
@@ -382,6 +419,7 @@ ns = min(1.0, max(0.0, s - t * 0.15))   # 暗侧更饱和，亮侧更灰
 | [`tests/test_selection.py`](../tests/test_selection.py) | 区域复制/移动/擦除、按色擦除 |
 | [`tests/test_pixel_xy_validation.py`](../tests/test_pixel_xy_validation.py) | `pixels` 的 `x`/`y` 非整数被拒（注入防护） |
 | [`tests/test_visibility.py`](../tests/test_visibility.py) | 抖动工具的自动建层与拒绝、缺失图层报错带上下文 |
+| [`tests/test_sprite_map.py`](../tests/test_sprite_map.py) | 字符网格落位与 `x,y` 锚点、`"."` 跳过 vs `erase_transparent` 擦除、镜像、四种非法输入被拒；`get_sprite_map` 的读→画→读像素完全一致、回灌 `palette` 后字符稳定、量化、合成读取、alpha 阈值 |
 
 ## 相关文档
 

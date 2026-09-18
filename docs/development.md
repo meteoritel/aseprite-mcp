@@ -220,7 +220,7 @@ No diff data returned
 
 | 风格 | 命名 | 例子 |
 |---|---|---|
-| **镜像源模块** | `test_<模块名>.py` | `test_drawing` `test_export` `test_layers` `test_text` `test_tilemap` `test_palette` `test_selection` `test_slices` `test_animation` `test_analysis` `test_fx` `test_native_fx` `test_script` |
+| **镜像源模块** | `test_<模块名>.py` | `test_drawing` `test_sprite_map` `test_export` `test_layers` `test_text` `test_tilemap` `test_palette` `test_selection` `test_slices` `test_animation` `test_analysis` `test_fx` `test_native_fx` `test_script` |
 | **按 bug / issue 命名** | `test_<主题>.py`，docstring 里写清 bug 经过 | `test_error_propagation` `test_group_layers` `test_create_into_group` `test_drawing_fixes` `test_auto_create` `test_visibility` `test_composite_read` `test_slices_pipe` `test_sprite_info_groups` `test_path_resolution` `test_pixel_xy_validation` `test_lifecycle` `test_encoding` |
 
 新建回归测试请用第二种，并在模块 docstring 里写清"原来错在哪、现在为什么不会错"。
@@ -344,7 +344,7 @@ docs/
 
 ### ⚠️ CI 不跑测试
 
-工作流只做三件事：构建镜像、推送镜像、PR 上冒烟验证解释器和 uv 能跑。**26 个测试模块没有任何自动化入口** —— `uv run pytest` 完全依赖开发者本地手动执行。
+工作流只做三件事：构建镜像、推送镜像、PR 上冒烟验证解释器和 uv 能跑。**27 个测试模块没有任何自动化入口** —— `uv run pytest` 完全依赖开发者本地手动执行。
 
 这意味着一次只改了 Python 逻辑、没碰 Docker 的 PR，CI 会给绿灯而测试可能全红。**提交前请本地跑 `uv run pytest`。**
 

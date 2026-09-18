@@ -2,7 +2,7 @@
 
 A Python MCP server that gives AI assistants full control over [Aseprite](https://www.aseprite.org/) for creating pixel art and animated sprites.
 
-**104 tools across 17 categories** — canvas, drawing, layers, animation, palettes, effects, slices, tilemaps, exports, visual-feedback/analysis tools, and a raw Lua escape hatch. The tool set is designed so an LLM has everything it needs to produce *good* pixel art, not just primitives: shading ramps with hue shifting, ordered dithering, outlines, retro palette presets with quantization, onion-skin renders, and frame diffing for animation work.
+**118 tools across 21 modules** — canvas, drawing, sprite maps, layers, animation, palettes, effects, slices, tilemaps, exports, native filters, visual-feedback/analysis tools, and a raw Lua escape hatch. The tool set is designed so an LLM has everything it needs to produce *good* pixel art, not just primitives: compact character-grid sprite maps, shading ramps with hue shifting, ordered dithering, outlines, retro palette presets with quantization, onion-skin renders, frame diffing for animation work, and composite reads that match what the player actually sees.
 
 ## Example: a swordsman, drawn and animated by Claude
 
@@ -31,6 +31,7 @@ Both were created end-to-end by Claude Fable 5 through this server's MCP tools �
 |----------|------:|-------------|
 | [Canvas](#canvas) | 6 | Create sprites, manage layers/frames, set the active state |
 | [Drawing](#drawing) | 14 | Pixels, lines, rectangles, circles, ellipses, polygons, paths, fills, gradients |
+| [Sprite Maps](#sprite-maps) | 2 | Author or read back a whole region as a compact character grid |
 | [Text](#text) | 3 | Draw and measure text with bitmap sprite-sheet or TrueType fonts |
 | [Layers](#layers) | 7 | Delete, rename, duplicate, reorder, blend modes, merge, flatten |
 | [Selection & Regions](#selection--regions) | 4 | Move, copy, and erase rectangular regions or colors |
@@ -76,6 +77,32 @@ All `_at` variants target a specific layer/frame and can create the cel on deman
 | `draw_path` | Polyline through a point list with thickness |
 | `fill_area` / `fill_area_at` | Paint-bucket flood fill |
 | `apply_gradient_rect` | Smooth linear gradient fill in a rectangle |
+
+### Sprite Maps
+
+Drawing a small sprite one `{x, y, color}` object at a time is expensive and easy to get wrong: a 16×16 canvas is 256 objects, and every coordinate must be right on the first pass because the model cannot see the result mid-call. A **sprite map** replaces that with a character grid plus a palette — the rows carry the coordinate grid, so the same sprite becomes 16 short strings.
+
+```python
+draw_sprite_map(
+    layer_name="hero", frame_index=1,
+    rows=["..1111..",
+          ".122221.",
+          "12233221",
+          ".122221."],
+    palette={"1": "#3B2A1E", "2": "#8B5A2B", "3": "#F2C48D"},
+)
+```
+
+`.` (or whatever `transparent` is set to) means "no pixel here" and is skipped, so existing art shows through; pass `erase_transparent=true` to clear those cells instead. `mirror_x` / `mirror_y` additionally draw each cell at its reflection, so a symmetric sprite is authored once. Like the other `_at` tools it targets a layer and frame, creating both on demand.
+
+`get_sprite_map` is the inverse: it reads a rectangle back as the same `rows` / `palette` / `transparent` triple, so the result can be edited and passed straight back in. Against `get_pixels_rect`'s per-pixel JSON a 16×16 region goes from ~256 objects to 16 strings — and unlike judging an exported PNG by eye, the hex values are exact. Feed a previous result's `palette` back in to keep characters stable between reads, which makes two maps directly comparable.
+
+| Tool | Description |
+|------|-------------|
+| `draw_sprite_map` | Draw a region from a character grid and palette, with optional mirroring and transparent-cell erasing |
+| `get_sprite_map` | Read a region back as a character grid, reusing a supplied palette for stable characters |
+
+Reach for the grid form when the shape is small enough to hold in view (roughly ≤ 32×32) or when exact readback matters; `draw_pixels_at` / `get_pixels_rect` remain the tools for scattered individual pixels.
 
 ### Text
 
@@ -321,7 +348,7 @@ time.
 
 1. **Plan the palette first**: `generate_color_ramp` for each material (skin, armor, blade), or `apply_palette_preset` for a retro look.
 2. **Build in layers**: background / body / equipment / effects, so parts can be animated and edited independently.
-3. **Draw coarse to fine**: silhouette with `draw_rectangle_at` / `draw_ellipse_at` / `fill_area_at`, then refine with `draw_pixels_at`.
+3. **Draw coarse to fine**: silhouette with `draw_rectangle_at` / `draw_ellipse_at` / `fill_area_at`, then refine with `draw_pixels_at`. On a small canvas (roughly ≤ 32×32) skip the two-step and author the whole thing as a single `draw_sprite_map` grid, then read it back with `get_sprite_map` to check it.
 4. **Look at your work**: `export_frame` at 8×, inspect, fix, repeat. Use `get_color_stats` to keep the palette tight.
 5. **Shade with intent**: `adjust_hsl` for shadow layers, `apply_dither_gradient` for blends, `outline_cel` for readability.
 6. **Animate with the cel tools**: `propagate_cels`, then `tween_cel_positions_eased` / `oscillate_cel_positions`; verify with `render_onion_skin` and `compare_frames`; export with `export_tag`.

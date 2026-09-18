@@ -2,9 +2,9 @@
 
 > ⚠️ 本文件由 `scripts/gen_tool_reference.py` 解析源码 AST 生成，**请勿手改**。
 > 新增或修改工具后重新生成：`uv run python scripts/gen_tool_reference.py`
-> 生成基线：`586420f`
+> 生成基线：`c26fe06`
 
-共 **116** 个 `@mcp.tool()` 工具，分布在 **20** 个模块。
+共 **118** 个 `@mcp.tool()` 工具，分布在 **21** 个模块。
 
 参数列中 `*` 之后的是 keyword-only 参数；`filename` 通常可省略（回退到会话的活跃文件）。
 
@@ -22,6 +22,7 @@
 | [`guide.py`](#guidepy) | 1 | 返回面向 LLM 的动画工作流指南文本 | [05-animation.md](../05-animation.md) |
 | [`quality.py`](#qualitypy) | 4 | 动画一致性校验与归一化（结构校验器，非评分器） | [08-inspection-and-quality.md](../08-inspection-and-quality.md) |
 | [`pixel_read.py`](#pixel_readpy) | 4 | 单 cel 与合成后的像素读取 | [08-inspection-and-quality.md](../08-inspection-and-quality.md) |
+| [`sprite_map.py`](#sprite_mappy) | 2 | 字符网格（sprite map）的紧凑批量绘制与回读 | [03-painting.md](../03-painting.md) |
 | [`transform.py`](#transformpy) | 4 | 翻转、旋转、缩放、裁剪 | [03-painting.md](../03-painting.md) |
 | [`layers.py`](#layerspy) | 7 | 图层删除、重命名、复制、排序、混合模式、合并、展平 | [04-layers-and-canvas.md](../04-layers-and-canvas.md) |
 | [`selection.py`](#selectionpy) | 4 | 矩形区域的移动/复制/擦除，以及按颜色擦除 | [03-painting.md](../03-painting.md) |
@@ -1390,6 +1391,62 @@ Read VISIBLE RGBA over a rectangle (flattened composite of all layers). The rect
 | `width` | `int` | **必填** | Region width |
 | `height` | `int` | **必填** | Region height |
 | `frame_index` | `int` | `1` | Frame index starting at 1 |
+
+## `sprite_map.py`
+
+字符网格（sprite map）的紧凑批量绘制与回读
+
+**2 个工具**
+
+### `draw_sprite_map`
+
+```text
+draw_sprite_map(*, filename: str = '', layer_name: str, frame_index: int, rows: List[str], palette: Dict[str, str], x: int = 0, y: int = 0, transparent: str = '.', mirror_x: bool = False, mirror_y: bool = False, erase_transparent: bool = False, create_if_missing: bool = True) -> str
+```
+
+源码：[`aseprite_mcp/tools/sprite_map.py:138`](../../aseprite_mcp/tools/sprite_map.py#L138)
+
+Draw a whole region from a compact character-grid map. `rows` is a list of equal-length strings, one per pixel row, top to bottom; `palette` maps each character to a colour. This is the compact alternative to draw_pixels_at's {x, y, color} lists: draw_sprite_map( layer_name="hero", frame_index=1, rows=["..1111..", ".122221.", "12233221"], palette={"1": "#3b2a1e", "2": "#8b5a2b", "3": "#f2c48d"}, ) Characters equal to `transparent` ("." by default) are skipped, so whatever is already on the layer shows through. Pass erase_transparent=true to clear them instead — that is what makes a map round-trip exactly after pixels are deleted in an edit.
+
+| 参数 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `filename` | `str` | `''` | Aseprite file to modify (optional; defaults to the session's active file) |
+| `layer_name` | `str` | **必填** | Layer to draw on |
+| `frame_index` | `int` | **必填** | Frame index starting at 1 |
+| `rows` | `List[str]` | **必填** | Grid rows, top to bottom; every row must be the same length |
+| `palette` | `Dict[str, str]` | **必填** | Character -> hex colour (#RGB, #RGBA, #RRGGBB or #RRGGBBAA) |
+| `x` | `int` | `0` | Sprite-global x of the grid's top-left cell (default 0) |
+| `y` | `int` | `0` | Sprite-global y of the grid's top-left cell (default 0) |
+| `transparent` | `str` | `'.'` | Character meaning "no pixel here" (default ".") |
+| `mirror_x` | `bool` | `False` | Also draw every cell at its left-right reflection, so a symmetric sprite only has to be authored once. The mirror is in place: the grid keeps its width, so author the full width with the far half left as `transparent` |
+| `mirror_y` | `bool` | `False` | Also draw every cell at its top-bottom reflection (in place) |
+| `erase_transparent` | `bool` | `False` | Clear transparent cells instead of leaving them |
+| `create_if_missing` | `bool` | `True` | Create the layer (top-level names only) and cel if they don't exist |
+
+### `get_sprite_map`
+
+```text
+get_sprite_map(*, filename: str = '', layer_name: str = '', frame_index: int = 1, x: int, y: int, width: int, height: int, palette: Optional[Dict[str, str]] = None, max_colors: int = 0, alpha_threshold: int = 128, transparent: str = '.', composite: bool = False) -> str
+```
+
+源码：[`aseprite_mcp/tools/sprite_map.py:270`](../../aseprite_mcp/tools/sprite_map.py#L270)
+
+Read a rectangular region back as a compact character-grid map. Returns JSON whose `rows`, `palette` and `transparent` are shaped exactly like draw_sprite_map's arguments, so a read/edit/write loop needs no reformatting: {"layer": "hero", "frame": 1, "x": 0, "y": 0, "width": 16, "height": 16, "transparent": ".", "columns": "0123456789abcdef", "palette": {"0": "#3b2a1e", "1": "#8b5a2b"}, "rows": ["....0011........", ...]} `columns` labels each column's x offset, so a character's position can be read off without counting. Against get_pixels_rect's per-pixel JSON a 16x16 region goes from ~256 objects to 16 short strings — and unlike judging an exported PNG by eye, the hex values are exact. Auto-assigned characters follow ascending colour order. Pass `palette` (e.g. a previous result's) to pin the assignment: characters then stay stable across edits, so two maps can be diffed character by character.
+
+| 参数 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `filename` | `str` | `''` | Aseprite file to read (optional; defaults to the session's active file) |
+| `layer_name` | `str` | `''` | Layer to read from (uses active layer when empty) |
+| `frame_index` | `int` | `1` | Frame index starting at 1 |
+| `x` | `int` | **必填** | Left edge of the region (sprite-global) |
+| `y` | `int` | **必填** | Top edge of the region (sprite-global) |
+| `width` | `int` | **必填** | Region width |
+| `height` | `int` | **必填** | Region height |
+| `palette` | `Optional[Dict[str, str]]` | `None` | Optional character -> hex colour map to reuse for the output |
+| `max_colors` | `int` | `0` | Quantise to at most this many colours (0 = no limit) |
+| `alpha_threshold` | `int` | `128` | Alpha below this becomes `transparent` (default 128) |
+| `transparent` | `str` | `'.'` | Character emitted for empty cells (default ".") |
+| `composite` | `bool` | `False` | Read the visible flattened composite instead of a single layer |
 
 ## `transform.py`
 

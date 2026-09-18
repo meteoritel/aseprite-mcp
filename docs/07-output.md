@@ -211,7 +211,7 @@ Sprite sheet exported to D:/art/coin_sheet.png (horizontal) with data file D:/ar
 Layers exported to D:/art/layers: body.png, armor.png, glow.png
 ```
 
-**没有任何工具返回 image content block、base64 数据或 MCP resource。** 全部 116 个工具都是 `async def ... -> str`（[02 §7](02-paths-errors-lifecycle.md#七错误契约)）。
+**没有任何工具返回 image content block、base64 数据或 MCP resource。** 全部 118 个工具都是 `async def ... -> str`（[02 §7](02-paths-errors-lifecycle.md#七错误契约)）。
 
 这意味着**图像传到客户端有且只有两条路**：
 
