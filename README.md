@@ -425,3 +425,9 @@ one available and may describe a wrapper rather than the client).
 ```json
 "env": { "ASEPRITE_MCP_CLIENT_WATCHDOG": "0" }
 ```
+
+## Developer Documentation
+
+Architecture, internals, and contribution guides live in [docs/](docs/README.md):
+the Lua bridge and stdout protocol, path/error/process conventions, one doc per
+subsystem, the full generated tool reference, and setup/testing/Docker notes.
