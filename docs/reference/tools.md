@@ -2,7 +2,7 @@
 
 > ⚠️ 本文件由 `scripts/gen_tool_reference.py` 解析源码 AST 生成，**请勿手改**。
 > 新增或修改工具后重新生成：`uv run python scripts/gen_tool_reference.py`
-> 生成基线：`c26fe06`
+> 生成基线：`c1ada8a`
 
 共 **118** 个 `@mcp.tool()` 工具，分布在 **21** 个模块。
 

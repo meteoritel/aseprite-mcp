@@ -1,7 +1,7 @@
 # 02 · 路径、错误与进程生命周期
 
 > 三个横切关注点：文件名如何变成受校验的绝对路径、失败如何表达给调用方、以及这条 stdio 服务链上有哪些进程、谁负责让它们死掉。
-> 覆盖源文件：[`core/state.py`](../aseprite_mcp/core/state.py) · [`core/colors.py`](../aseprite_mcp/core/colors.py) · [`core/lifecycle.py`](../aseprite_mcp/core/lifecycle.py) · [`tools/preview.py`](../aseprite_mcp/tools/preview.py)（进程部分）· [`tests/conftest.py`](../tests/conftest.py)（错误契约的权威定义）
+> 覆盖源文件：[`core/state.py`](../aseprite_mcp/core/state.py) · [`core/colors.py`](../aseprite_mcp/core/colors.py) · [`tools/preview.py`](../aseprite_mcp/tools/preview.py)（进程部分）· [`tests/conftest.py`](../tests/conftest.py)（错误契约的权威定义）· [`tests/test_stdio_lifecycle.py`](../tests/test_stdio_lifecycle.py)
 
 ## 职责边界
 
@@ -252,7 +252,7 @@ filename（prepare_filename）
 
 - 没有 `{"success": bool, ...}` 包装，没有结果对象。
 - 没有自定义异常体系（唯一的自定义异常是字体模块的 `FontError`），没有全局异常处理器。
-- 每个工具都是 `async def ... -> str`，返回一条给人看的字符串；FastMCP 把它包成 MCP 的 text content。
+- 每个工具都是 `async def ... -> str`，返回一条给人看的字符串；MCPServer 把它包成 MCP 的 text content。
 - 成功/失败**靠消息文本区分**。
 
 ### 四个前缀就是契约
@@ -321,64 +321,13 @@ ERROR:Layer 'foo' not found. Existing layers: [body, armor]. Tip: call add_layer
 
 | 进程 | 谁启动 | 生命周期 | 谁负责收尸 |
 |---|---|---|---|
-| MCP server（本进程） | MCP client（经 `uv` 启动器链） | 整个会话 | **自己**，靠看门狗（8.2） |
+| MCP server（本进程） | MCP client（经 `uv` 启动器链） | 整个会话 | MCP SDK stdio transport 在 stdin EOF 时结束 |
 | `aseprite --batch` | 每次工具调用 | 秒级，跑完即退 | 自然退出；**没有超时兜底** |
 | `python -m http.server` | `start_preview_server` | 跨多次调用，直到显式停止 | `stop_preview_server`（8.4） |
 
-### 8.2 客户端看门狗（`core/lifecycle.py`）
+### 8.2 MCP stdio 生命周期
 
-`install_client_watchdog()` 在 [`__main__.py:9`](../aseprite_mcp/__main__.py#L9) 里于 `mcp.run()` **之前**调用。它解决的是一类"孤儿进程堆积"问题，模块 docstring 记录了两个成因：
-
-1. **client 的直接子进程不是 server**。`uv --directory ... run -m aseprite_mcp` 展开成 `uv.exe → python(venv launcher) → python -m aseprite_mcp`，而 venv launcher 不监视*它*的父进程，所以杀掉 client（或只杀掉 `uv.exe`）会留下两个 python 进程永久孤儿化。
-2. **stdio 传输无法总是自己结束**。stdin EOF 时 reader 结束了，但 writer 还阻塞在一个没人关闭的流上，包裹它们的 task group 永不退出，`anyio.run()` 也就永不返回。
-
-实测数据（写进 docstring 与根 README）：一个 server 在 stdin 关闭 20 秒后仍活着；每个崩溃/强杀会话累积一对约 60 MB 的孤儿，Windows 上除 `taskkill /T /F` 无法清除。
-
-#### 判死信号
-
-**stdin 是权威信号，且任何检查都不消费输入**（否则会把已缓冲的请求从传输层偷走）：
-
-```python
-def _stdin_eof() -> bool | None:
-    """Tri-state: True = client gone, False = client connected, None = unknown."""
-```
-
-| 平台 | 手段 | 细节 |
-|---|---|---|
-| Windows | `PeekNamedPipe`（ctypes `kernel32`） | 成功 ⇒ `False`（有客户端在写）；`ERROR_BROKEN_PIPE`(109) ⇒ `True`；其他错误 ⇒ `None`（无法判断，例如 stdin 被重定向到文件） |
-| POSIX | `select.poll` | **只注册 `POLLHUP \| POLLERR`**，这样"stdin 有数据可读"不会被误报成 EOF |
-| macOS | 无 `poll` | 返回 `None`，交给父进程兜底 |
-
-```python
-poller.register(fd, select.POLLHUP | select.POLLERR)
-```
-
-[`lifecycle.py:142`](../aseprite_mcp/core/lifecycle.py#L142)。
-
-**父进程只是兜底**，仅当 stdin 无法回答时才启用。优先级是刻意的（[`lifecycle.py:205-229`](../aseprite_mcp/core/lifecycle.py#L205)）：
-
-> A readable stdin is *proof* the client is still connected, and it is deliberately allowed to veto the parent signal
-
-因为客户端可能通过短命包装器启动 server（`cmd /c start`、分离式 spawner、shell 包装），此时父进程已死但会话完全可用 —— 信任父信号会让看门狗在健康会话里 `os._exit(0)`。反过来说，当父进程**就是**客户端时（比如直接 `python -m aseprite_mcp`），兜底既准确又即时。
-
-`_ParentWatch` 的实现：Windows 用 `OpenProcess(SYNCHRONIZE)` + `WaitForSingleObject`（内核在父进程一死就发信号，即使是被强杀）；POSIX 比较 `os.getppid()` 与启动时的值（ppid 为 1 表示已被 reparent，没有基准可比，直接判定为 `False`）。
-
-#### 迟滞与退出方式
-
-```python
-_CONFIRMATIONS = 2   # 同一个答案必须连续出现两次
-```
-
-- 退出不可逆，所以条件要连续两次成立才动手。代价是最多让孤儿多活一个周期（2 秒）。
-- probe 抛异常时**重置 strikes 而不是解除武装**（[`lifecycle.py:251-254`](../aseprite_mcp/core/lifecycle.py#L251)）—— 一个打嗝就自杀的看门狗比没有更糟。
-- 退出走 `os._exit(0)`（[`lifecycle.py:278`](../aseprite_mcp/core/lifecycle.py#L278)）是刻意的：解释器**不能**去等那个被阻塞的传输 task 或任何非守护线程，因为那正是要逃离的状态。
-- 线程是 daemon，名为 `mcp-client-watchdog`，默认每 2 秒（`DEFAULT_INTERVAL_SECONDS`）检查一次。
-
-#### 开关与可测试性
-
-`ASEPRITE_MCP_CLIENT_WATCHDOG` —— 未设置或空白视为**开启**，只有 `0` / `false` / `no` / `off` 关闭（[`lifecycle.py:77-82`](../aseprite_mcp/core/lifecycle.py#L77)）。关闭的典型场景：把 server 嵌在一个预期比它活得更久的非 MCP 父进程下，或 macOS 上隔着启动包装器（那里只有父信号可用，而它描述的可能是包装器而非客户端）。
-
-`install_client_watchdog(*, interval, probe, on_client_gone)` 三个关键字参数可注入（[`lifecycle.py:257`](../aseprite_mcp/core/lifecycle.py#L257)）；**只要注入了 `probe`，就会跳过环境变量检查**，测试因此能在被禁用的环境下驱动逻辑。
+[`__main__.py`](../aseprite_mcp/__main__.py) 通过 `mcp.run(transport='stdio')` 启动官方 MCP SDK 的 stdio transport。客户端关闭 stdin 后，transport 结束读写任务，server 进程随之退出。回归测试 [`tests/test_stdio_lifecycle.py`](../tests/test_stdio_lifecycle.py) 会启动真实 server、完成 `initialize` 握手，再强制结束客户端并确认 server 退出。
 
 ### 8.3 子进程没有超时
 
@@ -403,10 +352,9 @@ _CONFIRMATIONS = 2   # 同一个答案必须连续出现两次
 | [`tests/test_path_resolution.py`](../tests/test_path_resolution.py) | 工作区解析、`~` 展开、穿越拒绝、锚定语义、`create_canvas` 只在成功后锚定、`run_lua_script` 的活跃文件回退。**纯单元测试，不需要 Aseprite** |
 | [`tests/test_encoding.py`](../tests/test_encoding.py) | UTF-8 落盘与子进程解码。不需要真 Aseprite（monkeypatch / `ASEPRITE_PATH=sys.executable`） |
 | [`tests/test_pixel_xy_validation.py`](../tests/test_pixel_xy_validation.py) | 非整数 `x`/`y` 的注入载荷在校验阶段被拒。不需要真 Aseprite |
-| [`tests/test_lifecycle.py`](../tests/test_lifecycle.py) | 看门狗只触发一次、存活时不触发、需要连续两次、probe 异常不解除、环境变量关闭、stdin 检查不消费输入、stdin 优先于死父进程、父进程兜底，以及一个在真实 spawn 出的 server 上做的 A/B 孤儿测试 |
+| [`tests/test_protocol.py`](../tests/test_protocol.py) | 通过真实 stdio server 验证现代 `server/discover` 与 `tools/list` |
+| [`tests/test_stdio_lifecycle.py`](../tests/test_stdio_lifecycle.py) | 通过真实 stdio server 验证客户端进程崩溃后的 server 退出 |
 | [`tests/test_error_propagation.py`](../tests/test_error_propagation.py) | 非法输入必须报失败而非伪造成功（issue #15） |
-
-> `tests/test_lifecycle.py::test_watchdog_is_what_ends_the_orphan_case` 是 A/B 端到端测试，对环境影响敏感（控制组依赖"看门狗关闭时 server 存活"），`.pytest_cache` 记录它曾失败过。
 
 ## 相关文档
 

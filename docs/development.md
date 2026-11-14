@@ -27,7 +27,7 @@ uv sync          # 含 dev 组（pytest）
 uv run -m aseprite_mcp
 ```
 
-[`__main__.py`](../aseprite_mcp/__main__.py) 做两件事：先 `install_client_watchdog()`，再 `mcp.run(transport='stdio')`。**没有 console script 入口**，`aseprite-mcp` 不是一个可执行命令（原因见第三节）。
+[`__main__.py`](../aseprite_mcp/__main__.py) 导入工具并调用 `mcp.run(transport='stdio')`。**没有 console script 入口**，`aseprite-mcp` 不是一个可执行命令（原因见第三节）。
 
 ### 客户端配置
 
@@ -76,7 +76,6 @@ dotenv.load_dotenv(dotenv_path=_ENV_PATH)
 |---|---|---|---|---|
 | `ASEPRITE_PATH` | ✅ | [`commands.py:75`](../aseprite_mcp/core/commands.py#L75)；shell: [`docker-entrypoint.sh:12-13`](../scripts/docker-entrypoint.sh#L12) | `aseprite`（查 `PATH`） | 所有 Aseprite 子进程的可执行文件路径 |
 | `ASERITE_MCP_WORKSPACE` | ⚠️ **少一个 `P`** | [`state.py:28,58`](../aseprite_mcp/core/state.py#L28) | 未设 → `os.getcwd()` | 相对文件名解析的基准目录 |
-| `ASEPRITE_MCP_CLIENT_WATCHDOG` | ✅ | [`lifecycle.py:62,79`](../aseprite_mcp/core/lifecycle.py#L62) | 启用；`0`/`false`/`no`/`off` 关闭 | 客户端存活看门狗 |
 | `STEAM_USERNAME` | ✅ | [`docker-entrypoint.sh:5`](../scripts/docker-entrypoint.sh#L5)、[`install-aseprite-steam.sh:15,28`](../scripts/install-aseprite-steam.sh#L15) | 未设 | 容器内 SteamCMD 登录 |
 | `STEAM_PASSWORD` | ✅ | 同上 | 未设 | 同上 |
 | `STEAM_GUARD_CODE` | ✅ | [`install-aseprite-steam.sh:29-30`](../scripts/install-aseprite-steam.sh#L29) | 未设 | Steam Guard 二次验证码 |
@@ -205,11 +204,12 @@ No diff data returned
 
 ### 不需要真实 Aseprite 的测试
 
-四个模块可以独立验证，改这些地方时不必配 Aseprite：
+这些测试可以独立验证，运行时不必配 Aseprite：
 
 | 测试 | 为什么能脱离 Aseprite |
 |---|---|
-| [`tests/test_lifecycle.py`](../tests/test_lifecycle.py) | 看门狗是纯决策逻辑 + 可注入 probe；A/B 测试自己 spawn 一个真 server |
+| [`tests/test_protocol.py`](../tests/test_protocol.py) | 真 stdio server 响应 `server/discover`，并继续提供 `tools/list` |
+| [`tests/test_stdio_lifecycle.py`](../tests/test_stdio_lifecycle.py) | 真 stdio server 在客户端进程崩溃后退出 |
 | [`tests/test_path_resolution.py`](../tests/test_path_resolution.py) | monkeypatch 掉 `execute_lua_script_checked` / `execute_lua_script` |
 | [`tests/test_pixel_xy_validation.py`](../tests/test_pixel_xy_validation.py) | 校验在拼脚本前就返回，用一个 0 字节占位文件即可 |
 | [`tests/test_encoding.py`](../tests/test_encoding.py) | monkeypatch `run_command`；两处用 `ASEPRITE_PATH=sys.executable` 当假 Aseprite |
@@ -221,7 +221,7 @@ No diff data returned
 | 风格 | 命名 | 例子 |
 |---|---|---|
 | **镜像源模块** | `test_<模块名>.py` | `test_drawing` `test_sprite_map` `test_export` `test_layers` `test_text` `test_tilemap` `test_palette` `test_selection` `test_slices` `test_animation` `test_analysis` `test_fx` `test_native_fx` `test_script` |
-| **按 bug / issue 命名** | `test_<主题>.py`，docstring 里写清 bug 经过 | `test_error_propagation` `test_group_layers` `test_create_into_group` `test_drawing_fixes` `test_auto_create` `test_visibility` `test_composite_read` `test_slices_pipe` `test_sprite_info_groups` `test_path_resolution` `test_pixel_xy_validation` `test_lifecycle` `test_encoding` |
+| **按 bug / issue 命名** | `test_<主题>.py`，docstring 里写清 bug 经过 | `test_error_propagation` `test_group_layers` `test_create_into_group` `test_drawing_fixes` `test_auto_create` `test_visibility` `test_composite_read` `test_slices_pipe` `test_sprite_info_groups` `test_path_resolution` `test_pixel_xy_validation` `test_protocol` `test_stdio_lifecycle` `test_encoding` |
 
 新建回归测试请用第二种，并在模块 docstring 里写清"原来错在哪、现在为什么不会错"。
 
@@ -237,11 +237,7 @@ No diff data returned
 | `test_visibility.py` | `04d77ca`（合成读取排除隐藏层） |
 | `test_auto_create.py` | `0f2bebf`（绘图工具自动建层） |
 | `test_path_resolution.py` / `test_encoding.py` | `721a31e` / `2987155`（路径与 UTF-8 集中化） |
-| `test_lifecycle.py` | `586420f`（客户端看门狗） |
 
-### 已知失败
-
-`.pytest_cache/v/cache/lastfailed` 记录 `tests/test_lifecycle.py::test_watchdog_is_what_ends_the_orphan_case` 曾失败。它是唯一在真实 spawn 出的 server 上做的 A/B 端到端测试，控制组依赖"看门狗关闭时 server 存活"，对运行环境敏感。
 
 ---
 
@@ -344,7 +340,7 @@ docs/
 
 ### ⚠️ CI 不跑测试
 
-工作流只做三件事：构建镜像、推送镜像、PR 上冒烟验证解释器和 uv 能跑。**27 个测试模块没有任何自动化入口** —— `uv run pytest` 完全依赖开发者本地手动执行。
+工作流只构建镜像、推送镜像，并在 PR 上冒烟验证解释器和 uv。测试目前没有自动化入口，`uv run pytest` 依赖开发者本地执行。
 
 这意味着一次只改了 Python 逻辑、没碰 Docker 的 PR，CI 会给绿灯而测试可能全红。**提交前请本地跑 `uv run pytest`。**
 
@@ -369,7 +365,7 @@ uv run python scripts/gen_tool_reference.py --check   # CI 友好：过期则退
 
 ### `SKILL.md` 是运行时契约，不是普通文档
 
-[`SKILL.md`](../SKILL.md) 被 [`_load_skill_instructions()`](../aseprite_mcp/__init__.py#L18) 读进 `FastMCP(instructions=...)`，在**客户端连接时推给模型**。它讲的是"模型应该怎样使用这些工具"（文件处理规则、哪些工具会自动建层、该用哪族读取工具、典型工作流）。
+[`SKILL.md`](../SKILL.md) 被 [`_load_skill_instructions()`](../aseprite_mcp/__init__.py#L18) 读进 `MCPServer(instructions=...)`，在**客户端连接时推给模型**。它讲的是"模型应该怎样使用这些工具"（文件处理规则、哪些工具会自动建层、该用哪族读取工具、典型工作流）。
 
 **改了工具契约就要同步它**，否则模型会拿着过时规则去调用。典型的触发场景：
 

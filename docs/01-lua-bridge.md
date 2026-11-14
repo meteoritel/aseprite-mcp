@@ -37,7 +37,7 @@ aseprite --batch [<sprite.aseprite>] --script <临时脚本.lua>
 | 每次都是冷启动 | 连"打开某个 sprite"这件事也要每次重新做 |
 | Python 侧不持有 sprite | 工具之间只通过磁盘上的 `.aseprite` 文件和活跃文件路径传递状态 |
 
-Python 侧唯一的长驻状态是**会话活跃文件**（[02](02-paths-errors-lifecycle.md#二活跃文件会话状态)）和**客户端看门狗线程**（[02](02-paths-errors-lifecycle.md#八进程生命周期)）。
+Python 侧唯一的长驻状态是**会话活跃文件**（[02](02-paths-errors-lifecycle.md#二活跃文件会话状态)）。MCP 协议与 stdio 生命周期由官方 Python SDK 管理。
 
 ---
 
@@ -226,7 +226,7 @@ end
 
 ## 六、`core/native.py`：原生命令为什么要包装
 
-[`core/native.py`](../aseprite_mcp/core/native.py) 只有 56 行、一个公开函数，但它解决了一个容易踩的坑，模块 docstring 写得很清楚：
+[`core/native.py`](../aseprite_mcp/core/native.py) 解决了一个容易踩的坑，模块 docstring 写得很清楚：
 
 > Native engine commands act on the ACTIVE sprite / layer / frame (and the active selection for region scope), NOT on explicit arguments — so the wrapper resolves + activates the target BEFORE the command, error-first, or a filter silently hits the wrong layer.
 
@@ -247,7 +247,7 @@ FIND_LAYER + LAYER_NAMES
 → print("OK")
 ```
 
-消费方是 [`tools/native_fx.py`](../aseprite_mcp/tools/native_fx.py) 的 7 个工具，详见 [06 · 特效与网格结构](06-effects-and-tilemap.md#三native_fxpy-的七个工具)。
+消费方是 [`tools/native_fx.py`](../aseprite_mcp/tools/native_fx.py)，详见 [06 · 特效与网格结构](06-effects-and-tilemap.md#三native_fxpy-的工具)。
 
 ---
 
@@ -291,7 +291,7 @@ FIND_LAYER + LAYER_NAMES
 
 ## 相关文档
 
-- [02 · 路径、错误与进程生命周期](02-paths-errors-lifecycle.md) —— 文件名如何变成绝对路径、错误前缀集合、看门狗
+- [02 · 路径、错误与进程生命周期](02-paths-errors-lifecycle.md) —— 文件名如何变成绝对路径、错误前缀集合、stdio 进程生命周期
 - [06 · 特效与网格结构](06-effects-and-tilemap.md) —— `core/native.py` 的主要消费方
 - [07 · 导出与预览](07-output.md) —— 绕过 Lua 直接调 CLI 的那条路径
 - [reference/tools.md](reference/tools.md#scriptpy) —— `run_lua_script` 的完整签名

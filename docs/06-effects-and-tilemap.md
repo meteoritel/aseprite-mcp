@@ -117,7 +117,7 @@ if f >= threshold then pset(img, px, py, c2) else pset(img, px, py, c1) end
 
 ---
 
-## 三、`native_fx.py` 的七个工具
+## 三、`native_fx.py` 的工具
 
 | 工具 | 包装的 `app.command.*` | 关键参数 |
 |---|---|---|

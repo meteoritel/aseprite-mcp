@@ -4,12 +4,9 @@
 
 | | |
 |---|---|
-| 工具数 | **118** 个 `@mcp.tool()`，分布在 **21** 个工具模块 |
-| 代码量 | `aseprite_mcp/` 约 9800 行，`tests/` 约 2400 行 |
-| 传输 | **stdio only**（`mcp.run(transport='stdio')`） |
+| 传输 | **stdio only**；支持 `initialize` 握手与 `2026-07-28` `server/discover` |
 | 运行时 | Python ≥ 3.13，依赖 `mcp[cli]`、`pillow`、`httpx`、`python-dotenv` |
 | 外部依赖 | 一个 `aseprite` 可执行文件（由 `ASEPRITE_PATH` 定位） |
-| 测试 | 27 个测试模块，以"真 Aseprite 集成测试"为主 |
 
 用户向的展示型文档（示例图、工具分类表）是仓库根的 [`README.md`](../README.md)。本文档集是面向开发者的机制文档，两者受众不同。
 
@@ -19,9 +16,9 @@
 
 一句话：**每次工具调用都新起一个 Aseprite 进程，跑一段生成的 Lua，从 stdout 读回结果。**
 
-因此它没有长驻编辑器、没有 socket、没有双向协议、没有 sprite 缓存。Python 侧只持有一点点会话状态（哪个文件是"当前文件"）和一个看门狗线程。所有真正的图像工作都由 Aseprite 自己的 Lua API（`app.*`、`Sprite`、`Layer`、`Cel`、`Image`）完成。
+因此它没有长驻编辑器、没有 socket、没有 sprite 缓存。Python 侧只持有一点点会话状态（哪个文件是"当前文件"）；MCP 协议与 stdio 生命周期由官方 Python SDK 管理。所有真正的图像工作都由 Aseprite 自己的 Lua API（`app.*`、`Sprite`、`Layer`、`Cel`、`Image`）完成。
 
-这个设计选择的回报是简单：没有并发、没有生命周期管理、没有状态同步。代价是每次调用都要冷启动一次 Aseprite，且每次都要重新打开文件。
+这个设计让 Aseprite 执行端无需维护长驻编辑会话、并发状态同步或图像缓存。代价是每次调用都要冷启动一次 Aseprite，且每次都要重新打开文件。
 
 ---
 
@@ -29,19 +26,18 @@
 
 ```text
 ┌──────────────────────────────────────────────────────────────────┐
-│  MCP 工具层          aseprite_mcp/tools/*.py （21 个模块，118 个工具）│
+│  MCP 工具层          aseprite_mcp/tools/*.py                       │
 │  · 参数校验（Python 侧）                                          │
 │  · 用 f-string 拼 Lua 脚本                                        │
 │  · 解析 stdout，返回人类可读字符串                                 │
 └───────────────────────────┬──────────────────────────────────────┘
                             │ 只依赖
 ┌───────────────────────────▼──────────────────────────────────────┐
-│  机制层              aseprite_mcp/core/*.py （7 个模块）           │
+│  机制层              aseprite_mcp/core/*.py                       │
 │  commands  子进程执行 · Lua 转义 · 穿越拒绝                        │
 │  lua       可复用 Lua 片段（图层解析、cel 归一化、HSL…）            │
 │  native    app.command.* 的目标激活包装                            │
 │  state     prepare_filename · 活跃文件 · 工作区                    │
-│  lifecycle 客户端看门狗                                           │
 │  colors    十六进制颜色解析                                       │
 │  fonts     字形栅格化（bitmap / TrueType）                        │
 └───────────────────────────┬──────────────────────────────────────┘
@@ -52,7 +48,7 @@
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-`aseprite_mcp/__init__.py` 创建 `FastMCP` 单例，`aseprite_mcp/__main__.py` 是入口。
+`aseprite_mcp/__init__.py` 创建 `MCPServer` 单例，`aseprite_mcp/__main__.py` 是入口。
 
 **依赖方向是单向的**：`tools/` 依赖 `core/`，`core/` 之间只按 `commands ← state ← tools` 这条链互相引用，不存在 `core/` 反向依赖 `tools/`。唯一跨模块的横向引用是 `core/state.py` 从 `core/commands.py` 取 `reject_traversal`。
 
@@ -64,7 +60,7 @@
 
 | # | 阶段 | 位置 |
 |---|---|---|
-| 1 | 客户端按 JSON Schema 调用工具 | FastMCP 依据函数签名生成 schema |
+| 1 | 客户端按 JSON Schema 调用工具 | MCPServer 依据函数签名生成 schema |
 | 2 | `filename` 解析成绝对路径，或返回错误字符串 | [`state.py:72`](../aseprite_mcp/core/state.py#L72) → [02](02-paths-errors-lifecycle.md#一prepare_filename唯一的路径漏斗) |
 | 3 | Python 侧校验（尺寸、颜色、`pixels` 的 `x`/`y`） | [02](02-paths-errors-lifecycle.md#六参数校验与-lua-注入) |
 | 4 | 用户字符串经 `lua_escape` 转义 | [`commands.py:11`](../aseprite_mcp/core/commands.py#L11) → [01](01-lua-bridge.md#四lua-字符串转义) |
@@ -73,11 +69,11 @@
 | 7 | `aseprite --batch <sprite> --script <tmp>` 子进程执行 | [`commands.py:75`](../aseprite_mcp/core/commands.py#L75) |
 | 8 | Lua 内：`app.transaction(...)` → `spr:saveAs(spr.filename)` → `print("OK")` | 各工具模块 |
 | 9 | Python 扫 stdout 找行首 `ERROR:`，决定成败 | [`commands.py:131`](../aseprite_mcp/core/commands.py#L131) → [01](01-lua-bridge.md#三stdout-文本协议核心机制) |
-| 10 | 工具返回字符串，FastMCP 包成一个 text content block | 各工具模块 |
+| 10 | 工具返回字符串，MCPServer 包成一个 text content block | 各工具模块 |
 
 ### 两条必须记住的推论
 
-**图像从不通过 MCP 返回。** 全部 118 个工具的返回类型都是 `str`，没有任何工具返回 image content block、base64 或 MCP resource。图片只能先写到磁盘，再把**绝对路径文本**交给客户端 —— 或者用 `start_preview_server` 起一个本地 HTTP 服务，让客户端去 `http://localhost:<port>/<file>` 取。这是这个项目视觉反馈循环（`export_frame` → 看图 → 改）的实现方式。
+**图像从不通过 MCP 返回。** 工具的返回类型都是 `str`，没有工具返回 image content block、base64 或 MCP resource。图片只能先写到磁盘，再把**绝对路径文本**交给客户端 —— 或者用 `start_preview_server` 起一个本地 HTTP 服务，让客户端去 `http://localhost:<port>/<file>` 取。这是这个项目视觉反馈循环（`export_frame` → 看图 → 改）的实现方式。
 
 **退出码 0 不等于成功。** 批量模式下 Lua 无法设置进程退出码，所以失败靠脚本 `print("ERROR:...")` 表达；反过来，Aseprite 在若干失败场景下仍以 0 退出却不写文件，导出类工具因此必须在成功退出后**查文件系统**。见 [07](07-output.md#四退出码-0-但没写文件)。
 
@@ -90,7 +86,7 @@
 [`aseprite_mcp/__init__.py:33`](../aseprite_mcp/__init__.py#L33)：
 
 ```python
-mcp = FastMCP("aseprite", instructions=_load_skill_instructions())
+mcp = MCPServer("aseprite", instructions=_load_skill_instructions())
 ```
 
 `_load_skill_instructions()`（[`__init__.py:18-30`](../aseprite_mcp/__init__.py#L18)）读取仓库根的 `SKILL.md` 作为 MCP 的 `instructions` 字段 —— 也就是**连接时推给模型的文件处理契约**。文件读不到（`OSError`）或内容为空时，回退到 `_FALLBACK_INSTRUCTIONS`（[`__init__.py:7-15`](../aseprite_mcp/__init__.py#L7)），那段是英文的精简版同样规则。
@@ -108,21 +104,19 @@ from .. import mcp
 async def create_canvas(width: int, height: int, *, filename: str) -> str:
 ```
 
-然后 [`tools/__init__.py`](../aseprite_mcp/tools/__init__.py) 显式 `from . import <module>` 逐个导入 21 个模块，`__main__.py` 再 `from .tools import *`。
+然后 [`tools/__init__.py`](../aseprite_mcp/tools/__init__.py) 显式 `from . import <module>` 逐个导入工具模块，`__main__.py` 再 `from .tools import *`。
 
 没有 `pkgutil` 扫描、没有注册表、没有 `__all__`。**新增一个模块必须手工加进 `tools/__init__.py`，否则它的工具不会出现**；在已有模块里加工具则不需要改任何注册代码。
 
 ### 入口
 
-[`aseprite_mcp/__main__.py`](../aseprite_mcp/__main__.py) 全文只有 10 行：
+[`aseprite_mcp/__main__.py`](../aseprite_mcp/__main__.py) 导入工具模块并启动 stdio server：
 
 ```python
 from . import mcp
-from .core.lifecycle import install_client_watchdog
 from .tools import *
 
 if __name__ == "__main__":
-    install_client_watchdog()
     mcp.run(transport='stdio')
 ```
 
@@ -132,7 +126,7 @@ if __name__ == "__main__":
 
 ### 落点
 
-优先加到语义最接近的**已有模块**，而不是新建文件。当前 21 个模块的职责划分见 [reference/tools.md 的模块索引](reference/tools.md#模块索引)，各模块的边界写在对应子系统文档的「职责边界」一节。
+优先加到语义最接近的**已有模块**，而不是新建文件。工具模块的职责划分见 [reference/tools.md 的模块索引](reference/tools.md#模块索引)，各模块的边界写在对应子系统文档的「职责边界」一节。
 
 ### 骨架
 
@@ -215,7 +209,7 @@ async def my_tool(filename: str = "", *, layer_name: str, frame_index: int = 1) 
 | 文档 | 内容 |
 |---|---|
 | [01 · Lua 桥与 Aseprite 调用模型](01-lua-bridge.md) | 一次调用一个进程的模型、`AsepriteCommand`、**stdout 文本协议总表**、`lua_escape`、`core/lua.py` 共享片段、`core/native.py` 的目标激活、`run_lua_script` |
-| [02 · 路径、错误与进程生命周期](02-paths-errors-lifecycle.md) | `prepare_filename` 漏斗、活跃文件、`ASERITE_MCP_WORKSPACE`、输出路径铁律、UTF-8 IO 全表、**参数校验与注入防护**、错误契约、客户端看门狗 |
+| [02 · 路径、错误与进程生命周期](02-paths-errors-lifecycle.md) | `prepare_filename` 漏斗、活跃文件、`ASERITE_MCP_WORKSPACE`、输出路径铁律、UTF-8 IO 全表、**参数校验与注入防护**、错误契约、MCP stdio 生命周期 |
 
 ### 子系统
 
@@ -232,7 +226,7 @@ async def my_tool(filename: str = "", *, layer_name: str, frame_index: int = 1) 
 
 | 文档 | 内容 |
 |---|---|
-| [reference/tools.md](reference/tools.md) | **118 个工具的完整清单**（签名、参数、默认值、源码行号），由脚本从 AST 生成 |
+| [reference/tools.md](reference/tools.md) | 工具的完整清单（签名、参数、默认值、源码行号），由脚本从 AST 生成 |
 | [development.md](development.md) | 环境与安装、**全部环境变量**、测试 harness、Docker、CI、文档保鲜 |
 
 ### 推荐阅读顺序
@@ -273,7 +267,7 @@ async def my_tool(filename: str = "", *, layer_name: str, frame_index: int = 1) 
 
 | # | 偏差 | 影响 |
 |---|---|---|
-| 1 | 根 [`README.md`](../README.md) 的 Tool Categories 表与实现有差：`native_fx.py` 的 7 个原生滤镜整类未列出，`get_composite_pixel` / `get_composite_rect` 未列入 Inspection，Canvas 行写 6 而 `canvas.py` 实为 7，且 `get_sprite_info` 在 Inspection 与 Animation 两处重复计入 —— 各行相加 109，与表头的 118 对不上（表头总数与模块数已对齐为 118 / 21） | 使用者可能以为没有原生滤镜和合成读取能力。权威清单以 [reference/tools.md](reference/tools.md) 为准 |
+| 1 | 根 [`README.md`](../README.md) 的 Tool Categories 表与实现有差：未列出 `native_fx.py` 的原生滤镜，也未列入 `get_composite_pixel` / `get_composite_rect`，Canvas 工具数与实现不符，且 `get_sprite_info` 在 Inspection 与 Animation 两处重复计入 | 使用者可能以为没有原生滤镜和合成读取能力。权威清单以 [reference/tools.md](reference/tools.md) 为准 |
 | 2 | `DOCKER.md` 与 `DOCKER_SETUP_SUMMARY.md` 声称容器里有非 root 用户 `mcpuser`，但 `Dockerfile` 从未创建该用户，实际以 **root** 运行 | 安全预期错位 |
 | 3 | `DOCKER.md` 引用的 `scripts/aseprite-docker.sh` 包装的是 `aseprite-from-source:latest` 镜像，本仓库**没有**构建它 | 脚本不可用 |
 | 4 | `requirements.txt` 与 `pyproject.toml` 冲突：前者缺 `httpx`/`mcp`，多了 `black`/`flake8`/`typing_extensions`，`pytest` 版本要求也不同 | 以 `pyproject.toml` 为准 |
@@ -298,8 +292,7 @@ async def my_tool(filename: str = "", *, layer_name: str, frame_index: int = 1) 
 | 13 | **没有播放/循环控制工具**：无 `set_loop`、无播放控制，循环行为只能由 tag 方向间接表达（[05](05-animation.md#十已知缺口)） |
 | 14 | `set_onion_skin` 是**文档化的 no-op**（UI-only）；真正的洋葱皮是 `analysis.render_onion_skin`（[05](05-animation.md#六onion-skin两个不同含义)） |
 | 15 | 错误消息前缀不统一：范围校验类（`Width and height must be > 0`、`Start frame must be >= 1`、`Unsupported anchor …`）**不在** `ok()` 检查的 4 个前缀内，测试会静默放过（[02 §7](02-paths-errors-lifecycle.md#陷阱ok-覆盖不了范围校验类消息)） |
-| 16 | CI **不跑 pytest**：`.github/workflows/docker-build.yml` 只构建/推送镜像并在 PR 上做冒烟，27 个测试模块没有自动化入口（[development.md](development.md#六ci)） |
-| 17 | `tests/test_lifecycle.py::test_watchdog_is_what_ends_the_orphan_case` 是环境敏感的 A/B 端到端测试，**2026-09-18 复跑仍失败**（非本仓库改动所致，stash 后在干净树上同样失败）。失败的是**对照组**：关掉看门狗后 server 依然退出，于是测试无法再把进程退出归因于看门狗。测试自身的断言消息已指出，这意味着有别的东西终止了 server（可能是 MCP SDK 修好了 stdin EOF 处理），需要重新评估看门狗是否还有必要 |
+| 16 | CI **不跑 pytest**：`.github/workflows/docker-build.yml` 只构建/推送镜像并在 PR 上做冒烟，测试没有自动化入口（[development.md](development.md#六ci)） |
 
 ---
 

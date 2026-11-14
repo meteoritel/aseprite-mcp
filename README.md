@@ -417,41 +417,10 @@ If installed, the binary will be at `/opt/steamapps/common/Aseprite/aseprite` an
 
 ## Server Lifecycle
 
-A stdio server must die with the client that spawned it, and two things get in
-the way:
-
-1. The client's direct child is usually a launcher chain, not the server.
-   `uv --directory ... run -m aseprite_mcp` becomes
-   `uv.exe → python (venv launcher) → python -m aseprite_mcp`, and the venv
-   launcher does not watch *its* parent, so killing `uv.exe` leaves both python
-   processes behind.
-2. The stdio transport cannot always finish by itself. On stdin EOF the reader
-   ends, but the writer stays blocked on a stream nobody closes, so the task
-   group around them never exits and `anyio.run()` never returns.
-
-The server therefore checks for a dead client itself, once every 2 seconds.
-**stdin is the authoritative signal** — its pipe broken (`PeekNamedPipe` on
-Windows, `poll` for `POLLHUP` on POSIX), read without consuming input so
-buffered requests are never stolen from the transport. The parent process is
-only a fallback for when stdin cannot answer (macOS, which has no `poll`), since
-a client that launches the server through something short-lived (`cmd /c start`,
-a detached spawner, a shell wrapper) leaves a dead parent behind while the
-session keeps working. While stdin is open the server stays up regardless of
-what happened to its parent. Either signal has to hold twice in a row before the
-process exits, so a single odd reading cannot kill a live session.
-
-Without this, one orphaned `launcher + server` pair (~60 MB) accumulates per
-crashed or force-quit client session, and on Windows nothing but
-`taskkill /T /F` can remove it.
-
-Set `ASEPRITE_MCP_CLIENT_WATCHDOG=0` to disable the watchdog. Worth doing when
-embedding the server under a non-MCP parent that is expected to outlive it, or
-on macOS behind a launch wrapper (there the fallback parent signal is the only
-one available and may describe a wrapper rather than the client).
-
-```json
-"env": { "ASEPRITE_MCP_CLIENT_WATCHDOG": "0" }
-```
+The MCP Python SDK owns the stdio transport lifecycle. When the client closes
+its input pipe, the server transport finishes and the process exits. The
+`tests/test_stdio_lifecycle.py` regression test verifies this after a client
+process is force-killed.
 
 ## Developer Documentation
 

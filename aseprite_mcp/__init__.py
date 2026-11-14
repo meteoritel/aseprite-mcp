@@ -2,7 +2,7 @@
 
 import os
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server import MCPServer
 
 _FALLBACK_INSTRUCTIONS = """\
 Aseprite MCP: every tool that touches a sprite file takes an optional
@@ -30,7 +30,7 @@ def _load_skill_instructions() -> str:
         return _FALLBACK_INSTRUCTIONS
 
 
-mcp = FastMCP("aseprite", instructions=_load_skill_instructions())
+mcp = MCPServer("aseprite", instructions=_load_skill_instructions())
 
 __version__ = "0.1.0"
 __author__ = "Divyansh Singh"
