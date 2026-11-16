@@ -75,13 +75,13 @@ end
 | [`drawing.py:10-12`](../aseprite_mcp/tools/drawing.py) | 直接使用 `parse_hex_color` | **保留** alpha，`#FF000080` 有效 |
 | [`selection.py:8-11`](../aseprite_mcp/tools/selection.py)、[`palette.py:46-49`](../aseprite_mcp/tools/palette.py) | `rgba[:3]` | **丢弃** alpha |
 | [`fx.py`](../aseprite_mcp/tools/fx.py) / [`native_fx.py`](../aseprite_mcp/tools/native_fx.py) | 转调 | 见 [06](06-effects-and-tilemap.md) |
-| [`tilemap.py:9-16`](../aseprite_mcp/tools/tilemap.py) | 自己的副本 | 只支持 6 位、无 alpha —— 遗留不一致，见 [06 §5](06-effects-and-tilemap.md#四已知不一致) |
+| [`tilemap.py`](../aseprite_mcp/tools/tilemap.py) | 直接使用 `parse_hex_color` | 保留 RGB/RGBA，坐标为 tile-local |
 
 绘图工具的默认颜色是 `#000000`，文本是 `#FFFFFF`。
 
 ### 2.5 校验顺序
 
-统一在拼 Lua 之前：`prepare_filename` → 尺寸/半径范围 → 颜色解析 →（`pixels` 的 `x`/`y` 强制转换）。所以 `draw_pixels_at` 会在**遍历 `pixels` 列表的过程中**逐个校验，遇到第一个坏的立刻返回，一个像素都不会落盘（[`drawing.py:53-63`](../aseprite_mcp/tools/drawing.py)）。
+MCP 先按参数模型校验尺寸、帧号和嵌套对象，拒绝未知字段；再解析文件、业务条件和颜色，最后生成 Lua。`pixels` 要求显式整数 x/y/color，palette key 要求单字符。网格语义检查先处理 palette/transparent，再检查矩形；失败发生在 Aseprite 启动前。
 
 ---
 
@@ -91,6 +91,7 @@ end
 |---|---|---|
 | `draw_pixels_at` | putPixel | `pixels=[{x,y,color}]`、`layer_name`、`frame_index` |
 | `draw_sprite_map` | putPixel（字符网格整批） | `rows=[str]`、`palette={char:hex}`、`x,y`、`mirror_x/y`、`erase_transparent` |
+| `draw_sprite_maps` | 单次有序多层/跨帧提交 | `maps=[{layer_name,frame_index,rows,palette,…}]` |
 | `get_sprite_map` | 单 cel 或合成读取（字符网格整批） | `x,y,width,height`、`palette`（回灌）、`max_colors`、`composite` |
 | `draw_line_at` | putPixel + Bresenham | `x1,y1,x2,y2`、`thickness` |
 | `draw_rectangle_at` | useTool | `x,y,width,height`、`fill` |
@@ -134,7 +135,9 @@ local r = math.floor({sr} + ({er} - {sr}) * t + 0.5)
 
 `transparent` 默认 `"."`；默认跳过已有像素，需要删除格子时显式启用擦除。颜色接受短／长 RGB 或 RGBA。绘图要求 RGB 工程。
 
-`get_sprite_map` 返回 `rows`、`palette`、`transparent`、`columns` 与 `lossy`。默认 `max_colors=0, alpha_threshold=1`，保留所有有效 RGBA；单 cel 精确读取适合回灌。自定义透明字符与已占 palette 字符从自动字符池中排除；容量不足时报错，可分区或显式量化。
+`draw_sprite_maps` 复用同一纯网格解析与镜像规则，Python 先校验全部 map，Lua 先解析已有帧和目标/创建条件，再按列表顺序绘制。同一 cel 的重叠按顺序覆盖，新顶层图层按首次出现顺序建立；一次 Aseprite 执行、一次暂存保存与提交。后部 map 失败时源工程保持原值。单图工具调用相同编辑实现。
+
+`get_sprite_map` 的 `data` 返回 `rows`、`palette`、`transparent`、`columns`、`lossy` 和来源。单 cel 的 `source="cel"`、`layer` 为实际路径数组，合成的 `source="composite"`、`layer=null`。默认 `max_colors=0, alpha_threshold=1`，保留所有有效 RGBA；单 cel 精确读取适合回灌。自定义透明字符与已占 palette 字符从自动字符池中排除；容量不足时报错，可分区或显式量化。
 
 显式 alpha 阈值过滤有效像素，或量化实际改变颜色时 `lossy=true`。`composite=true` 复用可见合成，用于审阅；单 cel 读取要求明确层和帧，拒绝 tilemap 与非 RGB 编码。
 
@@ -226,6 +229,8 @@ TrueType 后端默认**不做抗锯齿** —— 把覆盖度按阈值切成硬�
 ### 4.6 目标图层与临时文件
 
 `draw_text` 明确指定 layer/frame，沿用 `EDIT_TARGET` 与顶层图层创建规则。Pillow 将文字栅格化为临时 RGBA PNG，再由 Lua 合成到归一化 cel；标准编辑提交后清理临时图片。
+
+文字使用正常 alpha 合成：字形透明洞保留已有像素，半透明文字与目标混合。成功 `data` 返回真实 `layer_paths`、`frame` 和 `stamp_bounds`；矩形包含描边/阴影，使用裁剪前 sprite-global 坐标，画布边缘负责裁剪。无可见字形时 bounds 为 null。
 
 ## 五、选区与区域操作
 

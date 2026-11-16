@@ -1,5 +1,6 @@
 """Saved native projects preserve pixel semantics, targets and unaffected content."""
-import json
+
+from support import payload
 from pathlib import Path
 
 import pytest
@@ -24,6 +25,17 @@ def test_same_frame_copy_preserves_project(new_sprite, tmp_path):
     assert image.getpixel((2, 0)) == (0, 0, 0, 0)
 
 
+def test_appended_copy_overwrites_inherited_last_frame_cels(new_sprite, tmp_path):
+    filename = new_sprite()
+    paint(filename)
+    run(animation.copy_frame(filename=filename, source_frame=1))
+    run(drawing.draw_pixels_at(filename=filename, layer_name="ink", frame_index=2,
+                               pixels=[{"x": 0, "y": 0, "color": "#0000ff"}]))
+    result = payload(run(animation.copy_frame(filename=filename, source_frame=1, overwrite=False)))
+    assert result["frame"] == 3
+    assert frame_image(filename, 3, tmp_path).tobytes() == frame_image(filename, 1, tmp_path).tobytes()
+
+
 def test_explicit_draw_changes_only_selected_cel(new_sprite, tmp_path):
     filename = new_sprite()
     paint(filename, "guard")
@@ -38,7 +50,7 @@ def test_explicit_draw_changes_only_selected_cel(new_sprite, tmp_path):
     assert image.getpixel((2, 3)) == (18, 52, 86, 255)
     assert image.getpixel((0, 0)) == (255, 0, 0, 255)
     assert frame_image(filename, 1, tmp_path).tobytes() == original_first_frame
-    guard = json.loads(run(pixel_read.get_pixels_rect(
+    guard = payload(run(pixel_read.get_pixels_rect(
         filename=filename, layer_name="guard", frame_index=2,
         x=0, y=0, width=3, height=4,
     )))
@@ -88,7 +100,7 @@ def test_exact_grid_round_trip_preserves_alpha_and_outside_region(new_sprite, tm
     ))
     run(drawing.draw_pixels_at(filename=filename, layer_name="ink", frame_index=1,
                                pixels=[{"x": size - 1, "y": size - 1, "color": "#123456"}]))
-    read = json.loads(run(sprite_map.get_sprite_map(
+    read = payload(run(sprite_map.get_sprite_map(
         filename=filename, layer_name="ink", frame_index=1,
         x=1, y=2, width=4, height=1, transparent="0",
     )))
@@ -111,7 +123,7 @@ def test_large_pixel_read_fits_output_budget(new_sprite):
     filename = new_sprite(256, 256)
     run(drawing.draw_rectangle_at(filename=filename, layer_name="ink", frame_index=1,
         x=0, y=0, width=256, height=256, color="#123456", fill=True))
-    pixels = json.loads(run(pixel_read.get_pixels_rect(filename=filename, layer_name="ink", frame_index=1,
+    pixels = payload(run(pixel_read.get_pixels_rect(filename=filename, layer_name="ink", frame_index=1,
         x=0, y=0, width=256, height=256)))
     assert len(pixels) == 256 * 256
     assert all((p["r"], p["g"], p["b"], p["a"]) == (18, 52, 86, 255) for p in pixels)
@@ -129,7 +141,7 @@ def test_create_native_requires_explicit_overwrite_and_anchors_after_success(new
         run(canvas.create_canvas(8, 8, filename=str(tmp_path / "wrong.png")))
     assert get_active_file() == filename
     run(canvas.create_canvas(8, 8, filename=filename, overwrite=True))
-    assert json.loads(run(animation.get_sprite_info(filename=filename)))["width"] == 8
+    assert payload(run(animation.get_sprite_info(filename=filename)))["width"] == 8
     target = tmp_path / "新目录" / "新工程"
     run(canvas.create_canvas(16, 16, filename=str(target)))
     assert target.with_suffix(".aseprite").exists()
@@ -246,7 +258,7 @@ def test_layer_paths_resolve_ambiguous_names_and_preserve_hierarchy(new_sprite):
         check(genuine.layers[2], 255, 255, 0)
         check(spr.layers[4], 0, 0, 255)
     ''', filename))
-    info = json.loads(run(animation.get_sprite_info(filename=filename)))
+    info = payload(run(animation.get_sprite_info(filename=filename)))
     renamed = next(layer for layer in info["layers"] if layer["name"] == "renamed")
     assert renamed["parent"] == "abc/x"
 

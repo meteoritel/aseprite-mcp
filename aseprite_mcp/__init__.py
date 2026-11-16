@@ -6,7 +6,7 @@ from importlib import import_module
 from pathlib import Path
 
 from mcp.server import MCPServer
-from mcp.server.mcpserver.tools import Tool
+from .core.contracts import ContractTool
 
 from .tool_catalog import CORE_TOOLS, DISCOVERY_TOOLS, EXTENSION_TOOLS
 from .tool_discovery import create_discovery_tools
@@ -37,18 +37,20 @@ def _load_tools(catalog):
     for category, names in catalog.items():
         module = import_module(f".tools.{category}", __name__)
         for name in names:
-            yield category, Tool.from_function(getattr(module, name))
+            yield category, ContractTool.from_function(getattr(module, name))
 
 
 def create_server() -> MCPServer:
     """Assemble a stable core tool list and the extension discovery interface."""
     instructions = _load_skill_instructions()
-    core = [tool for _, tool in _load_tools(CORE_TOOLS)]
+    core_entries = list(_load_tools(CORE_TOOLS))
+    core = [tool for _, tool in core_entries]
     extensions = list(_load_tools(EXTENSION_TOOLS))
     names = [tool.name for tool in core] + [tool.name for _, tool in extensions] + list(DISCOVERY_TOOLS)
     if len(set(names)) != len(names):
         raise ValueError("Duplicate names in the tool catalog")
-    discovery = create_discovery_tools({tool.name: (category, tool) for category, tool in extensions})
+    discovery = create_discovery_tools({tool.name: (category, tool) for category, tool in extensions},
+                                       {tool.name: (category, tool) for category, tool in core_entries})
     tool_lock = asyncio.Lock()
 
     async def serialize_tools(context, call_next):

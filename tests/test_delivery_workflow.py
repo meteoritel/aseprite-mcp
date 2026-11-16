@@ -1,4 +1,6 @@
 """Decode delivered images and metadata, preserving projects and previous outputs on failure."""
+
+from support import payload
 import json
 from pathlib import Path
 
@@ -31,7 +33,7 @@ def test_animation_delivery_maps_tag_frames_and_ticks(new_sprite, tmp_path, dire
     filename = animated_project(new_sprite)
     run(animation.set_tag(filename=filename, name="clip", from_frame=2, to_frame=4, direction=direction))
     original = digest(filename)
-    result = json.loads(run(export.export_minecraft_texture(
+    result = payload(run(export.export_minecraft_texture(
         filename=filename, output_filename=str(tmp_path / "texture.png"), tag_name="clip",
     )))
     metadata = json.loads(Path(result["mcmeta"]).read_text())
@@ -61,7 +63,7 @@ def test_static_delivery_and_review_lifetime(new_sprite, tmp_path, size):
     run(sprite_map.draw_sprite_map(filename=filename, layer_name="ink", frame_index=1,
                                    rows=["A"], palette={"A": "#1234567f"}))
     original = digest(filename)
-    result = json.loads(run(export.export_minecraft_texture(
+    result = payload(run(export.export_minecraft_texture(
         filename=filename, output_filename=str(tmp_path / "static.png"),
     )))
     assert json.loads(Path(result["mcmeta"]).read_text()) == {}
@@ -167,7 +169,7 @@ def test_numbered_png_export_publishes_only_this_sequence(new_sprite, tmp_path):
     outputs = sorted(path for path in tmp_path.glob("texture*.png") if path != reference)
     assert len(outputs) == 4
     for path, colour in zip(outputs, [(255,0,0,255), (0,255,0,255), (0,0,255,255), (255,255,0,255)]):
-        assert str(path) in result
+        assert str(path) in payload(result)["files"]
         with Image.open(path) as image:
             assert image.convert("RGBA").getpixel((0, 0)) == colour
     assert reference.read_bytes() == b"reference"

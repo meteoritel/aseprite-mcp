@@ -1,11 +1,16 @@
+from typing import Literal
+
 from mcp.server.mcpserver.exceptions import ToolError
-from ..core.editing import execute_edit_script
+
 from ..core.commands import lua_escape
-from ..core.lua import FIND_LAYER, LAYER_NAMES
+from ..core.contracts import FrameIndex, LayerRef, PositiveInt, ToolOutput
+from ..core.editing import edit_output, execute_edit_script
+from ..core.lua import FIND_LAYER, LAYER_NAMES, lua_layer_ref
+from ..core.results import EditReceipt
 from ..core.state import prepare_filename
 
 
-async def flip_layer(filename: str='', *, layer_name: str, frame_index: int, direction: str='horizontal') -> str:
+async def flip_layer(filename: str='', *, layer_name: LayerRef, frame_index: FrameIndex, direction: Literal['horizontal', 'vertical']='horizontal') -> ToolOutput[EditReceipt]:
     """Flip a layer's image horizontally or vertically.
 
     Args:
@@ -30,7 +35,7 @@ async def flip_layer(filename: str='', *, layer_name: str, frame_index: int, dir
 
     {FIND_LAYER}
     {LAYER_NAMES}
-    local target = find_layer(spr, "{safe_layer}")
+    local target = find_layer(spr, {lua_layer_ref(layer_name)})
     if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
 
     local cel = target:cel(spr.frames[idx])
@@ -65,11 +70,11 @@ async def flip_layer(filename: str='', *, layer_name: str, frame_index: int, dir
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Layer '{layer_name}' flipped {direction}ly in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Layer '{layer_name}' flipped {direction}ly in {filename}", filename, execution, frame_index)
 
 
-async def rotate_layer(filename: str='', *, layer_name: str, frame_index: int, angle: int=90) -> str:
+async def rotate_layer(filename: str='', *, layer_name: LayerRef, frame_index: FrameIndex, angle: Literal[90, 180, 270]=90) -> ToolOutput[EditReceipt]:
     """Rotate a layer's image 90, 180, or 270 degrees clockwise.
 
     Args:
@@ -137,7 +142,7 @@ async def rotate_layer(filename: str='', *, layer_name: str, frame_index: int, a
 
     {FIND_LAYER}
     {LAYER_NAMES}
-    local target = find_layer(spr, "{safe_layer}")
+    local target = find_layer(spr, {lua_layer_ref(layer_name)})
     if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
 
     local cel = target:cel(spr.frames[idx])
@@ -152,11 +157,11 @@ async def rotate_layer(filename: str='', *, layer_name: str, frame_index: int, a
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Layer '{layer_name}' rotated {angle}° clockwise in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Layer '{layer_name}' rotated {angle}° clockwise in {filename}"
+, filename, execution, frame_index)
 
-
-async def resize_canvas(filename: str = "", *, width: int, height: int) -> str:
+async def resize_canvas(filename: str = "", *, width: PositiveInt, height: PositiveInt) -> ToolOutput[EditReceipt]:
     """Scale the canvas and all its content to new dimensions.
 
     Args:
@@ -180,11 +185,11 @@ async def resize_canvas(filename: str = "", *, width: int, height: int) -> str:
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Canvas resized to {width}x{height} in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Canvas resized to {width}x{height} in {filename}", filename, execution, None)
 
 
-async def crop_canvas(filename: str = "", *, x: int, y: int, width: int, height: int) -> str:
+async def crop_canvas(filename: str = "", *, x: int, y: int, width: PositiveInt, height: PositiveInt) -> ToolOutput[EditReceipt]:
     """Crop the canvas to the given rectangle, discarding content outside it.
 
     Args:
@@ -214,5 +219,5 @@ async def crop_canvas(filename: str = "", *, x: int, y: int, width: int, height:
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Canvas cropped to ({x},{y}) {width}x{height} in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Canvas cropped to ({x},{y}) {width}x{height} in {filename}", filename, execution, None)

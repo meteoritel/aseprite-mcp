@@ -1,11 +1,13 @@
 """Activate an explicit cel and optional selection for native batch filters."""
+from .lua import lua_layer_ref, lua_layer_refs
+from .contracts import LayerRef
 from .lua import EDIT_TARGET
 from .commands import lua_escape
 
 
 def build_native_command_script(
     command_lua: str,
-    layer_name: str,
+    layer_name: LayerRef,
     frame_index: int,
     region: tuple[int, int, int, int] | None = None,
 ) -> str:
@@ -32,7 +34,7 @@ def build_native_command_script(
     if not spr then print("ERROR:No active sprite") return end
     local idx = {frame_index}
     app.activeFrame = require_frame(spr, idx)
-    local target = require_layer(spr, "{safe_layer}", false)
+    local target = require_layer(spr, {lua_layer_ref(layer_name)} , false)
     require_cel(spr, target, idx, false)
     app.activeLayer = target
     {sel_set}

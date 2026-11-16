@@ -1,9 +1,13 @@
-from mcp.server.mcpserver.exceptions import ToolError
 import os
+import signal
 import subprocess
 import sys
 import tempfile
-import signal
+
+from mcp.server.mcpserver.exceptions import ToolError
+
+from ..core.contracts import ToolOutput
+from ..core.results import PreviewStatus
 from ..core.state import get_workspace_dir, resolve_path
 
 def _pid_path(port: int) -> str:
@@ -24,7 +28,7 @@ def _pid_is_running(pid: int) -> bool:
     except Exception:
         return False
 
-async def start_preview_server(directory: str = "", port: int = 8000) -> str:
+async def start_preview_server(directory: str = "", port: int = 8000) -> ToolOutput[PreviewStatus]:
     """Start a simple HTTP server to preview exported sprites.
 
     Args:
@@ -41,7 +45,7 @@ async def start_preview_server(directory: str = "", port: int = 8000) -> str:
             with open(pid_file, "r", encoding="utf-8") as f:
                 pid = int(f.read().strip())
             if _pid_is_running(pid):
-                return f"Preview server may already be running on port {port}"
+                return ToolOutput(summary=f"Preview process already exists on port {port}", data=PreviewStatus(port=port, running=True, url=f"http://localhost:{port}/"))
         except Exception:
             pass
         os.remove(pid_file)
@@ -56,9 +60,9 @@ async def start_preview_server(directory: str = "", port: int = 8000) -> str:
     with open(pid_file, "w", encoding="utf-8") as f:
         f.write(str(proc.pid))
 
-    return f"Preview server started: http://localhost:{port}/"
+    return ToolOutput(summary="Preview process started", data=PreviewStatus(port=port, running=True, url=f"http://localhost:{port}/"))
 
-async def stop_preview_server(port: int = 8000) -> str:
+async def stop_preview_server(port: int = 8000) -> ToolOutput[PreviewStatus]:
     """Stop the preview HTTP server for a given port.
 
     Args:
@@ -79,4 +83,4 @@ async def stop_preview_server(port: int = 8000) -> str:
     finally:
         os.remove(pid_file)
 
-    return f"Preview server stopped on port {port}"
+    return ToolOutput(summary="Preview process stopped", data=PreviewStatus(port=port, running=False))

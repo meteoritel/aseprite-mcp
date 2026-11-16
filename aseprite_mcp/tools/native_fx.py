@@ -1,11 +1,12 @@
 """Native Aseprite filters with explicit layer/frame targeting."""
 
 from mcp.server.mcpserver.exceptions import ToolError
-from ..core.editing import execute_edit_script
-import json
 
 from ..core.commands import lua_escape
+from ..core.contracts import FrameIndex, LayerRef, ToolOutput
+from ..core.editing import edit_output, execute_edit_script
 from ..core.native import build_native_command_script
+from ..core.results import EditReceipt, ExtractedPalette
 from ..core.state import prepare_filename
 from .fx import _parse_hex_color
 
@@ -30,7 +31,7 @@ def _region(x: int, y: int, width: int, height: int):
     return (x, y, width, height) if width > 0 and height > 0 else None
 
 
-async def outline_native(filename: str='', *, layer_name: str, frame_index: int, color: str='#000000', place: str='outside', matrix: str='circle') -> str:
+async def outline_native(filename: str='', *, layer_name: LayerRef, frame_index: FrameIndex, color: str='#000000', place: str='outside', matrix: str='circle') -> ToolOutput[EditReceipt]:
     """Native Aseprite Outline around opaque pixels (app.command.Outline).
 
     Higher quality than the 1px hand-rolled outline_cel: inside/outside
@@ -57,11 +58,11 @@ async def outline_native(filename: str='', *, layer_name: str, frame_index: int,
     cmd = (f'        app.command.Outline{{ui=false, color=Color{{r={r}, g={g}, '
            f'b={b}, a=255}}, place="{place}", matrix="{matrix}"}}')
     script = build_native_command_script(cmd, layer_name, frame_index)
-    await execute_edit_script(script, filename)
-    return f"Outlined ({place}, {matrix}) {layer_name or 'active layer'} in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Outlined ({place}, {matrix}) {layer_name or 'active layer'} in {filename}", filename, execution, frame_index)
 
 
-async def adjust_hsl_native(filename: str='', *, layer_name: str, frame_index: int, hue: int=0, saturation: int=0, lightness: int=0, x: int=0, y: int=0, width: int=0, height: int=0) -> str:
+async def adjust_hsl_native(filename: str='', *, layer_name: LayerRef, frame_index: FrameIndex, hue: int=0, saturation: int=0, lightness: int=0, x: int=0, y: int=0, width: int=0, height: int=0) -> ToolOutput[EditReceipt]:
     """Native Hue/Saturation/Lightness filter (engine-quality vs adjust_hsl).
 
     Args:
@@ -83,11 +84,11 @@ async def adjust_hsl_native(filename: str='', *, layer_name: str, frame_index: i
            f'saturation={saturation}, lightness={lightness}, alpha=0}}')
     script = build_native_command_script(cmd, layer_name, frame_index,
                                          _region(x, y, width, height))
-    await execute_edit_script(script, filename)
-    return f"Adjusted HSL on {layer_name or 'active layer'} in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Adjusted HSL on {layer_name or 'active layer'} in {filename}", filename, execution, frame_index)
 
 
-async def adjust_brightness_contrast(filename: str='', *, layer_name: str, frame_index: int, brightness: int=0, contrast: int=0, x: int=0, y: int=0, width: int=0, height: int=0) -> str:
+async def adjust_brightness_contrast(filename: str='', *, layer_name: LayerRef, frame_index: FrameIndex, brightness: int=0, contrast: int=0, x: int=0, y: int=0, width: int=0, height: int=0) -> ToolOutput[EditReceipt]:
     """Native Brightness/Contrast filter (app.command.BrightnessContrast).
 
     Args:
@@ -106,11 +107,11 @@ async def adjust_brightness_contrast(filename: str='', *, layer_name: str, frame
            f'brightness={brightness}, contrast={contrast}}}')
     script = build_native_command_script(cmd, layer_name, frame_index,
                                          _region(x, y, width, height))
-    await execute_edit_script(script, filename)
-    return f"Adjusted brightness/contrast on {layer_name or 'active layer'} in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Adjusted brightness/contrast on {layer_name or 'active layer'} in {filename}", filename, execution, frame_index)
 
 
-async def invert_colors(filename: str='', *, layer_name: str, frame_index: int, x: int=0, y: int=0, width: int=0, height: int=0) -> str:
+async def invert_colors(filename: str='', *, layer_name: LayerRef, frame_index: FrameIndex, x: int=0, y: int=0, width: int=0, height: int=0) -> ToolOutput[EditReceipt]:
     """Native colour inversion (app.command.InvertColor).
 
     Args:
@@ -124,11 +125,11 @@ async def invert_colors(filename: str='', *, layer_name: str, frame_index: int, 
     cmd = "        app.command.InvertColor{ui=false}"
     script = build_native_command_script(cmd, layer_name, frame_index,
                                          _region(x, y, width, height))
-    await execute_edit_script(script, filename)
-    return f"Inverted colours on {layer_name or 'active layer'} in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Inverted colours on {layer_name or 'active layer'} in {filename}", filename, execution, frame_index)
 
 
-async def apply_convolution(filename: str='', *, matrix: str, layer_name: str, frame_index: int, x: int=0, y: int=0, width: int=0, height: int=0) -> str:
+async def apply_convolution(filename: str='', *, matrix: str, layer_name: LayerRef, frame_index: FrameIndex, x: int=0, y: int=0, width: int=0, height: int=0) -> ToolOutput[EditReceipt]:
     """Native convolution filter (blur / sharpen / edge / emboss …).
 
     Args:
@@ -147,24 +148,24 @@ async def apply_convolution(filename: str='', *, matrix: str, layer_name: str, f
     cmd = f'        app.command.ConvolutionMatrix{{ui=false, fromResource="{lua_escape(matrix)}"}}'
     script = build_native_command_script(cmd, layer_name, frame_index,
                                          _region(x, y, width, height))
-    await execute_edit_script(script, filename)
-    return f"Applied convolution '{matrix}' on {layer_name or 'active layer'} in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Applied convolution '{matrix}' on {layer_name or 'active layer'} in {filename}", filename, execution, frame_index)
 
 
-async def list_convolution_matrices() -> str:
+async def list_convolution_matrices() -> ToolOutput[list[str]]:
     """List the built-in convolution-matrix names usable with apply_convolution.
 
     Returns:
         JSON array of matrix resource names.
     """
-    return json.dumps(sorted(CONVOLUTION_MATRICES))
+    return ToolOutput(summary='List convolution matrices completed', data=sorted(CONVOLUTION_MATRICES))
 
 
 async def extract_palette(
     filename: str = "",
     max_colors: int = 16,
     with_alpha: bool = False,
-) -> str:
+) -> ToolOutput[ExtractedPalette]:
     """Build an OPTIMAL palette from the sprite via native ColorQuantization.
 
     True palette extraction (vs the nearest-snap quantize_to_palette): writes
@@ -220,7 +221,8 @@ async def extract_palette(
     print("TRANSPARENT:" .. transparent_index)
     print("OK")
     """
-    output = await execute_edit_script(script, filename)
+    execution = await execute_edit_script(script, filename)
+    output = execution.stdout
     colors = [ln[len("PALETTE:"):] for ln in output.splitlines() if ln.startswith("PALETTE:")]
     transparent_index = None
     palette_size = None
@@ -234,10 +236,4 @@ async def extract_palette(
         # Reconstruct rather than under-report: the transparent slot is a
         # real slot even though it never shows up in `colors`.
         palette_size = len(colors) + (1 if transparent_index is not None else 0)
-    return json.dumps({
-        "colors": colors,
-        "count": len(colors),
-        "transparent_index": transparent_index,
-        "max_colors": max_colors,
-        "palette_size": palette_size,
-    })
+    return ToolOutput(summary='Extract palette completed', data={'colors': colors, 'count': len(colors), 'transparent_index': transparent_index, 'max_colors': max_colors, 'palette_size': palette_size})

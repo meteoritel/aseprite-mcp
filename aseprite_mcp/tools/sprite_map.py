@@ -1,142 +1,115 @@
-"""Compact character-grid ("sprite map") authoring and readback.
-
-A sprite map is a rectangular grid of single characters plus a
-character -> hex-colour palette. It is the compact counterpart to the
-{x, y, color} pixel lists that draw_pixels_at / get_pixels_rect use: a
-16x16 sprite drops from ~256 JSON objects to 16 short strings, and the
-rows themselves carry the coordinate grid, so neither side has to do
-index arithmetic on a 256-cell mental bitmap.
-
-The two tools are inverses. get_sprite_map returns ``rows``,
-``palette`` and ``transparent`` shaped exactly like draw_sprite_map's
-arguments, so a read -> edit -> write loop needs no reformatting.
-"""
-
-from mcp.server.mcpserver.exceptions import ToolError
-from ..core.editing import execute_edit_script
+"""Compact character-grid editing and readback."""
 
 import json
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Dict, List
 
-from ..core.colors import parse_hex_color
+from mcp.server.mcpserver.exceptions import ToolError
+from pydantic import Field, ValidationError
+
 from ..core.commands import AsepriteCommand, lua_escape
-from ..core.lua import EDIT_TARGET, FIND_LAYER, LAYER_NAMES, NORMALIZE_CEL, PSET
+from ..core.composite import COMPOSE_FRAME
+from ..core.contracts import Byte, Character, ContractModel, FrameIndex, LayerRef, NonnegativeInt, Palette, PositiveInt, ToolOutput
+from ..core.editing import edit_output, execute_edit_script
+from ..core.lua import EDIT_TARGET, FIND_LAYER, LAYER_NAMES, NORMALIZE_CEL, lua_layer_ref
+from ..core.results import EditReceipt, SpriteMap
+from ..core.sprite_grid import compile_sprite_map, encode_sprite_map, parse_sprite_map
 from ..core.state import prepare_filename
-from .analysis import _COMPOSE_FRAME
+
+_TILEMAP_REFUSAL = "is a tilemap layer: its cel stores tile indexes, not pixels"
 
 
-# Characters used for auto-assigned palette entries. "." is reserved for
-# transparent cells and never appears here, so a map read back with an
-# auto-derived palette is always valid input for draw_sprite_map.
-_AUTO_ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+class SpriteMapEdit(ContractModel):
+    layer_name: LayerRef
+    frame_index: FrameIndex
+    rows: Annotated[list[str], Field(min_length=1, description="Equal-width pixel rows, top to bottom.")]
+    palette: Annotated[Palette, Field(description="Single-character keys mapped to RGB/RGBA hex colours; transparent is reserved.")]
+    x: int = Field(default=0, description="Sprite-global x of the grid origin; may be negative for clipping.")
+    y: int = Field(default=0, description="Sprite-global y of the grid origin; may be negative for clipping.")
+    transparent: Character = "."
+    mirror_x: bool = False
+    mirror_y: bool = False
+    erase_transparent: bool = False
+    create_if_missing: bool = True
 
-_TILEMAP_REFUSAL = (
-    "is a tilemap layer: its cel stores tile indexes, not pixels, so a "
-    "per-pixel read would return an index in the red channel instead of a "
-    "colour"
-)
 
+async def draw_sprite_maps(*, filename: str = "", maps: Annotated[list[SpriteMapEdit], Field(min_length=1)]) -> ToolOutput[EditReceipt]:
+    """Draw ordered maps across layers/frames with one all-or-nothing project commit.
 
-def _parse_sprite_map(
-    rows: List[str], palette: Dict[str, str], transparent: str
-) -> tuple[tuple[int, int, List[tuple[int, int, tuple[int, int, int, int]]]] | None, str | None]:
-    """Validate a sprite map and flatten it to (width, height, cells).
-
-    Each cell is (col, row, (r, g, b, a)) with col/row relative to the
-    grid's top-left. Every character must be either `transparent` or a key
-    of `palette`, and all rows must be the same length.
-
-    Returns ((width, height, cells), None) on success, or (None, error).
+    Args:
+        filename: Project, defaulting to the active file.
+        maps: Ordered grid edits. All frames must exist. New top-level layers follow first occurrence order.
     """
-    if not rows:
-        return None, "rows must contain at least one row"
-    if not isinstance(transparent, str) or len(transparent) != 1:
-        return None, f"transparent must be a single character, got {transparent!r}"
-    if not isinstance(rows[0], str):
-        return None, f"rows[0] must be a string, got {type(rows[0]).__name__}"
-
-    width = len(rows[0])
-    if width == 0:
-        return None, "rows must be non-empty strings"
-
-    for index, row in enumerate(rows):
-        if not isinstance(row, str):
-            return None, f"rows[{index}] must be a string, got {type(row).__name__}"
-        if len(row) != width:
-            return None, (
-                f"rows must form a rectangle: rows[0] has {width} character(s) "
-                f"but rows[{index}] has {len(row)}"
-            )
-
-    colours: Dict[str, tuple[int, int, int, int]] = {}
-    if not isinstance(palette, dict):
-        return None, f"palette must be an object, got {type(palette).__name__}"
-    for char, value in palette.items():
-        if not isinstance(char, str) or len(char) != 1:
-            return None, f"palette keys must be single characters, got {char!r}"
-        if char == transparent:
-            return None, (
-                f"palette must not contain the transparent character "
-                f"{transparent!r} — it is reserved for empty cells"
-            )
-        rgba = parse_hex_color(value)
-        if rgba is None:
-            return None, f"Invalid colour for palette[{char!r}]: {value!r}"
-        colours[char] = rgba
-
-    cells: List[tuple[int, int, tuple[int, int, int, int]]] = []
-    for row_index, row in enumerate(rows):
-        for col_index, char in enumerate(row):
-            if char == transparent:
-                continue
-            rgba = colours.get(char)
-            if rgba is None:
-                return None, (
-                    f"Unknown character {char!r} at row {row_index}, column "
-                    f"{col_index} — add it to palette, or use {transparent!r} "
-                    f"for an empty cell"
-                )
-            cells.append((col_index, row_index, rgba))
-
-    return (width, len(rows), cells), None
-
-
-def _hex_of(rgba: tuple[int, int, int, int]) -> str:
-    """#RRGGBB for opaque colours, #RRGGBBAA when alpha is partial."""
-    r, g, b, a = rgba
-    if a == 255:
-        return f"#{r:02x}{g:02x}{b:02x}"
-    return f"#{r:02x}{g:02x}{b:02x}{a:02x}"
-
-
-def _quantise(
-    colours: List[tuple[int, int, int, int]],
-    counts: Dict[tuple[int, int, int, int], int],
-    max_colors: int,
-) -> Dict[tuple[int, int, int, int], tuple[int, int, int, int]]:
-    """Map every colour to one of the `max_colors` most frequent colours.
-
-    Keeps the most-used colours and snaps the rest to the nearest kept one
-    by squared RGB distance, so an antialiased sprite reads back as a valid
-    map instead of failing on colour-count overflow.
-    """
-    keep = sorted(colours, key=lambda c: (-counts[c], c))[:max_colors]
-    mapping: Dict[tuple[int, int, int, int], tuple[int, int, int, int]] = {}
-    for colour in colours:
-        if colour in keep:
-            mapping[colour] = colour
-            continue
-        nearest = min(
-            keep,
-            key=lambda k: (k[0] - colour[0]) ** 2
-            + (k[1] - colour[1]) ** 2
-            + (k[2] - colour[2]) ** 2,
-        )
-        mapping[colour] = nearest
-    return mapping
+    filename = prepare_filename(filename)
+    if not maps:
+        raise ToolError("maps must contain at least one map")
+    compiled = []
+    for index, item in enumerate(maps):
+        try:
+            item = item if isinstance(item, SpriteMapEdit) else SpriteMapEdit.model_validate(item)
+            _, _, pixels = compile_sprite_map(item.rows, item.palette, item.transparent,
+                                              item.mirror_x, item.mirror_y, item.erase_transparent)
+        except (ToolError, ValidationError) as exc:
+            raise ToolError(f"maps[{index}]: {exc}") from exc
+        compiled.append(dict(layer=item.layer_name, frame=item.frame_index, create=item.create_if_missing,
+                             pixels=[[item.x+x, item.y+y, *rgba] for (x,y),rgba in sorted(pixels.items())]))
+    script = EDIT_TARGET + NORMALIZE_CEL + '\nlocal edits = json.decode("' + lua_escape(json.dumps(compiled, ensure_ascii=False)) + '")\n' + r'''
+    local spr = app.activeSprite
+    if not spr then error("No active sprite") end
+    if spr.colorMode ~= ColorMode.RGB then error("Sprite maps require RGB mode. Tip: use set_color_mode(mode='rgb') first.") end
+    local planned_layers, planned_cels, bindings = {}, {}, {}
+    for index, edit in ipairs(edits) do
+        local ok, message = pcall(function()
+            require_frame(spr, edit.frame)
+            local target = find_layer(spr, edit.layer)
+            local path = target and layer_path(target) or (type(edit.layer) ~= "string" and edit.layer or {edit.layer})
+            local key = json.encode(path)
+            local binding = target and {layer=target} or planned_layers[key] or {ref=edit.layer}
+            if not target then
+                local creatable = (type(edit.layer) ~= "string" and #edit.layer == 1)
+                               or (type(edit.layer) == "string" and not string.find(edit.layer, "/", 1, true))
+                if not planned_layers[key] and (not edit.create or not creatable) then
+                    error("Layer " .. layer_ref_text(edit.layer) .. " not found; create groups and nested layers first")
+                end
+                if #edit.pixels > 0 then planned_layers[key] = binding end
+            elseif target.isGroup or target.isTilemap then error("Sprite maps require a leaf image layer") end
+            local cel_key = key .. ":" .. edit.frame
+            if not edit.create and not planned_cels[cel_key] and (not target or not target:cel(spr.frames[edit.frame])) then
+                error("No cel on requested layer/frame")
+            end
+            if #edit.pixels > 0 then planned_cels[cel_key] = true end
+            bindings[index] = binding
+        end)
+        if not ok then error("maps[" .. (index-1) .. "] " .. layer_ref_text(edit.layer) .. ": " .. message) end
+    end
+    local changed = false
+    _aseprite_edit_targets = {}
+    app.transaction(function()
+        for index, edit in ipairs(edits) do
+            local ok, message = pcall(function()
+                if #edit.pixels == 0 then return end
+                local binding = bindings[index]
+                local layer = binding.layer or require_layer(spr, binding.ref, true)
+                binding.layer = layer
+                remember_target(layer)
+                require_cel(spr, layer, edit.frame, edit.create)
+                local cel = normalize_cel(spr, layer, spr.frames[edit.frame], false)
+                for _, pixel in ipairs(edit.pixels) do
+                    if pixel[1] >= 0 and pixel[2] >= 0 and pixel[1] < spr.width and pixel[2] < spr.height then
+                        cel.image:putPixel(pixel[1], pixel[2], app.pixelColor.rgba(pixel[3],pixel[4],pixel[5],pixel[6]))
+                    end
+                end
+                changed = true
+            end)
+            if not ok then error("maps[" .. (index-1) .. "]: " .. message) end
+        end
+    end)
+    if changed then save_project(spr) else print("PROJECT_UNCHANGED") end
+    '''
+    execution = await execute_edit_script(script, filename)
+    return edit_output("Sprite maps applied in order", filename, execution)
 
 
-async def draw_sprite_map(*, filename: str='', layer_name: str, frame_index: int, rows: List[str], palette: Dict[str, str], x: int=0, y: int=0, transparent: str='.', mirror_x: bool=False, mirror_y: bool=False, erase_transparent: bool=False, create_if_missing: bool=True) -> str:
+async def draw_sprite_map(*, filename: str='', layer_name: LayerRef, frame_index: FrameIndex, rows: List[str], palette: Palette, x: int=0, y: int=0, transparent: Character='.', mirror_x: bool=False, mirror_y: bool=False, erase_transparent: bool=False, create_if_missing: bool=True) -> ToolOutput[EditReceipt]:
     """Draw a whole region from a compact character-grid map.
 
     `rows` is a list of equal-length strings, one per pixel row, top to
@@ -170,98 +143,34 @@ async def draw_sprite_map(*, filename: str='', layer_name: str, frame_index: int
         erase_transparent: Clear transparent cells instead of leaving them
         create_if_missing: Create the layer (top-level names only) and cel if they don't exist
     """
-    filename = prepare_filename(filename)
-
-    parsed, map_err = _parse_sprite_map(rows, palette, transparent)
-    if map_err:
-        raise ToolError(f"Invalid sprite map: {map_err}")
-    width, height, cells = parsed
-
-    pixels: Dict[tuple[int, int], tuple[int, int, int, int]] = {}
-    for col, row, rgba in cells:
-        positions = {(col, row)}
-        if mirror_x:
-            positions.add((width - 1 - col, row))
-        if mirror_y:
-            positions.add((col, height - 1 - row))
-        if mirror_x and mirror_y:
-            positions.add((width - 1 - col, height - 1 - row))
-        for position in positions:
-            if position in pixels and pixels[position] != rgba:
-                raise ToolError(f"Invalid sprite map: conflicting mirrored colours at column {position[0]}, row {position[1]}")
-            pixels[position] = rgba
-
-    if erase_transparent:
-        for row in range(height):
-            for col in range(width):
-                pixels.setdefault((col, row), (0, 0, 0, 0))
-
-    if not pixels:
-        return (
-            f"OK: nothing to draw — every cell of the {width}x{height} map is "
-            f"{transparent!r} and erase_transparent is false"
+    try:
+        edit = SpriteMapEdit(
+            layer_name=layer_name, frame_index=frame_index, rows=rows, palette=palette,
+            x=x, y=y, transparent=transparent, mirror_x=mirror_x, mirror_y=mirror_y,
+            erase_transparent=erase_transparent, create_if_missing=create_if_missing,
         )
-
-    safe_layer_name = lua_escape(layer_name)
-    create_flag = "true" if create_if_missing else "false"
-
-    script = f"""
-    {NORMALIZE_CEL}
-    {PSET}
-    {EDIT_TARGET}
-    local spr = app.activeSprite
-    if not spr then print("ERROR:No active sprite") return end
-    if spr.colorMode ~= ColorMode.RGB then print("ERROR:Sprite maps require RGB mode. Tip: use set_color_mode(mode='rgb') first.") return end
-
-    local idx = {frame_index}
-    if idx < 1 or idx > #spr.frames then print("ERROR:Frame index {frame_index} out of range (sprite has " .. #spr.frames .. " frame(s), 1-based). Tip: call add_frame first.") return end
-
-    local target = require_layer(spr, "{safe_layer_name}", {create_flag})
-    if target.isTilemap then print("ERROR:Sprite maps require an image layer, not a tilemap") return end
-
-    app.transaction(function()
-        app.activeLayer = target
-        app.activeFrame = spr.frames[idx]
-        require_cel(spr, target, idx, {create_flag})
-        local cel = normalize_cel(spr, target, spr.frames[idx], false)
-        local img = cel.image
-    """
-
-    for col, row in sorted(pixels):
-        r, g, b, a = pixels[(col, row)]
-        script += f"""
-        pset(img, {x + col}, {y + row}, Color({r}, {g}, {b}, {a}))
-        """
-
-    script += """
-    end)
-
-    save_project(spr)
-    print("OK")
-    """
-
-    await execute_edit_script(script, filename)
-    return (
-        f"Sprite map drawn on '{layer_name}' frame {frame_index} "
-        f"({width}x{height} at {x},{y}, {len(pixels)} pixel(s)) in {filename}"
-    )
+    except ValidationError as exc:
+        raise ToolError(f"Invalid sprite map: {exc}") from exc
+    result = await draw_sprite_maps(filename=filename, maps=[edit])
+    result.data.frame = frame_index
+    return result
 
 
 async def get_sprite_map(
     *,
     filename: str = "",
-    layer_name: str = "",
-    frame_index: int = 1,
+    layer_name: LayerRef = "",
+    frame_index: FrameIndex = 1,
     x: int,
     y: int,
-    width: int,
-    height: int,
-    palette: Optional[Dict[str, str]] = None,
-    max_colors: int = 0,
-    alpha_threshold: int = 1,
-    transparent: str = ".",
+    width: PositiveInt,
+    height: PositiveInt,
+    palette: Palette | None = None,
+    max_colors: NonnegativeInt = 0,
+    alpha_threshold: Byte = 1,
+    transparent: Character = ".",
     composite: bool = False,
-) -> str:
+) -> ToolOutput[SpriteMap]:
     """Read a rectangular region back as a compact character-grid map.
 
     Returns JSON whose `rows`, `palette` and `transparent` are shaped
@@ -309,34 +218,17 @@ async def get_sprite_map(
     if not isinstance(transparent, str) or len(transparent) != 1:
         raise ToolError(f"Invalid transparent: must be a single character, got {transparent!r}")
 
-    # Parse the caller's palette up front. It is only an output mapping, so a
-    # bad key or colour can be rejected before paying for an Aseprite launch.
-    char_to_rgba: Dict[str, tuple[int, int, int, int]] = {}
-    rgba_to_char: Dict[tuple[int, int, int, int], str] = {}
-    if palette:
-        for char, value in palette.items():
-            if not isinstance(char, str) or len(char) != 1:
-                raise ToolError(f"Invalid palette key {char!r}: keys must be single characters")
-            if char == transparent:
-                raise ToolError(f"Invalid palette: must not contain the transparent "
-                    f"character {transparent!r}")
-            rgba = parse_hex_color(value)
-            if rgba is None:
-                raise ToolError(f"Invalid colour for palette[{char!r}]: {value!r}")
-            # Two characters for one colour would make the inverse
-            # ambiguous; the lowest character wins deterministically.
-            if rgba in rgba_to_char:
-                continue
-            rgba_to_char[rgba] = char
-            char_to_rgba[char] = rgba
+    _, error = parse_sprite_map([transparent], palette or {}, transparent)
+    if error:
+        raise ToolError(error)
 
     safe_layer = lua_escape(layer_name)
 
     if composite:
-        # Visible layers only — see _COMPOSE_FRAME for why flattening a
+        # Visible layers only — see COMPOSE_FRAME for why flattening a
         # clone beats Sprite:flatten() directly.
         reader = f"""
-        {_COMPOSE_FRAME}
+        {COMPOSE_FRAME}
         local img = compose_frame(spr, idx, nil)
         local ox, oy = 0, 0
         """
@@ -346,9 +238,10 @@ async def get_sprite_map(
         local cel = nil
         {FIND_LAYER}
         {LAYER_NAMES}
-        local target = find_layer(spr, "{safe_layer}")
+        local target = find_layer(spr, {lua_layer_ref(layer_name)})
         if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
         if target.isTilemap then print("ERROR:Layer '{safe_layer}' {_TILEMAP_REFUSAL}. Tip: use get_composite_rect for the rendered colour.") return end
+        print("LAYER_PATH:" .. json.encode(layer_path(target)))
         cel = target:cel(spr.frames[idx])
         if not cel then print("ERROR:No cel on layer '{safe_layer}' at frame {frame_index} (sprite has " .. #spr.frames .. " frame(s), 1-based). Tip: call add_frame first, or draw on this layer/frame.") return end
         local img = cel.image
@@ -384,8 +277,11 @@ async def get_sprite_map(
 
     output = await AsepriteCommand.execute_lua_script(script, filename)
 
+    resolved_path = None
     cells: Dict[tuple[int, int], tuple[int, int, int, int]] = {}
     for line in output.splitlines():
+        if line.startswith("LAYER_PATH:"):
+            resolved_path = json.loads(line.removeprefix("LAYER_PATH:"))
         if line.startswith("ERROR:"):
             raise ToolError(f"Failed to read sprite map: {line[6:]}")
         if line.startswith("PIXEL:"):
@@ -395,63 +291,8 @@ async def get_sprite_map(
     if len(cells) != width * height:
         raise ToolError("Failed to read sprite map: incomplete pixel data returned")
 
-    is_lossy = any(0 < rgba[3] < alpha_threshold for rgba in cells.values())
-
-    counts: Dict[tuple[int, int, int, int], int] = {}
-    for rgba in cells.values():
-        if rgba[3] >= alpha_threshold:
-            counts[rgba] = counts.get(rgba, 0) + 1
-
-    if max_colors > 0 and len(counts) > max_colors:
-        remap = _quantise(list(counts), counts, max_colors)
-        is_lossy = is_lossy or any(colour != mapped for colour, mapped in remap.items())
-        cells = {
-            pos: remap.get(rgba, rgba) for pos, rgba in cells.items()
-        }
-        counts = {}
-        for rgba in cells.values():
-            if rgba[3] >= alpha_threshold:
-                counts[rgba] = counts.get(rgba, 0) + 1
-
-    # Anything the caller's palette did not cover is auto-assigned from the
-    # alphabet that is still free.
-    free = [c for c in _AUTO_ALPHABET if c != transparent and c not in char_to_rgba]
-    extra = sorted(colour for colour in counts if colour not in rgba_to_char)
-    if len(extra) > len(free):
-        raise ToolError(f"Invalid colour count: the region uses {len(counts)} distinct "
-            f"colour(s) but only {len(char_to_rgba) + len(free)} "
-            f"single-character slot(s) are available — pass max_colors to "
-            f"quantise, or a palette covering the colours you care about")
-    for rgba, char in zip(extra, free):
-        rgba_to_char[rgba] = char
-        char_to_rgba[char] = rgba
-
-    rows_out = []
-    for row in range(height):
-        line = []
-        for col in range(width):
-            rgba = cells.get((col, row), (0, 0, 0, 0))
-            if rgba[3] < alpha_threshold:
-                line.append(transparent)
-            else:
-                line.append(rgba_to_char[rgba])
-        rows_out.append("".join(line))
-
-    result: Dict[str, Any] = {
-        "layer": layer_name or "(active)",
-        "frame": frame_index,
-        "x": x,
-        "y": y,
-        "width": width,
-        "height": height,
-        "transparent": transparent,
-        "palette": {char: _hex_of(char_to_rgba[char]) for char in sorted(char_to_rgba)},
-        "rows": rows_out,
-        "lossy": is_lossy,
-    }
-    # A single-character-per-column ruler only exists while the alphabet
-    # lasts; past that the region is wide enough that rows are self-describing.
-    if width <= len(_AUTO_ALPHABET):
-        result["columns"] = _AUTO_ALPHABET[:width]
-
-    return json.dumps(result, ensure_ascii=False)
+    result = encode_sprite_map(cells, frame_index=frame_index, x=x, y=y, width=width, height=height,
+                               palette=palette, max_colors=max_colors, alpha_threshold=alpha_threshold,
+                               transparent=transparent, source="composite" if composite else "cel",
+                               layer=None if composite else resolved_path)
+    return ToolOutput(summary="Read exact sprite map", data=result)

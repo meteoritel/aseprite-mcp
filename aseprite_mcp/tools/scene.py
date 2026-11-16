@@ -1,24 +1,26 @@
 from mcp.server.mcpserver.exceptions import ToolError
-from ..core.editing import execute_edit_script
-from typing import List
+
 from ..core.commands import lua_escape
-from ..core.lua import FIND_LAYER
+from ..core.contracts import LayerRef, ToolOutput
+from ..core.editing import edit_output, execute_edit_script
+from ..core.lua import FIND_LAYER, lua_layer_refs
+from ..core.results import EditReceipt
 from ..core.state import prepare_filename
 
 async def copy_layers_between_sprites(
     *,
     source_filename: str = "",
     target_filename: str,
-    layer_names: List[str],
+    layer_names: list[LayerRef],
     replace: bool = True,
     create_missing_frames: bool = True
-) -> str:
+) -> ToolOutput[EditReceipt]:
     """Copy layers by name from a source sprite to a target sprite.
 
     Args:
         source_filename: Source .aseprite file (optional; defaults to the session's active file)
         target_filename: Target .aseprite file (must already exist)
-        layer_names: List of layer names to copy
+        layer_names: Source leaf image layers, by legacy name or exact path array. Exact destination parents must already exist.
         replace: Overwrite existing cels in target layers
         create_missing_frames: Add frames to target if needed
     """
@@ -31,7 +33,7 @@ async def copy_layers_between_sprites(
     dst_path = lua_escape(target_filename.replace("\\", "/"))
     replace_flag = "true" if replace else "false"
     create_frames_flag = "true" if create_missing_frames else "false"
-    layers_lua = "{" + ",".join([f"\"{lua_escape(name)}\"" for name in layer_names]) + "}"
+    layers_lua = lua_layer_refs(layer_names)
 
     script = f"""
     local src = app.open("{src_path}")
@@ -45,10 +47,24 @@ async def copy_layers_between_sprites(
     local missing = {{}}
     local valid = {{}}
     for _, name in ipairs(names) do
-        if find_layer(src, name) then
-            table.insert(valid, name)
+        local source = find_layer(src, name)
+        if source then
+            if source.isGroup or source.isTilemap then error("Copy requires leaf image layers: " .. layer_ref_text(name)) end
+            local target = find_layer(dst, name)
+            local parent = nil
+            local new_name = source.name
+            if not target and type(name) ~= "string" and #name > 1 then
+                local parent_path = {{}}
+                for index = 1, #name-1 do parent_path[index] = name[index] end
+                parent = find_layer(dst, parent_path)
+                if not parent or not parent.isGroup then error("Destination group not found: " .. layer_ref_text(parent_path)) end
+            elseif not target and type(name) == "string" then
+                new_name = name
+            end
+            if target and (target.isGroup or target.isTilemap) then error("Destination must be an image layer: " .. layer_ref_text(name)) end
+            table.insert(valid, {{source=source, target=target, parent=parent, name=new_name, ref=name}})
         else
-            table.insert(missing, name)
+            table.insert(missing, layer_ref_text(name))
         end
     end
     if #valid == 0 then
@@ -62,13 +78,16 @@ async def copy_layers_between_sprites(
             end
         end
 
-        for _, name in ipairs(valid) do
-            local src_layer = find_layer(src, name)
-            local dst_layer = find_layer(dst, name)
+        _aseprite_edit_targets = {{}}
+        for _, entry in ipairs(valid) do
+            local src_layer = entry.source
+            local dst_layer = entry.target or find_layer(dst, entry.ref)
             if not dst_layer then
                 dst_layer = dst:newLayer()
-                dst_layer.name = name
+                dst_layer.name = entry.name
+                if entry.parent then dst_layer.parent = entry.parent end
             end
+            remember_target(dst_layer)
             if {replace_flag} then
                 for i = 1, #dst.frames do
                     local cel = dst_layer:cel(dst.frames[i])
@@ -101,7 +120,8 @@ async def copy_layers_between_sprites(
     print("OK")
     """
 
-    output = await execute_edit_script(script, source_filename, output_filename=target_filename)
+    execution = await execute_edit_script(script, source_filename, output_filename=target_filename)
+    output = execution.stdout
     missing = next(
         (line[len("MISSING:"):] for line in output.splitlines() if line.startswith("MISSING:")),
         None,
@@ -109,4 +129,4 @@ async def copy_layers_between_sprites(
     msg = f"Layers copied from {source_filename} to {target_filename}"
     if missing:
         msg += f" (skipped missing layers: {missing})"
-    return msg
+    return edit_output(msg, target_filename, execution, None)

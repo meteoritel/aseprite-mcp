@@ -1,9 +1,12 @@
 from mcp.server.mcpserver.exceptions import ToolError
-from ..core.editing import execute_edit_script
-from ..core.commands import lua_escape
-from ..core.lua import FIND_LAYER, LAYER_NAMES, NORMALIZE_CEL, PSET
-from ..core.state import prepare_filename
+
 from ..core.colors import parse_hex_color
+from ..core.commands import lua_escape
+from ..core.contracts import Byte, FrameIndex, LayerRef, PositiveInt, ToolOutput
+from ..core.editing import edit_output, execute_edit_script
+from ..core.lua import FIND_LAYER, LAYER_NAMES, NORMALIZE_CEL, PSET, lua_layer_ref
+from ..core.results import EditReceipt
+from ..core.state import prepare_filename
 
 
 def _parse_hex_color(value: str) -> tuple[int, int, int] | None:
@@ -12,7 +15,7 @@ def _parse_hex_color(value: str) -> tuple[int, int, int] | None:
     return rgba[:3] if rgba else None
 
 
-async def move_region(filename: str='', *, layer_name: str, frame_index: int, x: int, y: int, width: int, height: int, dest_x: int, dest_y: int) -> str:
+async def move_region(filename: str='', *, layer_name: LayerRef, frame_index: FrameIndex, x: int, y: int, width: PositiveInt, height: PositiveInt, dest_x: int, dest_y: int) -> ToolOutput[EditReceipt]:
     """Cut a rectangular region of pixels and paste it at a new position.
 
     Coordinates are sprite-global. The source area is left transparent.
@@ -46,7 +49,7 @@ async def move_region(filename: str='', *, layer_name: str, frame_index: int, x:
     local idx = {frame_index}
     if idx < 1 or idx > #spr.frames then print("ERROR:Frame index out of range") return end
 
-    local target = find_layer(spr, "{safe_layer}")
+    local target = find_layer(spr, {lua_layer_ref(layer_name)})
     if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
 
     app.transaction(function()
@@ -83,14 +86,14 @@ async def move_region(filename: str='', *, layer_name: str, frame_index: int, x:
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
+    execution = await execute_edit_script(script, filename)
     return (
-        f"Moved {width}x{height} region from ({x},{y}) to ({dest_x},{dest_y}) "
-        f"on '{layer_name}' frame {frame_index} in {filename}"
+        edit_output(f"Moved {width}x{height} region from ({x},{y}) to ({dest_x},{dest_y}) "
+        f"on '{layer_name}' frame {frame_index} in {filename}", filename, execution, frame_index)
     )
 
 
-async def copy_region(filename: str='', *, layer_name: str, frame_index: int, x: int, y: int, width: int, height: int, dest_x: int, dest_y: int, target_layer_name: str='', target_frame_index: int=0) -> str:
+async def copy_region(filename: str='', *, layer_name: LayerRef, frame_index: FrameIndex, x: int, y: int, width: PositiveInt, height: PositiveInt, dest_x: int, dest_y: int, target_layer_name: LayerRef='', target_frame_index: int=0) -> ToolOutput[EditReceipt]:
     """Copy a rectangular region of pixels to another position, layer, or frame.
 
     Coordinates are sprite-global. Fully transparent source pixels do not
@@ -130,9 +133,9 @@ async def copy_region(filename: str='', *, layer_name: str, frame_index: int, x:
     if src_idx < 1 or src_idx > #spr.frames then print("ERROR:Source frame index out of range") return end
     if dst_idx < 1 or dst_idx > #spr.frames then print("ERROR:Target frame index out of range") return end
 
-    local src_layer = find_layer(spr, "{safe_layer}")
+    local src_layer = find_layer(spr, {lua_layer_ref(layer_name)})
     if not src_layer then print("ERROR:Source layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
-    local dst_layer = find_layer(spr, "{safe_target_layer}")
+    local dst_layer = find_layer(spr, {lua_layer_ref(target_layer_name or layer_name)})
     if not dst_layer then print("ERROR:Target layer '{safe_target_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
 
     app.transaction(function()
@@ -170,14 +173,14 @@ async def copy_region(filename: str='', *, layer_name: str, frame_index: int, x:
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
+    execution = await execute_edit_script(script, filename)
     return (
-        f"Copied {width}x{height} region from ({x},{y}) to ({dest_x},{dest_y}) "
-        f"in {filename}"
+        edit_output(f"Copied {width}x{height} region from ({x},{y}) to ({dest_x},{dest_y}) "
+        f"in {filename}", filename, execution, frame_index)
     )
 
 
-async def erase_region(filename: str='', *, layer_name: str, frame_index: int, x: int, y: int, width: int, height: int) -> str:
+async def erase_region(filename: str='', *, layer_name: LayerRef, frame_index: FrameIndex, x: int, y: int, width: PositiveInt, height: PositiveInt) -> ToolOutput[EditReceipt]:
     """Erase (make transparent) a rectangular region of pixels.
 
     Coordinates are sprite-global.
@@ -206,7 +209,7 @@ async def erase_region(filename: str='', *, layer_name: str, frame_index: int, x
     local idx = {frame_index}
     if idx < 1 or idx > #spr.frames then print("ERROR:Frame index out of range") return end
 
-    local target = find_layer(spr, "{safe_layer}")
+    local target = find_layer(spr, {lua_layer_ref(layer_name)})
     if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
 
     app.transaction(function()
@@ -224,14 +227,14 @@ async def erase_region(filename: str='', *, layer_name: str, frame_index: int, x
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
+    execution = await execute_edit_script(script, filename)
     return (
-        f"Erased {width}x{height} region at ({x},{y}) on '{layer_name}' "
-        f"frame {frame_index} in {filename}"
+        edit_output(f"Erased {width}x{height} region at ({x},{y}) on '{layer_name}' "
+        f"frame {frame_index} in {filename}", filename, execution, frame_index)
     )
 
 
-async def erase_color(filename: str='', *, layer_name: str, frame_index: int, color: str, tolerance: int=0) -> str:
+async def erase_color(filename: str='', *, layer_name: LayerRef, frame_index: FrameIndex, color: str, tolerance: Byte=0) -> ToolOutput[EditReceipt]:
     """Make all pixels of a given color transparent (like a magic eraser).
 
     Args:
@@ -260,7 +263,7 @@ async def erase_color(filename: str='', *, layer_name: str, frame_index: int, co
     local idx = {frame_index}
     if idx < 1 or idx > #spr.frames then print("ERROR:Frame index out of range") return end
 
-    local target = find_layer(spr, "{safe_layer}")
+    local target = find_layer(spr, {lua_layer_ref(layer_name)})
     if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
 
     local cel = target:cel(spr.frames[idx])
@@ -289,13 +292,14 @@ async def erase_color(filename: str='', *, layer_name: str, frame_index: int, co
     print("COUNT:" .. count)
     """
 
-    output = await execute_edit_script(script, filename)
+    execution = await execute_edit_script(script, filename)
+    output = execution.stdout
 
     count = "?"
     for line in output.splitlines():
         if line.startswith("COUNT:"):
             count = line[len("COUNT:"):]
     return (
-        f"Erased {count} pixels of {color} on '{layer_name}' "
-        f"frame {frame_index} in {filename}"
+        edit_output(f"Erased {count} pixels of {color} on '{layer_name}' "
+        f"frame {frame_index} in {filename}", filename, execution, frame_index)
     )

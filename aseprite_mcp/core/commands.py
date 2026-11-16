@@ -1,4 +1,5 @@
 import asyncio
+import json
 import re
 import signal
 import subprocess
@@ -21,6 +22,8 @@ def lua_escape(s: str) -> str:
     single-quoted error text (`Layer '...' not found`). Lua accepts \\' and
     \\" in either style, so escaping both is safe for both.
     """
+    if isinstance(s, list):
+        s = json.dumps(s, ensure_ascii=False)
     return (
         s.replace("\\", "\\\\")
          .replace('"', '\\"')
@@ -32,16 +35,11 @@ def lua_escape(s: str) -> str:
 
 
 def parse_pixel_xy(pixel: dict) -> tuple[int, int] | None:
-    """Coerce a pixel dict's x/y to integers, or None when invalid.
-
-    `pixels` tool arguments are typed Dict[str, Any], so x/y values are
-    not schema-validated before being interpolated into Lua scripts;
-    they must be plain integers there.
-    """
-    try:
-        return int(pixel.get("x", 0)), int(pixel.get("y", 0))
-    except (TypeError, ValueError):
+    """Require explicit integer coordinates for direct Python callers too."""
+    x, y = pixel.get("x"), pixel.get("y")
+    if type(x) is not int or type(y) is not int:
         return None
+    return x, y
 
 
 def reject_traversal(path: str) -> str | None:

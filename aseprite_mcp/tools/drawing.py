@@ -1,14 +1,15 @@
 from mcp.server.mcpserver.exceptions import ToolError
-from ..core.editing import execute_edit_script
-from typing import Any, Dict, List
 
 from ..core.colors import parse_hex_color
 from ..core.commands import lua_escape, parse_pixel_xy
-from ..core.lua import EDIT_TARGET, NORMALIZE_CEL, PSET
+from ..core.contracts import FrameIndex, LayerRef, Pixel, Point, PositiveInt, ToolOutput
+from ..core.editing import edit_output, execute_edit_script
+from ..core.lua import EDIT_TARGET, NORMALIZE_CEL, PSET, lua_layer_ref
+from ..core.results import EditReceipt
 from ..core.state import prepare_filename
 
 
-async def draw_pixels_at(*, filename: str='', layer_name: str, frame_index: int, pixels: List[Dict[str, Any]], create_if_missing: bool=True) -> str:
+async def draw_pixels_at(*, filename: str='', layer_name: LayerRef, frame_index: FrameIndex, pixels: list[Pixel], create_if_missing: bool=True) -> ToolOutput[EditReceipt]:
     """Draw pixels on a specific layer/frame.
 
     Args:
@@ -31,7 +32,7 @@ async def draw_pixels_at(*, filename: str='', layer_name: str, frame_index: int,
 
     {EDIT_TARGET}
     {NORMALIZE_CEL}
-    local target = require_layer(spr, "{safe_layer_name}", {create_flag})
+    local target = require_layer(spr, {lua_layer_ref(layer_name)} , {create_flag})
 
     app.transaction(function()
         app.activeLayer = target
@@ -63,10 +64,10 @@ async def draw_pixels_at(*, filename: str='', layer_name: str, frame_index: int,
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Pixels drawn on '{layer_name}' frame {frame_index} in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Pixels drawn on '{layer_name}' frame {frame_index} in {filename}", filename, execution, frame_index)
 
-async def draw_line_at(*, filename: str='', layer_name: str, frame_index: int, x1: int, y1: int, x2: int, y2: int, color: str='#000000', thickness: int=1, create_if_missing: bool=True) -> str:
+async def draw_line_at(*, filename: str='', layer_name: LayerRef, frame_index: FrameIndex, x1: int, y1: int, x2: int, y2: int, color: str='#000000', thickness: int=1, create_if_missing: bool=True) -> ToolOutput[EditReceipt]:
     """Draw a line on a specific layer/frame.
 
     Args:
@@ -127,7 +128,7 @@ async def draw_line_at(*, filename: str='', layer_name: str, frame_index: int, x
 
     {EDIT_TARGET}
     {NORMALIZE_CEL}
-    local target = require_layer(spr, "{safe_layer_name}", {create_flag})
+    local target = require_layer(spr, {lua_layer_ref(layer_name)} , {create_flag})
 
     app.transaction(function()
         app.activeLayer = target
@@ -145,10 +146,10 @@ async def draw_line_at(*, filename: str='', layer_name: str, frame_index: int, x
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Line drawn on '{layer_name}' frame {frame_index} in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Line drawn on '{layer_name}' frame {frame_index} in {filename}", filename, execution, frame_index)
 
-async def draw_rectangle_at(*, filename: str='', layer_name: str, frame_index: int, x: int, y: int, width: int, height: int, color: str='#000000', fill: bool=False, create_if_missing: bool=True) -> str:
+async def draw_rectangle_at(*, filename: str='', layer_name: LayerRef, frame_index: FrameIndex, x: int, y: int, width: PositiveInt, height: PositiveInt, color: str='#000000', fill: bool=False, create_if_missing: bool=True) -> ToolOutput[EditReceipt]:
     """Draw a rectangle on a specific layer/frame.
 
     Args:
@@ -185,7 +186,7 @@ async def draw_rectangle_at(*, filename: str='', layer_name: str, frame_index: i
 
     {EDIT_TARGET}
     {NORMALIZE_CEL}
-    local target = require_layer(spr, "{safe_layer_name}", {create_flag})
+    local target = require_layer(spr, {lua_layer_ref(layer_name)} , {create_flag})
 
     app.transaction(function()
         app.activeLayer = target
@@ -205,10 +206,10 @@ async def draw_rectangle_at(*, filename: str='', layer_name: str, frame_index: i
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Rectangle drawn on '{layer_name}' frame {frame_index} in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Rectangle drawn on '{layer_name}' frame {frame_index} in {filename}", filename, execution, frame_index)
 
-async def draw_circle_at(*, filename: str='', layer_name: str, frame_index: int, center_x: int, center_y: int, radius: int, color: str='#000000', fill: bool=False, create_if_missing: bool=True) -> str:
+async def draw_circle_at(*, filename: str='', layer_name: LayerRef, frame_index: FrameIndex, center_x: int, center_y: int, radius: int, color: str='#000000', fill: bool=False, create_if_missing: bool=True) -> ToolOutput[EditReceipt]:
     """Draw a circle on a specific layer/frame.
 
     Args:
@@ -240,7 +241,7 @@ async def draw_circle_at(*, filename: str='', layer_name: str, frame_index: int,
 
     {EDIT_TARGET}
     {NORMALIZE_CEL}
-    local target = require_layer(spr, "{safe_layer_name}", {create_flag})
+    local target = require_layer(spr, {lua_layer_ref(layer_name)} , {create_flag})
 
     app.transaction(function()
         app.activeLayer = target
@@ -263,10 +264,10 @@ async def draw_circle_at(*, filename: str='', layer_name: str, frame_index: int,
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Circle drawn on '{layer_name}' frame {frame_index} in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Circle drawn on '{layer_name}' frame {frame_index} in {filename}", filename, execution, frame_index)
 
-async def fill_area_at(*, filename: str='', layer_name: str, frame_index: int, x: int, y: int, color: str='#000000', create_if_missing: bool=True) -> str:
+async def fill_area_at(*, filename: str='', layer_name: LayerRef, frame_index: FrameIndex, x: int, y: int, color: str='#000000', create_if_missing: bool=True) -> ToolOutput[EditReceipt]:
     """Fill an area on a specific layer/frame.
 
     Args:
@@ -296,7 +297,7 @@ async def fill_area_at(*, filename: str='', layer_name: str, frame_index: int, x
 
     {EDIT_TARGET}
     {NORMALIZE_CEL}
-    local target = require_layer(spr, "{safe_layer_name}", {create_flag})
+    local target = require_layer(spr, {lua_layer_ref(layer_name)} , {create_flag})
 
     app.transaction(function()
         app.activeLayer = target
@@ -315,10 +316,10 @@ async def fill_area_at(*, filename: str='', layer_name: str, frame_index: int, x
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Area filled on '{layer_name}' frame {frame_index} in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Area filled on '{layer_name}' frame {frame_index} in {filename}", filename, execution, frame_index)
 
-async def draw_polygon(*, filename: str='', layer_name: str, frame_index: int, points: List[Dict[str, int]], color: str='#000000', fill: bool=False, create_if_missing: bool=True) -> str:
+async def draw_polygon(*, filename: str='', layer_name: LayerRef, frame_index: FrameIndex, points: list[Point], color: str='#000000', fill: bool=False, create_if_missing: bool=True) -> ToolOutput[EditReceipt]:
     """Draw a polygon on a specific layer/frame.
 
     Args:
@@ -402,7 +403,7 @@ async def draw_polygon(*, filename: str='', layer_name: str, frame_index: int, p
     local idx = {frame_index}
     if idx < 1 or idx > #spr.frames then print("ERROR:Frame index {frame_index} out of range (sprite has " .. #spr.frames .. " frame(s), 1-based). Tip: call add_frame first.") return end
 
-    local target = require_layer(spr, "{safe_layer_name}", {create_flag})
+    local target = require_layer(spr, {lua_layer_ref(layer_name)} , {create_flag})
 
     app.transaction(function()
         app.activeLayer = target
@@ -427,10 +428,10 @@ async def draw_polygon(*, filename: str='', layer_name: str, frame_index: int, p
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Polygon drawn on '{layer_name}' frame {frame_index} in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Polygon drawn on '{layer_name}' frame {frame_index} in {filename}", filename, execution, frame_index)
 
-async def draw_path(*, filename: str='', layer_name: str, frame_index: int, points: List[Dict[str, int]], color: str='#000000', thickness: int=1, create_if_missing: bool=True) -> str:
+async def draw_path(*, filename: str='', layer_name: LayerRef, frame_index: FrameIndex, points: list[Point], color: str='#000000', thickness: int=1, create_if_missing: bool=True) -> ToolOutput[EditReceipt]:
     """Draw a path using a polyline on a specific layer/frame.
 
     Args:
@@ -492,7 +493,7 @@ async def draw_path(*, filename: str='', layer_name: str, frame_index: int, poin
     local idx = {frame_index}
     if idx < 1 or idx > #spr.frames then print("ERROR:Frame index {frame_index} out of range (sprite has " .. #spr.frames .. " frame(s), 1-based). Tip: call add_frame first.") return end
 
-    local target = require_layer(spr, "{safe_layer_name}", {create_flag})
+    local target = require_layer(spr, {lua_layer_ref(layer_name)} , {create_flag})
 
     app.transaction(function()
         app.activeLayer = target
@@ -512,10 +513,10 @@ async def draw_path(*, filename: str='', layer_name: str, frame_index: int, poin
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Path drawn on '{layer_name}' frame {frame_index} in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Path drawn on '{layer_name}' frame {frame_index} in {filename}", filename, execution, frame_index)
 
-async def apply_gradient_rect(*, filename: str='', layer_name: str, frame_index: int, x: int, y: int, width: int, height: int, color_start: str, color_end: str, horizontal: bool=True, create_if_missing: bool=True) -> str:
+async def apply_gradient_rect(*, filename: str='', layer_name: LayerRef, frame_index: FrameIndex, x: int, y: int, width: PositiveInt, height: PositiveInt, color_start: str, color_end: str, horizontal: bool=True, create_if_missing: bool=True) -> ToolOutput[EditReceipt]:
     """Apply a linear gradient fill to a rectangle.
 
     Args:
@@ -558,7 +559,7 @@ async def apply_gradient_rect(*, filename: str='', layer_name: str, frame_index:
     local idx = {frame_index}
     if idx < 1 or idx > #spr.frames then print("ERROR:Frame index {frame_index} out of range (sprite has " .. #spr.frames .. " frame(s), 1-based). Tip: call add_frame first.") return end
 
-    local target = require_layer(spr, "{safe_layer_name}", {create_flag})
+    local target = require_layer(spr, {lua_layer_ref(layer_name)} , {create_flag})
 
     app.transaction(function()
         app.activeLayer = target
@@ -590,11 +591,11 @@ async def apply_gradient_rect(*, filename: str='', layer_name: str, frame_index:
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Gradient applied on '{layer_name}' frame {frame_index} in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Gradient applied on '{layer_name}' frame {frame_index} in {filename}", filename, execution, frame_index)
 
 
-async def draw_ellipse_at(*, filename: str='', layer_name: str, frame_index: int, center_x: int, center_y: int, radius_x: int, radius_y: int, color: str='#000000', fill: bool=False, create_if_missing: bool=True) -> str:
+async def draw_ellipse_at(*, filename: str='', layer_name: LayerRef, frame_index: FrameIndex, center_x: int, center_y: int, radius_x: PositiveInt, radius_y: PositiveInt, color: str='#000000', fill: bool=False, create_if_missing: bool=True) -> ToolOutput[EditReceipt]:
     """Draw an ellipse on a specific layer/frame.
 
     Args:
@@ -629,7 +630,7 @@ async def draw_ellipse_at(*, filename: str='', layer_name: str, frame_index: int
 
     {EDIT_TARGET}
     {NORMALIZE_CEL}
-    local target = require_layer(spr, "{safe_layer_name}", {create_flag})
+    local target = require_layer(spr, {lua_layer_ref(layer_name)} , {create_flag})
 
     app.transaction(function()
         app.activeLayer = target
@@ -652,5 +653,5 @@ async def draw_ellipse_at(*, filename: str='', layer_name: str, frame_index: int
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Ellipse drawn on '{layer_name}' frame {frame_index} in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Ellipse drawn on '{layer_name}' frame {frame_index} in {filename}", filename, execution, frame_index)

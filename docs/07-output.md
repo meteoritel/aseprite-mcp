@@ -2,7 +2,7 @@
 
 常用导出与图片导入直接调用；`export_spritesheet`、`export_layers` 和本地 HTTP preview 属于扩展，经 `search_tools` 查找后使用 `call_tool` 执行。
 
-[`tools/export.py`](../aseprite_mcp/tools/export.py) 负责将原生工程转为图像并发布精确目标。导出不修改源工程或切换活跃文件；产物路径作为文本或 JSON 返回。
+[`tools/export.py`](../aseprite_mcp/tools/export.py) 负责将原生工程转为图像并发布精确目标。导出不修改源工程或切换活跃文件；成功结果的 `data.files` 给出实际发布路径，JE 使用专用载荷。
 
 ## 生成、校验与发布
 
@@ -41,7 +41,7 @@ CLI 帧过滤在打开文件前设置；`--scale` 等导出选项按 Aseprite �
 
 固定原尺寸、vertical、无 trim／旋转；逐帧核对 Aseprite JSON 的矩形和 duration。8× 审阅图由最终 PNG 经 Pillow `NEAREST` 放大，保留 alpha，生成校验后再发布游戏文件。
 
-返回 JSON 包含 `png`、`mcmeta`、`preview_png`、`preview_scale` 和 `frames`（source_frame／index／duration_ms）。preview 位于会话独有临时目录，lifespan 退出时删除；失败时清理本次 preview。静态覆盖动画时空 metadata 替换旧 animation。
+成功结果的 `data` 包含 `png`、`mcmeta`、`preview_png`、`preview_scale` 和 `frames`（source_frame／index／duration_ms）。源帧号从 1 开始，播放索引从 0 开始；`pingpong` 如 `[0,1,2,3,2,1]`，条带每个源帧只存一次。preview 位于会话独有临时目录，lifespan 退出时删除；失败时清理本次 preview。静态覆盖动画时空 metadata 替换旧 animation。
 
 交付到 Java 纹理及 metadata；具体游戏版本的资源包 manifest 由上层准备。
 

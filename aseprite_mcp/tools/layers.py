@@ -1,7 +1,10 @@
 from mcp.server.mcpserver.exceptions import ToolError
-from ..core.editing import execute_edit_script
+
 from ..core.commands import lua_escape
-from ..core.lua import FIND_LAYER, LAYER_NAMES
+from ..core.contracts import LayerRef, PositiveInt, ToolOutput
+from ..core.editing import edit_output, execute_edit_script
+from ..core.lua import FIND_LAYER, LAYER_NAMES, lua_layer_ref
+from ..core.results import EditReceipt
 from ..core.state import prepare_filename
 
 _BLEND_MODES = {
@@ -27,7 +30,7 @@ _BLEND_MODES = {
 }
 
 
-async def delete_layer(filename: str = "", *, layer_name: str) -> str:
+async def delete_layer(filename: str = "", *, layer_name: LayerRef) -> ToolOutput[EditReceipt]:
     """Delete a layer by name.
 
     Args:
@@ -44,7 +47,7 @@ async def delete_layer(filename: str = "", *, layer_name: str) -> str:
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
-    local target = find_layer(spr, "{safe_layer}")
+    local target = find_layer(spr, {lua_layer_ref(layer_name)})
     if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
     if #spr.layers <= 1 then print("ERROR:Cannot delete the only layer") return end
 
@@ -56,11 +59,11 @@ async def delete_layer(filename: str = "", *, layer_name: str) -> str:
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Layer '{layer_name}' deleted from {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Layer '{layer_name}' deleted from {filename}", filename, execution, None)
 
 
-async def rename_layer(filename: str = "", *, layer_name: str, new_name: str) -> str:
+async def rename_layer(filename: str = "", *, layer_name: LayerRef, new_name: str) -> ToolOutput[EditReceipt]:
     """Rename a layer.
 
     Args:
@@ -81,22 +84,24 @@ async def rename_layer(filename: str = "", *, layer_name: str, new_name: str) ->
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
-    local target = find_layer(spr, "{safe_layer}")
+    local target = find_layer(spr, {lua_layer_ref(layer_name)})
     if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
 
     app.transaction(function()
         target.name = "{safe_new}"
+        _aseprite_edit_targets = {{}}
+        remember_target(target)
     end)
 
     save_project(spr)
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Layer '{layer_name}' renamed to '{new_name}' in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Layer '{layer_name}' renamed to '{new_name}' in {filename}", filename, execution, None)
 
 
-async def duplicate_layer(filename: str = "", *, layer_name: str, new_name: str = "", group: str = "") -> str:
+async def duplicate_layer(filename: str = "", *, layer_name: LayerRef, new_name: str = "", group: LayerRef = "") -> ToolOutput[EditReceipt]:
     """Duplicate a layer with all its cels across every frame.
 
     The copy inherits the source's opacity and blend mode. By default it is
@@ -113,7 +118,7 @@ async def duplicate_layer(filename: str = "", *, layer_name: str, new_name: str 
     """
     filename = prepare_filename(filename)
 
-    final_name = new_name or f"{layer_name} copy"
+    final_name = new_name or f"{layer_name[-1] if isinstance(layer_name, list) else layer_name} copy"
     safe_layer = lua_escape(layer_name)
     safe_new = lua_escape(final_name)
     safe_group = lua_escape(group)
@@ -123,12 +128,12 @@ async def duplicate_layer(filename: str = "", *, layer_name: str, new_name: str 
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
-    local src = find_layer(spr, "{safe_layer}")
+    local src = find_layer(spr, {lua_layer_ref(layer_name)})
     if not src then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
 
     local parent = nil
     if "{safe_group}" ~= "" then
-        parent = find_layer(spr, "{safe_group}")
+        parent = find_layer(spr, {lua_layer_ref(group)})
         if not parent then print("ERROR:Group '{safe_group}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_group first, or check get_sprite_info for the exact group names.") return end
         if not parent.isGroup then print("ERROR:Target is not a group") return end
     end
@@ -141,6 +146,7 @@ async def duplicate_layer(filename: str = "", *, layer_name: str, new_name: str 
         if parent then
             copy.parent = parent
         else
+            copy.parent = src.parent
             copy.stackIndex = src.stackIndex + 1
         end
         for _, frame in ipairs(spr.frames) do
@@ -150,18 +156,20 @@ async def duplicate_layer(filename: str = "", *, layer_name: str, new_name: str 
                 c.opacity = cel.opacity
             end
         end
+        _aseprite_edit_targets = {{}}
+        remember_target(copy)
     end)
 
     save_project(spr)
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
+    execution = await execute_edit_script(script, filename)
     location = f" inside group '{group}'" if group else ""
-    return f"Layer '{layer_name}' duplicated as '{final_name}'{location} in {filename}"
+    return edit_output(f"Layer '{layer_name}' duplicated as '{final_name}'{location} in {filename}", filename, execution, None)
 
 
-async def reorder_layer(filename: str = "", *, layer_name: str, position: int) -> str:
+async def reorder_layer(filename: str = "", *, layer_name: LayerRef, position: PositiveInt) -> ToolOutput[EditReceipt]:
     """Move a layer to a new position in the layer stack.
 
     Args:
@@ -181,7 +189,7 @@ async def reorder_layer(filename: str = "", *, layer_name: str, position: int) -
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
-    local target = find_layer(spr, "{safe_layer}")
+    local target = find_layer(spr, {lua_layer_ref(layer_name)})
     if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
     if {position} > #spr.layers then print("ERROR:Position out of range") return end
 
@@ -193,11 +201,11 @@ async def reorder_layer(filename: str = "", *, layer_name: str, position: int) -
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Layer '{layer_name}' moved to position {position} in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Layer '{layer_name}' moved to position {position} in {filename}", filename, execution, None)
 
 
-async def set_layer_blend_mode(filename: str = "", *, layer_name: str, mode: str) -> str:
+async def set_layer_blend_mode(filename: str = "", *, layer_name: LayerRef, mode: str) -> ToolOutput[EditReceipt]:
     """Set a layer's blend mode.
 
     Args:
@@ -222,7 +230,7 @@ async def set_layer_blend_mode(filename: str = "", *, layer_name: str, mode: str
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
-    local target = find_layer(spr, "{safe_layer}")
+    local target = find_layer(spr, {lua_layer_ref(layer_name)})
     if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
 
     app.transaction(function()
@@ -233,11 +241,11 @@ async def set_layer_blend_mode(filename: str = "", *, layer_name: str, mode: str
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Layer '{layer_name}' blend mode set to {mode} in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Layer '{layer_name}' blend mode set to {mode} in {filename}", filename, execution, None)
 
 
-async def merge_layer_down(filename: str = "", *, layer_name: str) -> str:
+async def merge_layer_down(filename: str = "", *, layer_name: LayerRef) -> ToolOutput[EditReceipt]:
     """Merge a layer into the layer directly below it.
 
     Args:
@@ -254,7 +262,7 @@ async def merge_layer_down(filename: str = "", *, layer_name: str) -> str:
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
-    local target = find_layer(spr, "{safe_layer}")
+    local target = find_layer(spr, {lua_layer_ref(layer_name)})
     if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
     if target.stackIndex <= 1 then print("ERROR:Layer is the bottom layer; nothing to merge into") return end
 
@@ -265,11 +273,11 @@ async def merge_layer_down(filename: str = "", *, layer_name: str) -> str:
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Layer '{layer_name}' merged down in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Layer '{layer_name}' merged down in {filename}", filename, execution, None)
 
 
-async def flatten_sprite(filename: str = "") -> str:
+async def flatten_sprite(filename: str = "") -> ToolOutput[EditReceipt]:
     """Flatten all layers into a single layer.
 
     Args:
@@ -290,5 +298,5 @@ async def flatten_sprite(filename: str = "") -> str:
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Sprite flattened in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Sprite flattened in {filename}", filename, execution, None)

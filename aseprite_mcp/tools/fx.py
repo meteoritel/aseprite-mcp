@@ -1,8 +1,11 @@
 from mcp.server.mcpserver.exceptions import ToolError
-from ..core.editing import execute_edit_script
-from ..core.commands import lua_escape
-from ..core.lua import ENSURE_LAYER, FIND_LAYER, LAYER_NAMES, NORMALIZE_CEL, PSET, HSL
+
 from ..core.colors import parse_hex_color
+from ..core.commands import lua_escape
+from ..core.contracts import Byte, FrameIndex, LayerRef, PositiveInt, ToolOutput
+from ..core.editing import edit_output, execute_edit_script
+from ..core.lua import ENSURE_LAYER, FIND_LAYER, HSL, LAYER_NAMES, NORMALIZE_CEL, PSET, lua_layer_ref
+from ..core.results import EditReceipt
 from ..core.state import prepare_filename
 
 
@@ -12,7 +15,7 @@ def _parse_hex_color(value: str) -> tuple[int, int, int] | None:
     return rgba[:3] if rgba else None
 
 
-async def outline_cel(filename: str='', *, layer_name: str, frame_index: int, color: str='#000000', include_diagonals: bool=False) -> str:
+async def outline_cel(filename: str='', *, layer_name: LayerRef, frame_index: FrameIndex, color: str='#000000', include_diagonals: bool=False) -> ToolOutput[EditReceipt]:
     """Add a 1px outline around all opaque pixels of a cel.
 
     Transparent pixels adjacent to opaque pixels are filled with the
@@ -47,7 +50,7 @@ async def outline_cel(filename: str='', *, layer_name: str, frame_index: int, co
     local idx = {frame_index}
     if idx < 1 or idx > #spr.frames then print("ERROR:Frame index {frame_index} out of range (sprite has " .. #spr.frames .. " frame(s), 1-based). Tip: call add_frame first.") return end
 
-    local target = find_layer(spr, "{safe_layer}")
+    local target = find_layer(spr, {lua_layer_ref(layer_name)})
     if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
 
     app.transaction(function()
@@ -83,11 +86,11 @@ async def outline_cel(filename: str='', *, layer_name: str, frame_index: int, co
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Outline added to '{layer_name}' frame {frame_index} in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Outline added to '{layer_name}' frame {frame_index} in {filename}", filename, execution, frame_index)
 
 
-async def replace_color(filename: str='', *, layer_name: str, frame_index: int, from_color: str, to_color: str, tolerance: int=0) -> str:
+async def replace_color(filename: str='', *, layer_name: LayerRef, frame_index: FrameIndex, from_color: str, to_color: str, tolerance: Byte=0) -> ToolOutput[EditReceipt]:
     """Replace one color with another in a cel, preserving alpha.
 
     Args:
@@ -120,7 +123,7 @@ async def replace_color(filename: str='', *, layer_name: str, frame_index: int, 
     local idx = {frame_index}
     if idx < 1 or idx > #spr.frames then print("ERROR:Frame index {frame_index} out of range (sprite has " .. #spr.frames .. " frame(s), 1-based). Tip: call add_frame first.") return end
 
-    local target = find_layer(spr, "{safe_layer}")
+    local target = find_layer(spr, {lua_layer_ref(layer_name)})
     if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
 
     local cel = target:cel(spr.frames[idx])
@@ -150,19 +153,20 @@ async def replace_color(filename: str='', *, layer_name: str, frame_index: int, 
     print("COUNT:" .. count)
     """
 
-    output = await execute_edit_script(script, filename)
+    execution = await execute_edit_script(script, filename)
+    output = execution.stdout
 
     count = "?"
     for line in output.splitlines():
         if line.startswith("COUNT:"):
             count = line[len("COUNT:"):]
     return (
-        f"Replaced {count} pixels {from_color} -> {to_color} on '{layer_name}' "
-        f"frame {frame_index} in {filename}"
+        edit_output(f"Replaced {count} pixels {from_color} -> {to_color} on '{layer_name}' "
+        f"frame {frame_index} in {filename}", filename, execution, frame_index)
     )
 
 
-async def adjust_hsl(filename: str='', *, layer_name: str, frame_index: int, hue_shift: float=0, saturation_shift: float=0, lightness_shift: float=0) -> str:
+async def adjust_hsl(filename: str='', *, layer_name: LayerRef, frame_index: FrameIndex, hue_shift: float=0, saturation_shift: float=0, lightness_shift: float=0) -> ToolOutput[EditReceipt]:
     """Shift hue, saturation, and lightness of all opaque pixels in a cel.
 
     Useful for creating palette-swapped variants and shading: e.g. darken
@@ -197,7 +201,7 @@ async def adjust_hsl(filename: str='', *, layer_name: str, frame_index: int, hue
     local idx = {frame_index}
     if idx < 1 or idx > #spr.frames then print("ERROR:Frame index {frame_index} out of range (sprite has " .. #spr.frames .. " frame(s), 1-based). Tip: call add_frame first.") return end
 
-    local target = find_layer(spr, "{safe_layer}")
+    local target = find_layer(spr, {lua_layer_ref(layer_name)})
     if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
 
     local cel = target:cel(spr.frames[idx])
@@ -228,14 +232,14 @@ async def adjust_hsl(filename: str='', *, layer_name: str, frame_index: int, hue
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
+    execution = await execute_edit_script(script, filename)
     return (
-        f"Adjusted HSL (h{hue_shift:+g}, s{saturation_shift:+g}, l{lightness_shift:+g}) "
-        f"on '{layer_name}' frame {frame_index} in {filename}"
+        edit_output(f"Adjusted HSL (h{hue_shift:+g}, s{saturation_shift:+g}, l{lightness_shift:+g}) "
+        f"on '{layer_name}' frame {frame_index} in {filename}", filename, execution, frame_index)
     )
 
 
-async def apply_dither_gradient(filename: str='', *, layer_name: str, frame_index: int, x: int, y: int, width: int, height: int, color_start: str, color_end: str, horizontal: bool=False, create_if_missing: bool=True) -> str:
+async def apply_dither_gradient(filename: str='', *, layer_name: LayerRef, frame_index: FrameIndex, x: int, y: int, width: PositiveInt, height: PositiveInt, color_start: str, color_end: str, horizontal: bool=False, create_if_missing: bool=True) -> ToolOutput[EditReceipt]:
     """Fill a rectangle with a two-color gradient using Bayer 4x4 ordered dithering.
 
     This is the classic pixel-art way to blend two colors without
@@ -283,7 +287,7 @@ async def apply_dither_gradient(filename: str='', *, layer_name: str, frame_inde
     local idx = {frame_index}
     if idx < 1 or idx > #spr.frames then print("ERROR:Frame index {frame_index} out of range (sprite has " .. #spr.frames .. " frame(s), 1-based). Tip: call add_frame first.") return end
 
-    local target = ensure_layer(spr, "{safe_layer}", {create})
+    local target = ensure_layer(spr, {lua_layer_ref(layer_name)} , {create})
     if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first; dither tools auto-create top-level layers when create_if_missing=true.") return end
 
     local bayer = {{
@@ -316,15 +320,15 @@ async def apply_dither_gradient(filename: str='', *, layer_name: str, frame_inde
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
+    execution = await execute_edit_script(script, filename)
     direction = "horizontal" if horizontal else "vertical"
     return (
-        f"Dithered {direction} gradient {color_start} -> {color_end} applied at "
-        f"({x},{y}) {width}x{height} on '{layer_name}' frame {frame_index} in {filename}"
+        edit_output(f"Dithered {direction} gradient {color_start} -> {color_end} applied at "
+        f"({x},{y}) {width}x{height} on '{layer_name}' frame {frame_index} in {filename}", filename, execution, frame_index)
     )
 
 
-async def apply_dither_pattern(filename: str='', *, layer_name: str, frame_index: int, x: int, y: int, width: int, height: int, color_a: str, color_b: str, density: float=0.5, create_if_missing: bool=True) -> str:
+async def apply_dither_pattern(filename: str='', *, layer_name: LayerRef, frame_index: FrameIndex, x: int, y: int, width: PositiveInt, height: PositiveInt, color_a: str, color_b: str, density: float=0.5, create_if_missing: bool=True) -> ToolOutput[EditReceipt]:
     """Fill a rectangle with a uniform Bayer-dithered mix of two colors.
 
     density controls the ratio: 0.0 = all color_a, 0.5 = checkerboard,
@@ -372,7 +376,7 @@ async def apply_dither_pattern(filename: str='', *, layer_name: str, frame_index
     local idx = {frame_index}
     if idx < 1 or idx > #spr.frames then print("ERROR:Frame index {frame_index} out of range (sprite has " .. #spr.frames .. " frame(s), 1-based). Tip: call add_frame first.") return end
 
-    local target = ensure_layer(spr, "{safe_layer}", {create})
+    local target = ensure_layer(spr, {lua_layer_ref(layer_name)} , {create})
     if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first; dither tools auto-create top-level layers when create_if_missing=true.") return end
 
     local bayer = {{
@@ -404,8 +408,8 @@ async def apply_dither_pattern(filename: str='', *, layer_name: str, frame_index
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
+    execution = await execute_edit_script(script, filename)
     return (
-        f"Dither pattern ({color_a}/{color_b}, density {density}) applied at "
-        f"({x},{y}) {width}x{height} on '{layer_name}' frame {frame_index} in {filename}"
+        edit_output(f"Dither pattern ({color_a}/{color_b}, density {density}) applied at "
+        f"({x},{y}) {width}x{height} on '{layer_name}' frame {frame_index} in {filename}", filename, execution, frame_index)
     )

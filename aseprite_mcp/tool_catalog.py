@@ -66,7 +66,11 @@ CORE_TOOLS = {
     ),
     "sprite_map": (
         "draw_sprite_map",
+        "draw_sprite_maps",
         "get_sprite_map",
+    ),
+    "review": (
+        "review_frame",
     ),
     "transform": (
         "flip_layer",
@@ -164,4 +168,19 @@ EXTENSION_TOOLS = {
         "apply_convolution",
         "list_convolution_matrices",
     ),
+}
+
+TOOL_EXAMPLES = {
+    "draw_sprite_maps": [{"maps": [{"layer_name": "ink", "frame_index": 1, "rows": ["A."], "palette": {"A": "#FFFFFF"}}]}],
+    "review_frame": [{"frame_index": 1, "region": {"x": 0, "y": 0, "width": 16, "height": 16}}],
+    "draw_on_tile": [{"layer_name": "tiles", "tile_index": 1, "pixels": [{"x": 0, "y": 0, "color": "#FFFFFF"}]}],
+    "get_tile_at": [{"layer_name": "tiles", "frame_index": 1, "col": 0, "row": 0}],
+    "tween_cel_positions": [{"layer_name": "ink", "start_frame": 1, "end_frame": 4, "start_x": 0, "start_y": 0, "end_x": 3, "end_y": 0}],
+    "set_slice_center": [{"name": "panel", "x": 1, "y": 1, "width": 6, "height": 6}],
+    "ensure_layers_present": [{"layer_names": ["ink"], "start_frame": 1}],
+    "validate_scene": [{"required_layers": ["ink"], "start_frame": 1}],
+    "export_layers": [{"output_directory": "D:/art/layers"}],
+    "get_tilemap_info": [{"layer_name": "tiles"}],
+    "audit_animation": [{"layer_frame_ranges": [{"layer": ["art", "ink"], "ranges": [[1, 4]]}], "report_cels": True}],
+    "export_minecraft_texture": [{"output_filename": "D:/art/texture.png", "tag_name": "loop"}],
 }

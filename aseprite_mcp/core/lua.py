@@ -5,6 +5,23 @@ with them should print "ERROR:<message>" to signal failure and be run
 through AsepriteCommand.execute_lua_script_checked.
 """
 
+from .commands import lua_escape
+from .contracts import LayerRef
+
+
+def lua_layer_ref(ref: LayerRef) -> str:
+    if isinstance(ref, list):
+        if not ref or any(not isinstance(segment, str) or not segment for segment in ref):
+            from mcp.server.mcpserver.exceptions import ToolError
+            raise ToolError("A layer path needs nonempty name segments")
+        return "{" + ",".join('"' + lua_escape(part) + '"' for part in ref) + "}"
+    return '"' + lua_escape(ref) + '"'
+
+
+def lua_layer_refs(refs) -> str:
+    return "{" + ",".join(lua_layer_ref(ref) for ref in refs) + "}"
+
+
 # Resolve a layer by name, searching inside groups.
 #
 #   1. An exact full-name match (including any "/") is tried first, breadth-
@@ -20,14 +37,60 @@ through AsepriteCommand.execute_lua_script_checked.
 # Used for *operation* lookups — duplicate-name guards must stay top-level,
 # since Aseprite permits the same name in different groups.
 FIND_LAYER = """
+local function layer_ref_text(ref)
+    if type(ref) == "string" then return ref end
+    return json.encode(ref)
+end
+
+local function layer_path(layer)
+    local path = {}
+    local sprite = layer.sprite
+    while layer and layer ~= sprite do
+        table.insert(path, 1, layer.name)
+        layer = layer.parent
+    end
+    return path
+end
+
+local function remember_target(layer)
+    if layer and _aseprite_edit_targets then
+        local path = layer_path(layer)
+        local key = json.encode(path)
+        for _, previous in ipairs(_aseprite_edit_targets) do
+            if json.encode(previous) == key then return layer end
+        end
+        table.insert(_aseprite_edit_targets, path)
+    end
+    return layer
+end
+
 local function find_layer(spr, name)
+    if type(name) ~= "string" then
+        if #name == 0 then error("Layer path must not be empty") end
+        local layers, target = spr.layers, nil
+        for index, segment in ipairs(name) do
+            target = nil
+            for _, layer in ipairs(layers) do
+                if layer.name == segment then
+                    if target then error("Ambiguous layer path: " .. layer_ref_text(name)) end
+                    target = layer
+                end
+            end
+            if not target then return nil end
+            if index < #name then
+                if not target.isGroup then return nil end
+                layers = target.layers
+            end
+        end
+        return remember_target(target)
+    end
     local queue = {}
     for _, layer in ipairs(spr.layers) do queue[#queue + 1] = layer end
     local head = 1
     while head <= #queue do
         local layer = queue[head]
         head = head + 1
-        if layer.name == name then return layer end
+        if layer.name == name then return remember_target(layer) end
         if layer.isGroup then
             for _, child in ipairs(layer.layers) do queue[#queue + 1] = child end
         end
@@ -50,7 +113,7 @@ local function find_layer(spr, name)
         end
         return nil
     end
-    return resolve(spr.layers, 1)
+    return remember_target(resolve(spr.layers, 1))
 end
 """
 
@@ -79,10 +142,13 @@ ENSURE_LAYER = FIND_LAYER + """
 local function ensure_layer(spr, name, create)
     local layer = find_layer(spr, name)
     if layer then return layer end
-    if create and not string.find(name, "/", 1, true) then
+    local new_name = nil
+    if type(name) ~= "string" and #name == 1 then new_name = name[1]
+    elseif type(name) == "string" and not string.find(name, "/", 1, true) then new_name = name end
+    if create and new_name then
         layer = spr:newLayer()
-        layer.name = name
-        return layer
+        layer.name = new_name
+        return remember_target(layer)
     end
     return nil
 end
@@ -122,9 +188,9 @@ local function require_layer(spr, name, create)
     if name == "" then error("Specify an explicit layer_name") end
     local layer = ensure_layer(spr, name, create)
     if not layer then
-        error("Layer '" .. name .. "' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first.")
+        error("Layer '" .. (type(name) ~= "string" and layer_ref_text(name) or name) .. "' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first.")
     end
-    if layer.isGroup then error("Layer '" .. name .. "' is a group; select a leaf layer") end
+    if layer.isGroup then error("Layer '" .. (type(name) ~= "string" and layer_ref_text(name) or name) .. "' is a group; select a leaf layer") end
     return layer
 end
 

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import json
 import sys
 from pathlib import Path
 
@@ -38,10 +39,11 @@ MODULE_SUMMARY = {
     "preview.py": "本地 HTTP 预览服务器",
     "pixel_read.py": "单 cel 与合成后的像素读取",
     "sprite_map.py": "字符网格（sprite map）的紧凑批量绘制与回读",
+    "review.py": "同一可见合成图的精确网格与临时审阅图",
     "analysis.py": "洋葱皮渲染、帧差异、颜色统计",
     "quality.py": "动画一致性校验与归一化（结构校验器，非评分器）",
     "scene.py": "在两个精灵文件之间复制图层",
-    "tool_discovery.py": "扩展工具的搜索、完整 schema 与代理执行",
+    "tool_discovery.py": "完整工具目录、schema、调用示例与扩展代理执行",
     "script.py": "任意 Aseprite Lua 的逃生舱",
 }
 
@@ -65,18 +67,23 @@ DOC_MAP = {
     "export.py": "../07-output.md",
     "preview.py": "../07-output.md",
     "pixel_read.py": "../08-inspection-and-quality.md",
+    "review.py": "../08-inspection-and-quality.md",
     "analysis.py": "../08-inspection-and-quality.md",
     "quality.py": "../08-inspection-and-quality.md",
     "script.py": "../01-lua-bridge.md",
 }
 
 
-def read_catalog() -> list[tuple[str, str, str]]:
+def catalog_values() -> dict:
     """Project literal membership without importing the runtime or any tools."""
     path = REPO_ROOT / "aseprite_mcp" / "tool_catalog.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
-    values = {node.targets[0].id: ast.literal_eval(node.value)
-              for node in tree.body if isinstance(node, ast.Assign)}
+    return {node.targets[0].id: ast.literal_eval(node.value)
+            for node in tree.body if isinstance(node, ast.Assign)}
+
+
+def read_catalog() -> list[tuple[str, str, str]]:
+    values = catalog_values()
     entries = []
     for catalog, invocation in (("CORE_TOOLS", "直接调用"), ("EXTENSION_TOOLS", "经 call_tool")):
         for module, names in values[catalog].items():
@@ -188,6 +195,7 @@ def split_docstring(doc: str | None) -> tuple[str, dict[str, str]]:
 def collect() -> list[dict]:
     tools: list[dict] = []
     trees = {}
+    examples = catalog_values().get("TOOL_EXAMPLES", {})
     for source_path, name, invocation in read_catalog():
         path = REPO_ROOT / "aseprite_mcp" / source_path
         filename = path.name
@@ -217,12 +225,31 @@ def collect() -> list[dict]:
                     "params": render_params(node),
                     "line": node.lineno,
                     "async": isinstance(node, ast.AsyncFunctionDef),
+                    "examples": examples.get(name, []),
                 }
             )
             break
         else:
             raise ValueError(f"Catalog tool {name!r} has no definition in {source_path}")
     return tools
+
+
+def render_contracts() -> list[str]:
+    lines = ["## 共享类型", "", "以下定义从源码 AST 投影；嵌套字段、尺寸与路径约束同时由运行时 schema 表达。", ""]
+    sources = ("core/contracts.py", "core/results.py", "tools/sprite_map.py", "tools/review.py", "tools/quality.py")
+    for source in sources:
+        tree = ast.parse((REPO_ROOT / "aseprite_mcp" / source).read_text(encoding="utf-8"))
+        definitions = []
+        for node in tree.body:
+            if isinstance(node, ast.ClassDef) and node.name not in {"ContractTool", "ContractModel"}:
+                definitions.append(ast.unparse(node))
+            elif isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name):
+                name = node.targets[0].id
+                if name[:1].isupper() and not name.isupper():
+                    definitions.append(ast.unparse(node))
+        if definitions:
+            lines.extend([f"### `{source}`", "", "```python", "\n\n".join(definitions), "```", ""])
+    return lines
 
 
 def render(tools: list[dict]) -> str:
@@ -240,7 +267,9 @@ def render(tools: list[dict]) -> str:
     lines.append("> 新增或修改工具后重新生成：`uv run python scripts/gen_tool_reference.py`")
     lines.append("")
     lines.append("核心与发现入口直接调用；扩展使用 `call_tool(name=工具名, arguments=原参数对象)`。")
-    lines.append("用 `search_tools` 查询扩展完整 schema；每个条目的调用方式以下方标注为准。")
+    lines.append("用 `search_tools` 查询核心与扩展的 inputSchema、outputSchema、examples 及 invocation；按 invocation 选择入口。")
+    lines.append("")
+    lines.append("成功结果统一为 `{summary, data}`；客户端读取 `structuredContent.data`。text content 是同一对象的 JSON。失败使用 `isError=true`。所有输入对象拒绝未定义字段；`call_tool.arguments` 按目标工具 schema 校验。")
     lines.append("")
     lines.append(
         "参数列中 `*` 之后的是 keyword-only 参数；`filename` 通常可省略（回退到会话的活跃文件）。"
@@ -286,6 +315,11 @@ def render(tools: list[dict]) -> str:
             if tool["summary"]:
                 lines.append(tool["summary"])
                 lines.append("")
+
+            if tool["examples"]:
+                lines.extend(["最小调用参数（运行时装配按目标参数模型校验）：", "", "```json",
+                              json.dumps(tool["examples"], ensure_ascii=False, indent=2), "```", ""])
+
             if tool["params"]:
                 lines.append("| 参数 | 类型 | 默认值 | 说明 |")
                 lines.append("|---|---|---|---|")
@@ -303,6 +337,7 @@ def render(tools: list[dict]) -> str:
                     )
                 lines.append("")
 
+    lines.extend(render_contracts())
     return "\n".join(lines).rstrip() + "\n"
 
 

@@ -1,13 +1,15 @@
-from ..core.editing import execute_edit_script
 import os
+
 from mcp.server.mcpserver.exceptions import ToolError
 
 from ..core.commands import lua_escape
+from ..core.contracts import FrameIndex, LayerRef, PositiveInt, ToolOutput
+from ..core.editing import edit_output, execute_edit_script, native_project_path
+from ..core.lua import FIND_LAYER, LAYER_NAMES, lua_layer_ref
+from ..core.results import EditReceipt
 from ..core.state import prepare_filename, set_active_file
-from ..core.editing import native_project_path
-from ..core.lua import FIND_LAYER, LAYER_NAMES
 
-async def create_canvas(width: int, height: int, *, filename: str, overwrite: bool = False) -> str:
+async def create_canvas(width: PositiveInt, height: PositiveInt, *, filename: str, overwrite: bool = False) -> ToolOutput[EditReceipt]:
     """Create a new Aseprite canvas with specified dimensions.
 
     Args:
@@ -40,12 +42,12 @@ async def create_canvas(width: int, height: int, *, filename: str, overwrite: bo
     print("OK")
     """
 
-    await execute_edit_script(script, output_filename=filename)
+    execution = await execute_edit_script(script, output_filename=filename)
 
     set_active_file(filename)
-    return f"Canvas created and anchored as active file: {filename}. Subsequent tool calls may omit filename."
+    return edit_output(f"Canvas created and anchored as active file: {filename}. Subsequent tool calls may omit filename.", filename, execution, None)
 
-async def add_layer(filename: str = "", *, layer_name: str, group: str = "") -> str:
+async def add_layer(filename: str = "", *, layer_name: str, group: LayerRef = "") -> ToolOutput[EditReceipt]:
     """Add a new layer to the Aseprite file.
 
     Args:
@@ -66,7 +68,7 @@ async def add_layer(filename: str = "", *, layer_name: str, group: str = "") -> 
 
     local parent = nil
     if "{safe_group}" ~= "" then
-        parent = find_layer(spr, "{safe_group}")
+        parent = find_layer(spr, {lua_layer_ref(group)})
         if not parent then print("ERROR:Group '{safe_group}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_group first, or check get_sprite_info for the exact group names.") return end
         if not parent.isGroup then print("ERROR:Target is not a group") return end
     end
@@ -75,18 +77,20 @@ async def add_layer(filename: str = "", *, layer_name: str, group: str = "") -> 
         local lyr = spr:newLayer()
         lyr.name = "{safe_layer_name}"
         if parent then lyr.parent = parent end
+        _aseprite_edit_targets = {{}}
+        remember_target(lyr)
     end)
 
     save_project(spr)
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
+    execution = await execute_edit_script(script, filename)
 
     location = f" inside group '{group}'" if group else ""
-    return f"Layer '{layer_name}' added{location} to {filename}"
+    return edit_output(f"Layer '{layer_name}' added{location} to {filename}", filename, execution, None)
 
-async def add_group(filename: str = "", *, group_name: str, parent_group: str = "") -> str:
+async def add_group(filename: str = "", *, group_name: str, parent_group: LayerRef = "") -> ToolOutput[EditReceipt]:
     """Add a new, empty group layer.
 
     Combine with add_layer(group=...) / duplicate_layer(group=...) to build a
@@ -110,7 +114,7 @@ async def add_group(filename: str = "", *, group_name: str, parent_group: str = 
 
     local parent = nil
     if "{safe_parent}" ~= "" then
-        parent = find_layer(spr, "{safe_parent}")
+        parent = find_layer(spr, {lua_layer_ref(parent_group)})
         if not parent then print("ERROR:Group '{safe_parent}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_group first, or check get_sprite_info for the exact group names.") return end
         if not parent.isGroup then print("ERROR:Target is not a group") return end
     end
@@ -119,18 +123,20 @@ async def add_group(filename: str = "", *, group_name: str, parent_group: str = 
         local grp = spr:newGroup()
         grp.name = "{safe_group}"
         if parent then grp.parent = parent end
+        _aseprite_edit_targets = {{}}
+        remember_target(grp)
     end)
 
     save_project(spr)
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
+    execution = await execute_edit_script(script, filename)
 
     location = f" inside '{parent_group}'" if parent_group else ""
-    return f"Group '{group_name}' created{location} in {filename}"
+    return edit_output(f"Group '{group_name}' created{location} in {filename}", filename, execution, None)
 
-async def add_frame(filename: str = "") -> str:
+async def add_frame(filename: str = "") -> ToolOutput[EditReceipt]:
     """Add a new frame to the Aseprite file.
 
     Args:
@@ -150,12 +156,12 @@ async def add_frame(filename: str = "") -> str:
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
+    execution = await execute_edit_script(script, filename)
 
-    return f"New frame added successfully to {filename}"
+    return edit_output(f"New frame added successfully to {filename}", filename, execution, None)
 
 
-async def set_frame_duration(filename: str = "", *, frame_index: int, duration_ms: int) -> str:
+async def set_frame_duration(filename: str = "", *, frame_index: FrameIndex, duration_ms: PositiveInt) -> ToolOutput[EditReceipt]:
     """Set the duration of a frame in milliseconds.
 
     Args:
@@ -184,6 +190,6 @@ async def set_frame_duration(filename: str = "", *, frame_index: int, duration_m
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
+    execution = await execute_edit_script(script, filename)
 
-    return f"Frame {frame_index} duration set to {duration_ms}ms in {filename}"
+    return edit_output(f"Frame {frame_index} duration set to {duration_ms}ms in {filename}", filename, execution, frame_index)

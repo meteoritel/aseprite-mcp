@@ -15,7 +15,7 @@ output = prepare_filename(output_filename, must_exist=False, anchor=False)
 
 ## 错误契约
 
-预期的参数、路径、Lua、进程、产物和发布错误统一抛 `mcp.server.mcpserver.exceptions.ToolError`。SDK 将它转为 `CallToolResult.isError=true`。成功工具返回可读文本或 JSON 字符串，错误状态不依赖文本前缀。
+预期的参数、路径、Lua、进程、产物和发布错误统一抛 `mcp.server.mcpserver.exceptions.ToolError`。SDK 将它转为 `CallToolResult.isError=true`。成功工具返回类型化 `{summary, data}`，客户端直接消费 `structuredContent.data`；text content 是相同对象的 JSON。
 
 层错误应带目标名称、现有层列表和可执行提示。帧错误应说明外部编号从 1 开始。用户字符串先 `lua_escape`，像素字典坐标先 `parse_pixel_xy`，颜色通过 `core/colors.py` 解析；校验失败在提交前结束。
 

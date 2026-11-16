@@ -218,7 +218,7 @@ print("TRANSPARENT:" .. transparent_index)
 
 | 项 | 说明 |
 |---|---|
-| `tilemap.py` 有本地 `_parse_hex_color` | 只支持 6 位、无 alpha，**未**统一到 `core/colors.py`（[`tilemap.py:9-16`](../aseprite_mcp/tools/tilemap.py)） |
+| `tilemap.py` 使用共享 `parse_hex_color` | 支持短/长 RGB 与 RGBA，保留 alpha |
 | `native_fx` 从 `fx` 借用解析器 | `from .fx import _parse_hex_color`（[`native_fx.py:16`](../aseprite_mcp/tools/native_fx.py)），而 `fx` 的那份是 `parse_hex_color` 的 `rgba[:3]` 包装 —— 所以原生特效**不支持 alpha 颜色** |
 | 三个功能重复对 | 见第一节的表格，属刻意的 "deprecate, don't break" |
 | 抖动渐变方向默认值相反 | `apply_dither_gradient(horizontal=False)` vs `drawing.apply_gradient_rect(horizontal=True)` |
@@ -291,7 +291,7 @@ ERROR:tile_index out of range (tileset has 3 real tiles; pass 4 to append)
 
 写入方式是**克隆 → 改 → 赋值**（[`tilemap.py:142-150`](../aseprite_mcp/tools/tilemap.py)）：`tile.image:clone()` 后逐点 `putPixel`，最后 `tile.image = img`。局部 `put` 带边界判断。
 
-颜色用 `app.pixelColor.rgba(r, g, b, 255)` 打包，**alpha 固定 255** —— 本地解析器也不支持 alpha。
+颜色由共享 `core/colors.py` 解析，用 `app.pixelColor.rgba(r,g,b,a)` 打包，保留输入 alpha。每个 pixel 要求显式 tile-local x/y/color；未知字段由参数模型拒绝。
 
 ### `set_tiles`：在帧上摆放瓦片
 
@@ -344,7 +344,7 @@ local cx = {col} - cel.position.x // grid.width
 local cy = {row} - cel.position.y // grid.height
 ```
 
-`tilemap` 的 cel 存的是**瓦片索引**而不是像素（用 `app.pixelColor.tileI` 从打包值里取出索引）。这正是 [08 §4](08-inspection-and-quality.md#四tilemap-图层为什么不能逐像素读取) 里"逐像素读取被拒绝"的原因。
+`tilemap` 的 cel 存的是**瓦片索引**而不是像素（用 `app.pixelColor.tileI` 从打包值里取出索引）。这正是 [08 §4](08-inspection-and-quality.md#单-cel-与可见合成) 里"逐像素读取被拒绝"的原因。
 
 ### 全量工具
 
@@ -400,7 +400,7 @@ print("DONE")
 
 切片名用 Lua 的 `%q` 输出（`string.format("%q", slice.name)`），转义引号和控制字符。名称中含 `|`、`,`、`:` 时仍按 JSON 字符串解析；slice 元数据往返见[可选扩展链路](../tests/optional/extension_workflows.py)。
 
-Python 侧只 `json.loads` 每个 `SLICE:` 行并收进列表（[`slices.py:186-191`](../aseprite_mcp/tools/slices.py)），最后整体 `json.dumps`。所以工具返回的是一个**JSON 数组**，而传输层用的是**逐行协议** —— 两层是分开的。
+Python 侧 `json.loads` 每个 `SLICE:` 行并收进列表，作为类型化 `ToolOutput[list[SliceInfo]]` 的 `data` 返回；内部逐行传输与 MCP 成功 envelope 分离。
 
 ### 全量工具
 
@@ -428,7 +428,6 @@ Python 侧只 `json.loads` 每个 `SLICE:` 行并收进列表（[`slices.py:186-
 | 卷积矩阵名单是硬编码快照 | 上游新增不会自动同步 |
 | 抖动渐变方向默认值与 `apply_gradient_rect` 相反 | `False` vs `True` |
 | 原生特效不支持 alpha 颜色 | 经 `fx._parse_hex_color` 丢掉了 alpha |
-| `tilemap.py` 的本地颜色解析器只认 6 位 | 遗留不一致 |
 
 ---
 
@@ -442,5 +441,5 @@ Python 侧只 `json.loads` 每个 `SLICE:` 行并收进列表（[`slices.py:186-
 
 - [01 · Lua 桥](01-lua-bridge.md) —— `build_native_command_script` 的目标激活机制
 - [03 · 绘图与像素编辑](03-painting.md#七调色板) —— `quantize_to_palette`（吸附到已有调色板）与 `extract_palette`（推导调色板）的分工
-- [08 · 读取、分析与质量校验](08-inspection-and-quality.md#四tilemap-图层为什么不能逐像素读取) —— 为什么 tilemap 不能逐像素读
+- [08 · 读取、分析与质量校验](08-inspection-and-quality.md#单-cel-与可见合成) —— 为什么 tilemap 不能逐像素读
 - [reference/tools.md](reference/tools.md#fxpy) —— 四个模块的完整签名

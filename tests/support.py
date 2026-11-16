@@ -140,3 +140,8 @@ def paint(filename, layer="ink", frame=1):
         filename=filename, layer_name=layer, frame_index=frame,
         rows=["A..", ".B."], palette={"A": "#ff0000", "B": "#00ff00"},
     ))
+
+
+def payload(output):
+    """Consume the same successful result data used by protocol clients."""
+    return output.model_dump(mode="json")["data"]

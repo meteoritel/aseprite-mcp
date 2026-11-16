@@ -1,7 +1,11 @@
-from mcp.server.mcpserver.exceptions import ToolError
-from ..core.editing import execute_edit_script
 import json
+
+from mcp.server.mcpserver.exceptions import ToolError
+
 from ..core.commands import AsepriteCommand, lua_escape
+from ..core.contracts import PositiveInt, ToolOutput
+from ..core.editing import edit_output, execute_edit_script
+from ..core.results import EditReceipt, SliceInfo
 from ..core.state import prepare_filename
 
 _FIND_SLICE = """
@@ -14,7 +18,7 @@ end
 """
 
 
-async def create_slice(filename: str = "", *, name: str, x: int, y: int, width: int, height: int) -> str:
+async def create_slice(filename: str = "", *, name: str, x: int, y: int, width: PositiveInt, height: PositiveInt) -> ToolOutput[EditReceipt]:
     """Create a named slice (a rectangular region usable by game engines).
 
     Args:
@@ -49,11 +53,11 @@ async def create_slice(filename: str = "", *, name: str, x: int, y: int, width: 
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Slice '{name}' created at ({x},{y}) {width}x{height} in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Slice '{name}' created at ({x},{y}) {width}x{height} in {filename}", filename, execution, None)
 
 
-async def set_slice_center(filename: str = "", *, name: str, x: int, y: int, width: int, height: int) -> str:
+async def set_slice_center(filename: str = "", *, name: str, x: int, y: int, width: PositiveInt, height: PositiveInt) -> ToolOutput[EditReceipt]:
     """Set a slice's 9-patch center rectangle (relative to the slice origin).
 
     The center defines the stretchable region for 9-patch scaling in
@@ -89,11 +93,11 @@ async def set_slice_center(filename: str = "", *, name: str, x: int, y: int, wid
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Slice '{name}' 9-patch center set to ({x},{y}) {width}x{height} in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Slice '{name}' 9-patch center set to ({x},{y}) {width}x{height} in {filename}", filename, execution, None)
 
 
-async def set_slice_pivot(filename: str = "", *, name: str, x: int, y: int) -> str:
+async def set_slice_pivot(filename: str = "", *, name: str, x: int, y: int) -> ToolOutput[EditReceipt]:
     """Set a slice's pivot point (relative to the slice origin).
 
     Args:
@@ -122,11 +126,11 @@ async def set_slice_pivot(filename: str = "", *, name: str, x: int, y: int) -> s
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Slice '{name}' pivot set to ({x},{y}) in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Slice '{name}' pivot set to ({x},{y}) in {filename}", filename, execution, None)
 
 
-async def list_slices(filename: str = "") -> str:
+async def list_slices(filename: str = "") -> ToolOutput[list[SliceInfo]]:
     """List all slices with their bounds, 9-patch centers, and pivots.
 
     Args:
@@ -169,10 +173,10 @@ async def list_slices(filename: str = "") -> str:
         if not line.startswith("SLICE:"):
             continue
         slices.append(json.loads(line[len("SLICE:"):]))
-    return json.dumps(slices)
+    return ToolOutput(summary='List slices completed', data=slices)
 
 
-async def delete_slice(filename: str = "", *, name: str) -> str:
+async def delete_slice(filename: str = "", *, name: str) -> ToolOutput[EditReceipt]:
     """Delete a slice by name.
 
     Args:
@@ -199,5 +203,5 @@ async def delete_slice(filename: str = "", *, name: str) -> str:
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Slice '{name}' deleted from {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Slice '{name}' deleted from {filename}", filename, execution, None)

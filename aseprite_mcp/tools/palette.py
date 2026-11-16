@@ -1,11 +1,15 @@
-from mcp.server.mcpserver.exceptions import ToolError
-from ..core.editing import execute_edit_script
 import colorsys
 import json
 from typing import List
-from ..core.commands import AsepriteCommand, lua_escape
-from ..core.lua import FIND_LAYER, LAYER_NAMES
+
+from mcp.server.mcpserver.exceptions import ToolError
+
 from ..core.colors import parse_hex_color
+from ..core.commands import AsepriteCommand, lua_escape
+from ..core.contracts import ColorMapping, FrameIndex, LayerRef, NonnegativeInt, ToolOutput
+from ..core.editing import edit_output, execute_edit_script
+from ..core.lua import FIND_LAYER, LAYER_NAMES, lua_layer_ref
+from ..core.results import EditReceipt
 from ..core.state import prepare_filename
 
 # Well-known retro/pixel-art palettes.
@@ -49,7 +53,7 @@ def _parse_hex_color(value: str) -> tuple[int, int, int] | None:
     rgba = parse_hex_color(value)
     return rgba[:3] if rgba else None
 
-async def get_palette(filename: str = "") -> str:
+async def get_palette(filename: str = "") -> ToolOutput[list[str]]:
     """Get the active sprite palette as a JSON array of hex colors.
 
     Args:
@@ -81,9 +85,9 @@ async def get_palette(filename: str = "") -> str:
     """
 
     output = await AsepriteCommand.execute_lua_script_checked(script, filename)
-    return output
+    return ToolOutput(summary='Get palette completed', data=json.loads(output))
 
-async def set_palette(filename: str = "", *, colors: List[str]) -> str:
+async def set_palette(filename: str = "", *, colors: List[str]) -> ToolOutput[EditReceipt]:
     """Set the active sprite palette using a list of hex colors.
 
     Args:
@@ -117,10 +121,10 @@ async def set_palette(filename: str = "", *, colors: List[str]) -> str:
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Palette set with {len(colors)} colors in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Palette set with {len(colors)} colors in {filename}", filename, execution, None)
 
-async def remap_colors_in_cel_range(filename: str = "", *, layer_name: str, start_frame: int, end_frame: int, mappings: List[dict], create_missing_cels: bool = False, source_frame_index: int | None = None) -> str:
+async def remap_colors_in_cel_range(filename: str = "", *, layer_name: LayerRef, start_frame: FrameIndex, end_frame: FrameIndex, mappings: list[ColorMapping], create_missing_cels: bool = False, source_frame_index: FrameIndex | None = None) -> ToolOutput[EditReceipt]:
     """Remap colors in a layer across a frame range using explicit mappings.
 
     Args:
@@ -166,7 +170,7 @@ async def remap_colors_in_cel_range(filename: str = "", *, layer_name: str, star
 
     {FIND_LAYER}
     {LAYER_NAMES}
-    local target = find_layer(spr, "{safe_layer_name}")
+    local target = find_layer(spr, {lua_layer_ref(layer_name)})
     if not target then print("ERROR:Layer '{safe_layer_name}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
 
     local source_frame = {source_idx}
@@ -221,22 +225,22 @@ async def remap_colors_in_cel_range(filename: str = "", *, layer_name: str, star
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
+    execution = await execute_edit_script(script, filename)
     return (
-        f"Remapped colors on '{layer_name}' frames {start_frame}-{end_frame} in {filename}"
+        edit_output(f"Remapped colors on '{layer_name}' frames {start_frame}-{end_frame} in {filename}", filename, execution, None)
     )
 
 
-async def list_palette_presets() -> str:
+async def list_palette_presets() -> ToolOutput[dict[str, list[str]]]:
     """List the built-in retro palette presets with their colors.
 
     Returns:
         JSON object mapping preset name to its list of hex colors.
     """
-    return json.dumps(PALETTE_PRESETS, indent=2)
+    return ToolOutput(summary='List palette presets completed', data=PALETTE_PRESETS)
 
 
-async def apply_palette_preset(filename: str = "", *, preset: str) -> str:
+async def apply_palette_preset(filename: str = "", *, preset: str) -> ToolOutput[EditReceipt]:
     """Set the sprite palette to a built-in retro preset.
 
     This only sets the palette; existing pixels keep their colors.
@@ -254,7 +258,7 @@ async def apply_palette_preset(filename: str = "", *, preset: str) -> str:
     if colors is None:
         raise ToolError(f"Unknown preset '{preset}'. Available: {', '.join(sorted(PALETTE_PRESETS))}")
     await set_palette(filename, colors=colors)
-    return f"Palette preset '{preset}' ({len(colors)} colors) applied to {filename}"
+    return edit_output(f"Palette preset '{preset}' ({len(colors)} colors) applied to {filename}", filename, None, None)
 
 
 async def generate_color_ramp(
@@ -262,7 +266,7 @@ async def generate_color_ramp(
     steps: int = 5,
     hue_shift_degrees: float = 20,
     lightness_range: float = 0.5,
-) -> str:
+) -> ToolOutput[list[str]]:
     """Generate a shading ramp (dark to light) from a base color.
 
     Produces the standard pixel-art shading technique of hue-shifting:
@@ -302,15 +306,15 @@ async def generate_color_ramp(
         nr, ng, nb = colorsys.hls_to_rgb(nh, nl, ns)
         ramp.append("#{:02X}{:02X}{:02X}".format(
             round(nr * 255), round(ng * 255), round(nb * 255)))
-    return json.dumps(ramp)
+    return ToolOutput(summary='Generate color ramp completed', data=ramp)
 
 
 async def quantize_to_palette(
     filename: str = "",
-    layer_name: str = "",
-    start_frame: int = 1,
-    end_frame: int = 0,
-) -> str:
+    layer_name: LayerRef = "",
+    start_frame: FrameIndex = 1,
+    end_frame: NonnegativeInt = 0,
+) -> ToolOutput[EditReceipt]:
     """Snap every pixel to the nearest color in the sprite's palette.
 
     Walks the chosen cels and replaces each opaque pixel with the
@@ -345,7 +349,7 @@ async def quantize_to_palette(
 
     local layers = {{}}
     if "{safe_layer}" ~= "" then
-        local target = find_layer(spr, "{safe_layer}")
+        local target = find_layer(spr, {lua_layer_ref(layer_name)})
         if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
         table.insert(layers, target)
     else
@@ -407,16 +411,17 @@ async def quantize_to_palette(
     print("COUNT:" .. count)
     """
 
-    output = await execute_edit_script(script, filename)
+    execution = await execute_edit_script(script, filename)
+    output = execution.stdout
 
     count = "?"
     for line in output.splitlines():
         if line.startswith("COUNT:"):
             count = line[len("COUNT:"):]
-    return f"Quantized {count} pixels to the palette in {filename}"
+    return edit_output(f"Quantized {count} pixels to the palette in {filename}", filename, execution, None)
 
 
-async def set_color_mode(filename: str = "", *, mode: str) -> str:
+async def set_color_mode(filename: str = "", *, mode: str) -> ToolOutput[EditReceipt]:
     """Convert the sprite's color mode.
 
     Args:
@@ -438,5 +443,5 @@ async def set_color_mode(filename: str = "", *, mode: str) -> str:
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Color mode set to {mode} in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Color mode set to {mode} in {filename}", filename, execution, None)

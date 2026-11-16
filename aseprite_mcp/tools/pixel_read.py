@@ -1,12 +1,14 @@
 from mcp.server.mcpserver.exceptions import ToolError
-import json
+
 from ..core.commands import AsepriteCommand, lua_escape
-from ..core.lua import FIND_LAYER, LAYER_NAMES
+from ..core.composite import COMPOSE_FRAME
+from ..core.contracts import FrameIndex, LayerRef, PositiveInt, ToolOutput
+from ..core.lua import FIND_LAYER, LAYER_NAMES, lua_layer_ref
+from ..core.results import PixelColor
 from ..core.state import prepare_filename
-from .analysis import _COMPOSE_FRAME
 
 
-async def get_pixel_color(filename: str='', *, x: int, y: int, layer_name: str, frame_index: int) -> str:
+async def get_pixel_color(filename: str='', *, x: int, y: int, layer_name: LayerRef, frame_index: FrameIndex) -> ToolOutput[PixelColor]:
     """Read the RGBA color of a single pixel from one layer's cel.
 
     This is a single-cel read: it ignores layer visibility and everything
@@ -36,7 +38,7 @@ async def get_pixel_color(filename: str='', *, x: int, y: int, layer_name: str, 
     local cel = nil
     {FIND_LAYER}
     {LAYER_NAMES}
-    local target = find_layer(spr, "{safe_layer}")
+    local target = find_layer(spr, {lua_layer_ref(layer_name)})
     if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
     if target.isTilemap then print("ERROR:Layer '{safe_layer}' is a tilemap layer: its cel stores tile indexes, not pixels, so a per-pixel read would return an index in the red channel instead of a colour. Existing layers: [" .. layer_names(spr) .. "]. Tip: use get_tile_at for the tile index at a grid cell, or get_composite_pixel / get_composite_rect for the rendered colour.") return end
     cel = target:cel(spr.frames[idx])
@@ -65,12 +67,12 @@ async def get_pixel_color(filename: str='', *, x: int, y: int, layer_name: str, 
         if line.startswith("PIXEL:"):
             parts = line[6:].split(",")
             r, g, b, a = int(parts[0]), int(parts[1]), int(parts[2]), int(parts[3])
-            return f"#{r:02x}{g:02x}{b:02x} (r={r}, g={g}, b={b}, a={a})"
+            return ToolOutput(summary='Get pixel color completed', data={'x':x,'y':y,'hex':f'#{r:02x}{g:02x}{b:02x}','r':r,'g':g,'b':b,'a':a})
 
     raise ToolError("No pixel data returned")
 
 
-async def get_pixels_rect(filename: str='', *, x: int, y: int, width: int, height: int, layer_name: str, frame_index: int) -> str:
+async def get_pixels_rect(filename: str='', *, x: int, y: int, width: PositiveInt, height: PositiveInt, layer_name: LayerRef, frame_index: FrameIndex) -> ToolOutput[list[PixelColor]]:
     """Read all pixel colors in a rectangular region from one layer's cel.
 
     Single-cel read: layer visibility is ignored and nothing above or below
@@ -109,7 +111,7 @@ async def get_pixels_rect(filename: str='', *, x: int, y: int, width: int, heigh
     local cel = nil
     {FIND_LAYER}
     {LAYER_NAMES}
-    local target = find_layer(spr, "{safe_layer}")
+    local target = find_layer(spr, {lua_layer_ref(layer_name)})
     if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
     if target.isTilemap then print("ERROR:Layer '{safe_layer}' is a tilemap layer: its cel stores tile indexes, not pixels, so a per-pixel read would return an index in the red channel instead of a colour. Existing layers: [" .. layer_names(spr) .. "]. Tip: use get_tile_at for the tile index at a grid cell, or get_composite_pixel / get_composite_rect for the rendered colour.") return end
     cel = target:cel(spr.frames[idx])
@@ -155,10 +157,10 @@ async def get_pixels_rect(filename: str='', *, x: int, y: int, width: int, heigh
 
     if len(pixels) != width * height:
         raise ToolError("Incomplete pixel data returned")
-    return json.dumps(pixels)
+    return ToolOutput(summary='Get pixels rect completed', data=pixels)
 
 
-async def get_composite_pixel(filename: str = "", *, x: int, y: int, frame_index: int = 1) -> str:
+async def get_composite_pixel(filename: str = "", *, x: int, y: int, frame_index: FrameIndex = 1) -> ToolOutput[PixelColor]:
     """Read the RGBA colour VISIBLE at a pixel (flattened composite of all layers).
 
     Unlike get_pixel_color (which reads a single cel), this composites every
@@ -174,7 +176,7 @@ async def get_composite_pixel(filename: str = "", *, x: int, y: int, frame_index
     filename = prepare_filename(filename)
 
     script = f"""
-    {_COMPOSE_FRAME}
+    {COMPOSE_FRAME}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
     local idx = {frame_index}
@@ -197,11 +199,11 @@ async def get_composite_pixel(filename: str = "", *, x: int, y: int, frame_index
             raise ToolError(f"Failed to read composite pixel: {line[6:]}")
         if line.startswith("PIXEL:"):
             r, g, b, a = (int(p) for p in line[6:].split(","))
-            return f"#{r:02x}{g:02x}{b:02x} (r={r}, g={g}, b={b}, a={a})"
+            return ToolOutput(summary='Get composite pixel completed', data={'x':x,'y':y,'hex':f'#{r:02x}{g:02x}{b:02x}','r':r,'g':g,'b':b,'a':a})
     raise ToolError("No pixel data returned")
 
 
-async def get_composite_rect(filename: str = "", *, x: int, y: int, width: int, height: int, frame_index: int = 1) -> str:
+async def get_composite_rect(filename: str = "", *, x: int, y: int, width: PositiveInt, height: PositiveInt, frame_index: FrameIndex = 1) -> ToolOutput[list[PixelColor]]:
     """Read VISIBLE RGBA over a rectangle (flattened composite of all layers).
 
     The rectangular counterpart of get_composite_pixel — reads the composited
@@ -224,7 +226,7 @@ async def get_composite_rect(filename: str = "", *, x: int, y: int, width: int, 
 
     x_end, y_end = x + width - 1, y + height - 1
     script = f"""
-    {_COMPOSE_FRAME}
+    {COMPOSE_FRAME}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
     local idx = {frame_index}
@@ -260,4 +262,4 @@ async def get_composite_rect(filename: str = "", *, x: int, y: int, width: int, 
             })
     if len(pixels) != width * height:
         raise ToolError("Incomplete pixel data returned")
-    return json.dumps(pixels)
+    return ToolOutput(summary='Get composite rect completed', data=pixels)

@@ -34,7 +34,9 @@ spr.layers
 
 ### 名字解析
 
-所有工具都靠 [`core/lua.py` 的 `FIND_LAYER`](../aseprite_mcp/core/lua.py) 把用户给的名字变成图层对象。它的两段式策略（BFS 精确全名匹配 → `group/child` 路径最长前缀回溯）在 [01 §5](01-lua-bridge.md) 有完整说明。
+所有工具都靠 [`core/lua.py` 的 `FIND_LAYER`](../aseprite_mcp/core/lua.py) 把用户给的名字变成图层对象。它的两段式策略（BFS 精确全名匹配 → `group/child` 路径最长前缀回溯）在 [Lua 桥](01-lua-bridge.md#共享-lua) 有完整说明。
+
+定位参数的精确形式是 `LayerRef = str | list[str]`：`["character", "body"]` 逐段匹配组和子层，`["character/body"]` 匹配一个字面名称。路径必须非空、每段非空且同级唯一，歧义时报错。`get_sprite_info` 的图层条目含 `path` 数组与 `type`（group/image/tilemap），可直接回传给定位参数；创建参数仍是字面名称。编辑回执的 `data.layer_paths` 给出实际目标路径。
 
 需要记住的三条后果：
 
@@ -44,13 +46,7 @@ spr.layers
 
 ### 自动创建只处理顶层
 
-`ENSURE_LAYER` 里的守卫（[`lua.py:82`](../aseprite_mcp/core/lua.py)）：
-
-```lua
-if create and not string.find(name, "/", 1, true) then
-```
-
-**含 `/` 的名字永远不会被凭空创建。** 系统不会为了满足 `character/armor` 就顺手造出 `character` 组 —— 组的创建是显式操作（`add_group`）。绘图类工具因此可以直接对一个不存在的顶层图层名作画，但对 `group/child` 必须先建组。
+`ENSURE_LAYER` 可创建顶层裸名或单段数组名称；后者允许字面名称包含 `/`。多段路径要求已有组和子层，组的创建使用 `add_group`，组内新增图层使用 `add_layer(group=…)`。
 
 ---
 
@@ -90,6 +86,7 @@ copy.blendMode = src.blendMode
 if parent then
     copy.parent = parent
 else
+    copy.parent = src.parent
     copy.stackIndex = src.stackIndex + 1
 end
 for _, frame in ipairs(spr.frames) do
@@ -158,9 +155,9 @@ end
 - 对 `flatten_sprite` 本身，这意味着"隐藏"并不等于"不影响结果"：展平后隐藏图层的内容会变成可见像素。
 - 对**分析类工具**，这意味着不能用 `flatten()` 来求"玩家实际看到的画面"。
 
-后者就是 [`analysis.py` 的 `_COMPOSE_FRAME`](../aseprite_mcp/tools/analysis.py) 存在的原因：它先克隆 sprite、逐个删掉不可见图层、再 `flatten()`。详见 [08 · 读取、分析与质量校验](08-inspection-and-quality.md#二_compose_frame为什么不能直接用-flatten)。
+后者由 [`core/composite.py` 的 `COMPOSE_FRAME`](../aseprite_mcp/core/composite.py) 处理：先克隆 sprite、逐个删掉不可见图层、再 `flatten()`。详见 [读取与质量校验](08-inspection-and-quality.md#可见合成)。
 
-如果你要写新的"合成读取"类工具，**不要**直接用 `spr:flatten()`，复用 `_COMPOSE_FRAME`。
+新的合成读取工具复用 `core/composite.py` 的 `COMPOSE_FRAME`。
 
 ---
 
@@ -199,7 +196,8 @@ save_project(dst)               ← 暂存校验后提交目标
 
 ### 交付语义
 
-- 返回 `Layers copied from X to Y`，若有跳过则追加 `(skipped missing layers: a, b)`（[`scene.py:111-118`](../aseprite_mcp/tools/scene.py)）。
+- 返回编辑回执，`data.filename` 为目标工程，`layer_paths` 为目标层路径；跳过的缺失源层在 summary 中列出。
+- 精确数组路径在源、目标使用同一层级，目标父组须预先存在；字符串保留旧匹配与新建名称规则。只接受图像叶层。
 - **部分成功不算失败**：只要至少复制了一个图层就返回成功消息，缺失的通过 `MISSING:` 告知。只有**全部**缺失才是 `ERROR`。
 - **目标层不会被重命名或复用判重**：同名目标层存在就直接往里写，`replace=True`（默认）会先清空它的 cel。
 - **源文件只读**：脚本结尾只 `save_project(dst)`，由标准编辑层提交目标。
@@ -222,9 +220,9 @@ save_project(dst)               ← 暂存校验后提交目标
 |---|---|
 | `reorder_layer` 只作用于顶层 | `position` 上限是顶层图层数，嵌套层无法借此移出组 |
 | `duplicate_layer` 复制组会得到空层 | 组没有 cel |
-| `flatten_sprite` 会合入隐藏图层 | 见第六节，这是 `_COMPOSE_FRAME` 存在的原因 |
+| `flatten_sprite` 会合入隐藏图层 | 见第六节，读取使用 `core/composite.py` 的可见合成 |
 | 可见性/不透明度不在本文档 | 在 [`animation.py`](../aseprite_mcp/tools/animation.py)，见 [05 §5](05-animation.md) |
-| `copy_layers_between_sprites` 不保留组结构 | 一律建成顶层图层 |
+| 跨工程复制的路径形式决定定位 | 数组保留层级并要求已有目标父组；字符串保留旧名称解析及新建规则 |
 | `delete_layer` 拒绝删最后一个图层 | Aseprite 要求 sprite 至少有一层 |
 | `add_frame` 不带时长参数 | 新帧用 Aseprite 的默认时长；批量设时长用 `set_frame_duration_all`（在 [05](05-animation.md)） |
 
@@ -242,5 +240,5 @@ save_project(dst)               ← 暂存校验后提交目标
 - [01 · Lua 桥](01-lua-bridge.md) —— `FIND_LAYER` / `ENSURE_LAYER` 的解析规则
 - [02 · 路径、错误与进程生命周期](02-paths-errors-lifecycle.md) —— `create_canvas` 的路径要求、输出路径铁律
 - [05 · 动画](05-animation.md) —— 帧/cel/tag，以及图层可见性与不透明度
-- [08 · 读取、分析与质量校验](08-inspection-and-quality.md#二_compose_frame为什么不能直接用-flatten) —— `flatten()` 陷阱的消费方
+- [08 · 读取、分析与质量校验](08-inspection-and-quality.md#可见合成) —— `flatten()` 陷阱的消费方
 - [reference/tools.md](reference/tools.md#layerspy) —— 三个模块的完整签名

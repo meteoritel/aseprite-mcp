@@ -1,13 +1,14 @@
-from ..core.inspection import read_sprite_info
 from mcp.server.mcpserver.exceptions import ToolError
-from ..core.lua import CEL_COPIES
-from ..core.editing import execute_edit_script
-import json
-from ..core.commands import lua_escape
-from ..core.state import prepare_filename
-from ..core.lua import FIND_LAYER, LAYER_NAMES
 
-async def add_frames(filename: str = "", *, count: int, duration_ms: int | None = None) -> str:
+from ..core.commands import lua_escape
+from ..core.contracts import Byte, FrameIndex, LayerRef, PositiveInt, ToolOutput
+from ..core.editing import edit_output, execute_edit_script
+from ..core.inspection import read_sprite_info
+from ..core.lua import CEL_COPIES, FIND_LAYER, LAYER_NAMES, lua_layer_ref, lua_layer_refs
+from ..core.results import EditReceipt, SpriteInfo
+from ..core.state import prepare_filename
+
+async def add_frames(filename: str = "", *, count: PositiveInt, duration_ms: PositiveInt | None = None) -> ToolOutput[EditReceipt]:
     """Add multiple frames to a sprite and optionally set their duration.
 
     Args:
@@ -39,10 +40,10 @@ async def add_frames(filename: str = "", *, count: int, duration_ms: int | None 
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Added {count} frames to {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Added {count} frames to {filename}", filename, execution, None)
 
-async def set_frame_duration_all(filename: str = "", *, duration_ms: int) -> str:
+async def set_frame_duration_all(filename: str = "", *, duration_ms: PositiveInt) -> ToolOutput[EditReceipt]:
     """Set the duration of all frames in milliseconds.
 
     Args:
@@ -67,10 +68,10 @@ async def set_frame_duration_all(filename: str = "", *, duration_ms: int) -> str
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Set duration of all frames to {duration_ms}ms in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Set duration of all frames to {duration_ms}ms in {filename}", filename, execution, None)
 
-async def set_layer_visibility(filename: str = "", *, layer_name: str, visible: bool = True) -> str:
+async def set_layer_visibility(filename: str = "", *, layer_name: LayerRef, visible: bool = True) -> ToolOutput[EditReceipt]:
     """Set layer visibility by name.
 
     Args:
@@ -88,7 +89,7 @@ async def set_layer_visibility(filename: str = "", *, layer_name: str, visible: 
 
     {FIND_LAYER}
     {LAYER_NAMES}
-    local target = find_layer(spr, "{safe_layer_name}")
+    local target = find_layer(spr, {lua_layer_ref(layer_name)})
     if not target then print("ERROR:Layer '{safe_layer_name}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first.") return end
 
     app.transaction(function()
@@ -99,10 +100,10 @@ async def set_layer_visibility(filename: str = "", *, layer_name: str, visible: 
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Layer '{layer_name}' visibility set to {visible} in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Layer '{layer_name}' visibility set to {visible} in {filename}", filename, execution, None)
 
-async def set_layer_opacity(filename: str = "", *, layer_name: str, opacity: int) -> str:
+async def set_layer_opacity(filename: str = "", *, layer_name: LayerRef, opacity: Byte) -> ToolOutput[EditReceipt]:
     """Set layer opacity by name (0-255).
 
     Args:
@@ -121,7 +122,7 @@ async def set_layer_opacity(filename: str = "", *, layer_name: str, opacity: int
 
     {FIND_LAYER}
     {LAYER_NAMES}
-    local target = find_layer(spr, "{safe_layer_name}")
+    local target = find_layer(spr, {lua_layer_ref(layer_name)})
     if not target then print("ERROR:Layer '{safe_layer_name}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first.") return end
 
     app.transaction(function()
@@ -132,16 +133,16 @@ async def set_layer_opacity(filename: str = "", *, layer_name: str, opacity: int
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Layer '{layer_name}' opacity set to {opacity} in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Layer '{layer_name}' opacity set to {opacity} in {filename}", filename, execution, None)
 
-async def get_sprite_info(filename: str = "") -> str:
+async def get_sprite_info(filename: str = "") -> ToolOutput[SpriteInfo]:
     """Read canvas, layer tree, frame durations and tag metadata as JSON."""
     filename = prepare_filename(filename)
-    return json.dumps(await read_sprite_info(filename), ensure_ascii=False)
+    return ToolOutput(summary='Get sprite info completed', data=await read_sprite_info(filename))
 
 
-async def duplicate_frame_range(filename: str = "", *, start_frame: int, end_frame: int, times: int = 1) -> str:
+async def duplicate_frame_range(filename: str = "", *, start_frame: FrameIndex, end_frame: FrameIndex, times: PositiveInt = 1) -> ToolOutput[EditReceipt]:
     """Duplicate a frame range and append copies to the end.
 
     Args:
@@ -176,10 +177,10 @@ async def duplicate_frame_range(filename: str = "", *, start_frame: int, end_fra
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Duplicated frames {start_frame}-{end_frame} (x{times}) in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Duplicated frames {start_frame}-{end_frame} (x{times}) in {filename}", filename, execution, None)
 
-async def set_cel_position(filename: str='', *, layer_name: str, frame_index: int, x: int, y: int, create_if_missing: bool=False, source_frame_index: int | None=None) -> str:
+async def set_cel_position(filename: str='', *, layer_name: LayerRef, frame_index: FrameIndex, x: int, y: int, create_if_missing: bool=False, source_frame_index: FrameIndex | None=None) -> ToolOutput[EditReceipt]:
     """Set a cel's position in a specific layer and frame.
 
     Args:
@@ -207,7 +208,7 @@ async def set_cel_position(filename: str='', *, layer_name: str, frame_index: in
     end
     {FIND_LAYER}
     {LAYER_NAMES}
-    local target_layer = find_layer(spr, "{safe_layer_name}")
+    local target_layer = find_layer(spr, {lua_layer_ref(layer_name)})
     if not target_layer then print("ERROR:Layer '{safe_layer_name}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first.") return end
 
     local idx = {frame_index}
@@ -240,10 +241,10 @@ async def set_cel_position(filename: str='', *, layer_name: str, frame_index: in
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Cel position set to ({x}, {y}) on '{layer_name}' frame {frame_index} in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Cel position set to ({x}, {y}) on '{layer_name}' frame {frame_index} in {filename}", filename, execution, frame_index)
 
-async def tween_cel_positions(filename: str = "", *, layer_name: str, start_frame: int, end_frame: int, start_x: int, start_y: int, end_x: int, end_y: int, create_missing_cels: bool = False, source_frame_index: int | None = None) -> str:
+async def tween_cel_positions(filename: str = "", *, layer_name: LayerRef, start_frame: FrameIndex, end_frame: FrameIndex, start_x: int, start_y: int, end_x: int, end_y: int, create_missing_cels: bool = False, source_frame_index: FrameIndex | None = None) -> ToolOutput[EditReceipt]:
     """Tween cel positions linearly across a frame range.
 
     Args:
@@ -274,7 +275,7 @@ async def tween_cel_positions(filename: str = "", *, layer_name: str, start_fram
     end
     {FIND_LAYER}
     {LAYER_NAMES}
-    local target_layer = find_layer(spr, "{safe_layer_name}")
+    local target_layer = find_layer(spr, {lua_layer_ref(layer_name)})
     if not target_layer then print("ERROR:Layer '{safe_layer_name}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first.") return end
 
     local start_idx = {start_frame}
@@ -318,10 +319,10 @@ async def tween_cel_positions(filename: str = "", *, layer_name: str, start_fram
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Tweened cel positions on '{layer_name}' frames {start_frame}-{end_frame} in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Tweened cel positions on '{layer_name}' frames {start_frame}-{end_frame} in {filename}", filename, execution, None)
 
-async def offset_cel_positions(filename: str = "", *, layer_name: str, start_frame: int, end_frame: int, dx: int, dy: int) -> str:
+async def offset_cel_positions(filename: str = "", *, layer_name: LayerRef, start_frame: FrameIndex, end_frame: FrameIndex, dx: int, dy: int) -> ToolOutput[EditReceipt]:
     """Offset cel positions by a delta across a frame range.
 
     Args:
@@ -341,7 +342,7 @@ async def offset_cel_positions(filename: str = "", *, layer_name: str, start_fra
 
     {FIND_LAYER}
     {LAYER_NAMES}
-    local target_layer = find_layer(spr, "{safe_layer_name}")
+    local target_layer = find_layer(spr, {lua_layer_ref(layer_name)})
     if not target_layer then print("ERROR:Layer '{safe_layer_name}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first.") return end
 
     local start_idx = {start_frame}
@@ -365,10 +366,10 @@ async def offset_cel_positions(filename: str = "", *, layer_name: str, start_fra
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Offset cel positions by ({dx}, {dy}) on '{layer_name}' frames {start_frame}-{end_frame} in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Offset cel positions by ({dx}, {dy}) on '{layer_name}' frames {start_frame}-{end_frame} in {filename}", filename, execution, None)
 
-async def create_cel(filename: str='', *, layer_name: str, frame_index: int, x: int=0, y: int=0) -> str:
+async def create_cel(filename: str='', *, layer_name: LayerRef, frame_index: FrameIndex, x: int=0, y: int=0) -> ToolOutput[EditReceipt]:
     """Create an empty cel on a layer/frame.
 
     Args:
@@ -390,7 +391,7 @@ async def create_cel(filename: str='', *, layer_name: str, frame_index: int, x: 
 
     {FIND_LAYER}
     {LAYER_NAMES}
-    local target = find_layer(spr, "{safe_layer_name}")
+    local target = find_layer(spr, {lua_layer_ref(layer_name)})
     if not target then print("ERROR:Layer '{safe_layer_name}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first.") return end
 
     app.transaction(function()
@@ -405,10 +406,10 @@ async def create_cel(filename: str='', *, layer_name: str, frame_index: int, x: 
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Cel created on '{layer_name}' frame {frame_index} in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Cel created on '{layer_name}' frame {frame_index} in {filename}", filename, execution, frame_index)
 
-async def clear_cel(filename: str='', *, layer_name: str, frame_index: int) -> str:
+async def clear_cel(filename: str='', *, layer_name: LayerRef, frame_index: FrameIndex) -> ToolOutput[EditReceipt]:
     """Delete a cel on a layer/frame."""
     filename = prepare_filename(filename)
 
@@ -422,7 +423,7 @@ async def clear_cel(filename: str='', *, layer_name: str, frame_index: int) -> s
 
     {FIND_LAYER}
     {LAYER_NAMES}
-    local target = find_layer(spr, "{safe_layer_name}")
+    local target = find_layer(spr, {lua_layer_ref(layer_name)})
     if not target then print("ERROR:Layer '{safe_layer_name}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first.") return end
 
     app.transaction(function()
@@ -437,10 +438,10 @@ async def clear_cel(filename: str='', *, layer_name: str, frame_index: int) -> s
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Cel cleared on '{layer_name}' frame {frame_index} in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Cel cleared on '{layer_name}' frame {frame_index} in {filename}", filename, execution, frame_index)
 
-async def copy_cel(filename: str = "", *, layer_name: str, source_frame: int, target_frame: int, replace: bool = True, create_target_frame: bool = True) -> str:
+async def copy_cel(filename: str = "", *, layer_name: LayerRef, source_frame: FrameIndex, target_frame: FrameIndex, replace: bool = True, create_target_frame: bool = True) -> ToolOutput[EditReceipt]:
     """Copy a cel snapshot, optionally extending the timeline for its target.
 
     Args:
@@ -461,7 +462,7 @@ async def copy_cel(filename: str = "", *, layer_name: str, source_frame: int, ta
     local src, dst = {source_frame}, {target_frame}
     if src < 1 or src > #spr.frames then print("ERROR:Source frame out of range") return end
     if dst < 1 or (dst > #spr.frames and not {str(create_target_frame).lower()}) then print("ERROR:Target frame out of range. Tip: call add_frame first or enable create_target_frame.") return end
-    local layer = find_layer(spr, "{name}")
+    local layer = find_layer(spr, {lua_layer_ref(layer_name)})
     if not layer then print("ERROR:Layer '{name}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first.") return end
     if layer.isGroup then print("ERROR:Select a leaf layer for cel copying") return end
     local snapshot = snapshot_cel(layer:cel(spr.frames[src]))
@@ -475,12 +476,13 @@ async def copy_cel(filename: str = "", *, layer_name: str, source_frame: int, ta
     save_project(spr)
     print("OK|frames_added=" .. added)
     """
-    output = await execute_edit_script(script, filename)
+    execution = await execute_edit_script(script, filename)
+    output = execution.stdout
     added = next((int(line.split("=", 1)[1]) for line in output.splitlines() if line.startswith("OK|frames_added=")), 0)
     note = f" ({added} frame(s) auto-created)" if added else ""
-    return f"Cel copied on '{layer_name}' from frame {source_frame} to frame {target_frame}{note} in {filename}"
+    return edit_output(f"Cel copied on '{layer_name}' from frame {source_frame} to frame {target_frame}{note} in {filename}", filename, execution, target_frame)
 
-async def copy_frame(filename: str = "", *, source_frame: int, target_frame: int | None = None, overwrite: bool = True) -> str:
+async def copy_frame(filename: str = "", *, source_frame: FrameIndex, target_frame: FrameIndex | None = None, overwrite: bool = True) -> ToolOutput[EditReceipt]:
     """Copy all grouped and hidden cels; append when target_frame is omitted.
 
     Existing target durations and tags are preserved. An appended frame uses
@@ -506,14 +508,17 @@ async def copy_frame(filename: str = "", *, source_frame: int, target_frame: int
             frame = spr.frames[dst]
         end
         write_frame(spr, frame, snapshot, {str(overwrite).lower()} or dst == nil)
+        dst = frame.frameNumber
     end)
     save_project(spr)
-    print("OK")
+    print("FRAME:" .. dst)
     """
-    await execute_edit_script(script, filename)
-    return f"Frame {source_frame} copied to {target_frame or 'new frame'} in {filename}"
+    execution = await execute_edit_script(script, filename)
+    destination_frame = next((int(line.removeprefix("FRAME:")) for line in execution.stdout.splitlines()
+                              if line.startswith("FRAME:")), target_frame)
+    return edit_output(f"Frame {source_frame} copied to {destination_frame} in {filename}", filename, execution, destination_frame)
 
-async def propagate_frame_to_range(filename: str = "", *, source_frame: int, start_frame: int, end_frame: int, overwrite: bool = True) -> str:
+async def propagate_frame_to_range(filename: str = "", *, source_frame: FrameIndex, start_frame: FrameIndex, end_frame: FrameIndex, overwrite: bool = True) -> ToolOutput[EditReceipt]:
     """Copy source cels throughout an inclusive frame range, preserving durations."""
     filename = prepare_filename(filename)
     script = f"""
@@ -532,10 +537,10 @@ async def propagate_frame_to_range(filename: str = "", *, source_frame: int, sta
     save_project(spr)
     print("OK")
     """
-    await execute_edit_script(script, filename)
-    return f"Propagated frame {source_frame} to frames {start_frame}-{end_frame} in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Propagated frame {source_frame} to frames {start_frame}-{end_frame} in {filename}", filename, execution, None)
 
-async def set_tag(filename: str = "", *, name: str, from_frame: int, to_frame: int, direction: str = "forward") -> str:
+async def set_tag(filename: str = "", *, name: str, from_frame: FrameIndex, to_frame: FrameIndex, direction: str = "forward") -> ToolOutput[EditReceipt]:
     """Create or update an animation tag on the sprite.
 
     direction: forward | reverse | pingpong | pingpong_reverse
@@ -579,10 +584,10 @@ async def set_tag(filename: str = "", *, name: str, from_frame: int, to_frame: i
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Tag '{name}' set to frames {from_frame}-{to_frame} (direction={direction}) in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Tag '{name}' set to frames {from_frame}-{to_frame} (direction={direction}) in {filename}", filename, execution, None)
 
-async def propagate_cels(filename: str = "", *, layer_names: list[str], source_frame: int, start_frame: int, end_frame: int, replace: bool = True) -> str:
+async def propagate_cels(filename: str = "", *, layer_names: list[LayerRef], source_frame: FrameIndex, start_frame: FrameIndex, end_frame: FrameIndex, replace: bool = True) -> ToolOutput[EditReceipt]:
     """Copy cels from a source frame to a range of frames for specific layers.
 
     Args:
@@ -597,7 +602,7 @@ async def propagate_cels(filename: str = "", *, layer_names: list[str], source_f
     if not layer_names:
         raise ToolError("Layer names list cannot be empty")
 
-    layers_lua = "{" + ",".join(f'"{lua_escape(name)}"' for name in layer_names) + "}"
+    layers_lua = lua_layer_refs(layer_names)
     script = f"""
     {CEL_COPIES}
     {FIND_LAYER}
@@ -609,7 +614,7 @@ async def propagate_cels(filename: str = "", *, layer_names: list[str], source_f
     local snapshot = {{}}
     for _, name in ipairs({layers_lua}) do
         local layer = find_layer(spr, name)
-        if not layer then error("Layer '" .. name .. "' not found. Existing layers: [" .. layer_names(spr) .. "]") end
+        if not layer then error("Layer " .. layer_ref_text(name) .. " not found. Existing layers: [" .. layer_names(spr) .. "]") end
         if layer.isGroup then error("Select a leaf layer for cel propagation") end
         snapshot[#snapshot + 1] = {{layer=layer, cel=snapshot_cel(layer:cel(spr.frames[src]))}}
     end
@@ -627,13 +632,13 @@ async def propagate_cels(filename: str = "", *, layer_names: list[str], source_f
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
+    execution = await execute_edit_script(script, filename)
     return (
-        f"Propagated cels from frame {source_frame} to frames {start_frame}-{end_frame} "
-        f"for layers {', '.join(layer_names)} in {filename}"
+        edit_output(f"Propagated cels from frame {source_frame} to frames {start_frame}-{end_frame} "
+        f"for layers {layer_names} in {filename}", filename, execution, None)
     )
 
-async def tween_cel_positions_eased(filename: str = "", *, layer_name: str, start_frame: int, end_frame: int, start_x: int, start_y: int, end_x: int, end_y: int, easing: str = "smoothstep", create_missing_cels: bool = False, source_frame_index: int | None = None) -> str:
+async def tween_cel_positions_eased(filename: str = "", *, layer_name: LayerRef, start_frame: FrameIndex, end_frame: FrameIndex, start_x: int, start_y: int, end_x: int, end_y: int, easing: str = "smoothstep", create_missing_cels: bool = False, source_frame_index: FrameIndex | None = None) -> ToolOutput[EditReceipt]:
     """Tween cel positions with easing across a frame range."""
     filename = prepare_filename(filename)
 
@@ -651,7 +656,7 @@ async def tween_cel_positions_eased(filename: str = "", *, layer_name: str, star
 
     {FIND_LAYER}
     {LAYER_NAMES}
-    local target_layer = find_layer(spr, "{safe_layer_name}")
+    local target_layer = find_layer(spr, {lua_layer_ref(layer_name)})
     if not target_layer then print("ERROR:Layer '{safe_layer_name}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first.") return end
 
     local start_idx = {start_frame}
@@ -709,13 +714,13 @@ async def tween_cel_positions_eased(filename: str = "", *, layer_name: str, star
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
+    execution = await execute_edit_script(script, filename)
     return (
-        f"Tweened cel positions ({easing}) on '{layer_name}' frames {start_frame}-{end_frame} "
-        f"in {filename}"
+        edit_output(f"Tweened cel positions ({easing}) on '{layer_name}' frames {start_frame}-{end_frame} "
+        f"in {filename}", filename, execution, None)
     )
 
-async def oscillate_cel_positions(filename: str = "", *, layer_name: str, start_frame: int, end_frame: int, amplitude_x: int = 0, amplitude_y: int = 0, cycles: float = 1.0, phase_deg: float = 0.0, create_missing_cels: bool = False, source_frame_index: int | None = None) -> str:
+async def oscillate_cel_positions(filename: str = "", *, layer_name: LayerRef, start_frame: FrameIndex, end_frame: FrameIndex, amplitude_x: int = 0, amplitude_y: int = 0, cycles: float = 1.0, phase_deg: float = 0.0, create_missing_cels: bool = False, source_frame_index: FrameIndex | None = None) -> ToolOutput[EditReceipt]:
     """Oscillate cel positions across a frame range using a sine wave."""
     filename = prepare_filename(filename)
 
@@ -729,7 +734,7 @@ async def oscillate_cel_positions(filename: str = "", *, layer_name: str, start_
 
     {FIND_LAYER}
     {LAYER_NAMES}
-    local target_layer = find_layer(spr, "{safe_layer_name}")
+    local target_layer = find_layer(spr, {lua_layer_ref(layer_name)})
     if not target_layer then print("ERROR:Layer '{safe_layer_name}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first.") return end
 
     local start_idx = {start_frame}
@@ -781,13 +786,13 @@ async def oscillate_cel_positions(filename: str = "", *, layer_name: str, start_
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
+    execution = await execute_edit_script(script, filename)
     return (
-        f"Oscillated cel positions on '{layer_name}' frames {start_frame}-{end_frame} "
-        f"in {filename}"
+        edit_output(f"Oscillated cel positions on '{layer_name}' frames {start_frame}-{end_frame} "
+        f"in {filename}", filename, execution, None)
     )
 
-async def tween_cel_opacity_eased(filename: str = "", *, layer_name: str, start_frame: int, end_frame: int, start_opacity: int, end_opacity: int, easing: str = "smoothstep", create_missing_cels: bool = False, source_frame_index: int | None = None) -> str:
+async def tween_cel_opacity_eased(filename: str = "", *, layer_name: LayerRef, start_frame: FrameIndex, end_frame: FrameIndex, start_opacity: Byte, end_opacity: Byte, easing: str = "smoothstep", create_missing_cels: bool = False, source_frame_index: FrameIndex | None = None) -> ToolOutput[EditReceipt]:
     """Tween cel opacity with easing across a frame range."""
     filename = prepare_filename(filename)
     if start_opacity < 0 or start_opacity > 255 or end_opacity < 0 or end_opacity > 255:
@@ -807,7 +812,7 @@ async def tween_cel_opacity_eased(filename: str = "", *, layer_name: str, start_
 
     {FIND_LAYER}
     {LAYER_NAMES}
-    local target_layer = find_layer(spr, "{safe_layer_name}")
+    local target_layer = find_layer(spr, {lua_layer_ref(layer_name)})
     if not target_layer then print("ERROR:Layer '{safe_layer_name}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first.") return end
 
     local start_idx = {start_frame}
@@ -866,13 +871,13 @@ async def tween_cel_opacity_eased(filename: str = "", *, layer_name: str, start_
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
+    execution = await execute_edit_script(script, filename)
     return (
-        f"Tweened cel opacity ({easing}) on '{layer_name}' frames {start_frame}-{end_frame} "
-        f"in {filename}"
+        edit_output(f"Tweened cel opacity ({easing}) on '{layer_name}' frames {start_frame}-{end_frame} "
+        f"in {filename}", filename, execution, None)
     )
 
-async def tween_cel_scale_eased(filename: str = "", *, layer_name: str, start_frame: int, end_frame: int, start_scale: float, end_scale: float, easing: str = "smoothstep", anchor: str = "center", replace: bool = True, create_missing_cels: bool = True, source_frame_index: int | None = None) -> str:
+async def tween_cel_scale_eased(filename: str = "", *, layer_name: LayerRef, start_frame: FrameIndex, end_frame: FrameIndex, start_scale: float, end_scale: float, easing: str = "smoothstep", anchor: str = "center", replace: bool = True, create_missing_cels: bool = True, source_frame_index: FrameIndex | None = None) -> ToolOutput[EditReceipt]:
     """Tween cel scale with easing across a frame range."""
     filename = prepare_filename(filename)
     if start_scale <= 0 or end_scale <= 0:
@@ -897,7 +902,7 @@ async def tween_cel_scale_eased(filename: str = "", *, layer_name: str, start_fr
 
     {FIND_LAYER}
     {LAYER_NAMES}
-    local target_layer = find_layer(spr, "{safe_layer_name}")
+    local target_layer = find_layer(spr, {lua_layer_ref(layer_name)})
     if not target_layer then print("ERROR:Layer '{safe_layer_name}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first.") return end
 
     local start_idx = {start_frame}
@@ -975,14 +980,14 @@ async def tween_cel_scale_eased(filename: str = "", *, layer_name: str, start_fr
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
+    execution = await execute_edit_script(script, filename)
     return (
-        f"Tweened cel scale ({easing}) on '{layer_name}' frames {start_frame}-{end_frame} "
-        f"in {filename}"
+        edit_output(f"Tweened cel scale ({easing}) on '{layer_name}' frames {start_frame}-{end_frame} "
+        f"in {filename}", filename, execution, None)
     )
 
 
-async def delete_frame(filename: str = "", *, frame_index: int) -> str:
+async def delete_frame(filename: str = "", *, frame_index: FrameIndex) -> ToolOutput[EditReceipt]:
     """Delete a frame by index.
 
     Args:
@@ -1007,11 +1012,11 @@ async def delete_frame(filename: str = "", *, frame_index: int) -> str:
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Frame {frame_index} deleted from {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Frame {frame_index} deleted from {filename}", filename, execution, frame_index)
 
 
-async def delete_tag(filename: str = "", *, name: str) -> str:
+async def delete_tag(filename: str = "", *, name: str) -> ToolOutput[EditReceipt]:
     """Delete an animation tag by name.
 
     Args:
@@ -1039,11 +1044,11 @@ async def delete_tag(filename: str = "", *, name: str) -> str:
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Tag '{name}' deleted from {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Tag '{name}' deleted from {filename}", filename, execution, None)
 
 
-async def set_cel_opacity(filename: str='', *, layer_name: str, frame_index: int, opacity: int) -> str:
+async def set_cel_opacity(filename: str='', *, layer_name: LayerRef, frame_index: FrameIndex, opacity: Byte) -> ToolOutput[EditReceipt]:
     """Set the opacity of a single cel (0-255).
 
     Args:
@@ -1066,7 +1071,7 @@ async def set_cel_opacity(filename: str='', *, layer_name: str, frame_index: int
 
     {FIND_LAYER}
     {LAYER_NAMES}
-    local target = find_layer(spr, "{safe_layer}")
+    local target = find_layer(spr, {lua_layer_ref(layer_name)})
     if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first.") return end
 
     local cel = target:cel(spr.frames[idx])
@@ -1080,5 +1085,5 @@ async def set_cel_opacity(filename: str='', *, layer_name: str, frame_index: int
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
-    return f"Cel opacity set to {opacity} on '{layer_name}' frame {frame_index} in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Cel opacity set to {opacity} on '{layer_name}' frame {frame_index} in {filename}", filename, execution, frame_index)

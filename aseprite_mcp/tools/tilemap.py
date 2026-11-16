@@ -1,28 +1,15 @@
 from mcp.server.mcpserver.exceptions import ToolError
-from ..core.editing import execute_edit_script
-import json
-from typing import List, Dict, Any
+
+from ..core.colors import parse_hex_color
 from ..core.commands import AsepriteCommand, lua_escape, parse_pixel_xy
-from ..core.lua import FIND_LAYER, LAYER_NAMES
+from ..core.contracts import FrameIndex, LayerRef, Pixel, PositiveInt, TilePlacement, ToolOutput
+from ..core.editing import edit_output, execute_edit_script
+from ..core.lua import FIND_LAYER, LAYER_NAMES, lua_layer_ref
+from ..core.results import EditReceipt, TileAt, TilemapInfo
 from ..core.state import prepare_filename
 
 
-def _parse_hex_color(value: str) -> tuple[int, int, int] | None:
-    if not value:
-        return None
-    hex_color = value.lstrip("#")
-    if len(hex_color) != 6:
-        return None
-    try:
-        r = int(hex_color[0:2], 16)
-        g = int(hex_color[2:4], 16)
-        b = int(hex_color[4:6], 16)
-    except ValueError:
-        return None
-    return r, g, b
-
-
-async def create_tilemap_layer(filename: str = "", *, layer_name: str, tile_width: int, tile_height: int) -> str:
+async def create_tilemap_layer(filename: str = "", *, layer_name: str, tile_width: PositiveInt, tile_height: PositiveInt) -> ToolOutput[EditReceipt]:
     """Create a tilemap layer with its own tileset.
 
     Sets the sprite grid to the tile size and adds a tilemap layer.
@@ -60,20 +47,21 @@ async def create_tilemap_layer(filename: str = "", *, layer_name: str, tile_widt
         spr.gridBounds = Rectangle(0, 0, {tile_width}, {tile_height})
         app.command.NewLayer {{ tilemap = true }}
         app.activeLayer.name = "{safe_layer}"
+        remember_target(app.activeLayer)
     end)
 
     save_project(spr)
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
+    execution = await execute_edit_script(script, filename)
     return (
-        f"Tilemap layer '{layer_name}' created with {tile_width}x{tile_height} "
-        f"tiles in {filename}"
+        edit_output(f"Tilemap layer '{layer_name}' created with {tile_width}x{tile_height} "
+        f"tiles in {filename}", filename, execution, None)
     )
 
 
-async def draw_on_tile(filename: str = "", *, layer_name: str, tile_index: int, pixels: List[Dict[str, Any]]) -> str:
+async def draw_on_tile(filename: str = "", *, layer_name: LayerRef, tile_index: PositiveInt, pixels: list[Pixel]) -> ToolOutput[EditReceipt]:
     """Draw pixels onto a tile in a tilemap layer's tileset.
 
     Coordinates are tile-local (0,0 = tile top-left). When tile_index
@@ -85,7 +73,7 @@ async def draw_on_tile(filename: str = "", *, layer_name: str, tile_index: int, 
         layer_name: Tilemap layer whose tileset to edit
         tile_index: Tile to draw on (1 = first real tile; 0 is reserved
             for the empty tile and cannot be drawn on)
-        pixels: List of {"x": int, "y": int, "color": "#RRGGBB"}
+        pixels: Tile-local x/y and RGB or RGBA hex colour for each pixel.
     """
     filename = prepare_filename(filename)
     if tile_index < 1:
@@ -95,17 +83,17 @@ async def draw_on_tile(filename: str = "", *, layer_name: str, tile_index: int, 
 
     puts = []
     for pixel in pixels:
-        rgb = _parse_hex_color(pixel.get("color", ""))
-        if rgb is None:
+        rgba = parse_hex_color(pixel.get("color", ""))
+        if rgba is None:
             raise ToolError(f"Invalid color value: {pixel.get('color')}")
-        r, g, b = rgb
+        r, g, b, a = rgba
         xy = parse_pixel_xy(pixel)
         if xy is None:
             raise ToolError(f"Invalid pixel coordinates: x={pixel.get('x')!r}, "
                 f"y={pixel.get('y')!r} — must be integers")
         x, y = xy
         puts.append(
-            f"        put(img, {x}, {y}, app.pixelColor.rgba({r}, {g}, {b}, 255))"
+            f"        put(img, {x}, {y}, app.pixelColor.rgba({r}, {g}, {b}, {a}))"
         )
     puts_lua = "\n".join(puts)
 
@@ -116,7 +104,7 @@ async def draw_on_tile(filename: str = "", *, layer_name: str, tile_index: int, 
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
-    local target = find_layer(spr, "{safe_layer}")
+    local target = find_layer(spr, {lua_layer_ref(layer_name)})
     if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
     if not target.isTilemap then print("ERROR:Layer is not a tilemap layer") return end
 
@@ -145,14 +133,14 @@ async def draw_on_tile(filename: str = "", *, layer_name: str, tile_index: int, 
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
+    execution = await execute_edit_script(script, filename)
     return (
-        f"Drew {len(pixels)} pixels on tile {tile_index} of '{layer_name}' "
-        f"in {filename}"
+        edit_output(f"Drew {len(pixels)} pixels on tile {tile_index} of '{layer_name}' "
+        f"in {filename}", filename, execution, None)
     )
 
 
-async def set_tiles(filename: str='', *, layer_name: str, frame_index: int, tiles: List[Dict[str, Any]]) -> str:
+async def set_tiles(filename: str='', *, layer_name: LayerRef, frame_index: FrameIndex, tiles: list[TilePlacement]) -> ToolOutput[EditReceipt]:
     """Place tiles on a tilemap layer by grid position.
 
     Args:
@@ -170,7 +158,7 @@ async def set_tiles(filename: str='', *, layer_name: str, frame_index: int, tile
     entries = []
     for t in tiles:
         entries.append(
-            f"{{{int(t.get('col', 0))},{int(t.get('row', 0))},{int(t.get('tile_index', 0))}}}"
+            f"{{{int(t['col'])},{int(t['row'])},{int(t['tile_index'])}}}"
         )
     tiles_lua = ", ".join(entries)
 
@@ -184,7 +172,7 @@ async def set_tiles(filename: str='', *, layer_name: str, frame_index: int, tile
     local idx = {frame_index}
     if idx < 1 or idx > #spr.frames then print("ERROR:Frame index out of range") return end
 
-    local target = find_layer(spr, "{safe_layer}")
+    local target = find_layer(spr, {lua_layer_ref(layer_name)})
     if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
     if not target.isTilemap then print("ERROR:Layer is not a tilemap layer") return end
 
@@ -240,14 +228,14 @@ async def set_tiles(filename: str='', *, layer_name: str, frame_index: int, tile
     print("OK")
     """
 
-    await execute_edit_script(script, filename)
+    execution = await execute_edit_script(script, filename)
     return (
-        f"Placed {len(tiles)} tiles on '{layer_name}' frame {frame_index} "
-        f"in {filename}"
+        edit_output(f"Placed {len(tiles)} tiles on '{layer_name}' frame {frame_index} "
+        f"in {filename}", filename, execution, frame_index)
     )
 
 
-async def get_tile_at(filename: str='', *, layer_name: str, frame_index: int, col: int, row: int) -> str:
+async def get_tile_at(filename: str='', *, layer_name: LayerRef, frame_index: FrameIndex, col: int, row: int) -> ToolOutput[TileAt]:
     """Read which tile is placed at a grid position.
 
     Args:
@@ -273,7 +261,7 @@ async def get_tile_at(filename: str='', *, layer_name: str, frame_index: int, co
     local idx = {frame_index}
     if idx < 1 or idx > #spr.frames then print("ERROR:Frame index out of range") return end
 
-    local target = find_layer(spr, "{safe_layer}")
+    local target = find_layer(spr, {lua_layer_ref(layer_name)})
     if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
     if not target.isTilemap then print("ERROR:Layer is not a tilemap layer") return end
 
@@ -294,13 +282,11 @@ async def get_tile_at(filename: str='', *, layer_name: str, frame_index: int, co
 
     for line in output.splitlines():
         if line.startswith("TILE:"):
-            return json.dumps({
-                "col": col, "row": row, "tile_index": int(line[len("TILE:"):]),
-            })
+            return ToolOutput(summary='Get tile at completed', data={'col': col, 'row': row, 'tile_index': int(line[len('TILE:'):])})
     raise ToolError("No tile data returned")
 
 
-async def get_tilemap_info(filename: str = "", *, layer_name: str) -> str:
+async def get_tilemap_info(filename: str = "", *, layer_name: LayerRef) -> ToolOutput[TilemapInfo]:
     """Get tilemap layer info: tile size, tile count, and map dimensions.
 
     Args:
@@ -321,7 +307,7 @@ async def get_tilemap_info(filename: str = "", *, layer_name: str) -> str:
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
-    local target = find_layer(spr, "{safe_layer}")
+    local target = find_layer(spr, {lua_layer_ref(layer_name)})
     if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
     if not target.isTilemap then print("ERROR:Layer is not a tilemap layer") return end
 
@@ -338,8 +324,5 @@ async def get_tilemap_info(filename: str = "", *, layer_name: str) -> str:
     for line in output.splitlines():
         if line.startswith("INFO:"):
             tw, th, count, cols, rows = [int(v) for v in line[len("INFO:"):].split(",")]
-            return json.dumps({
-                "tile_width": tw, "tile_height": th, "tile_count": count,
-                "map_cols": cols, "map_rows": rows,
-            })
+            return ToolOutput(summary='Get tilemap info completed', data={'tile_width': tw, 'tile_height': th, 'tile_count': count, 'map_cols': cols, 'map_rows': rows})
     raise ToolError("No tilemap data returned")

@@ -25,7 +25,9 @@ flowchart LR
 
 `tools/` 依赖 `core/`。`core/commands.py` 管理进程与 UTF-8 输出，`core/lua.py` 承载共享目标、坐标和 cel 快照规则，`core/editing.py` 管理原生保存与提交，`core/native.py` 为原生命令激活显式目标。`core/inspection.py` 提供工程元数据读取，供查询和导出共享。字体栅格化在 `core/fonts.py`。
 
-一次编辑先解析文件和参数，再生成 Lua，在临时原生文件保存成功后替换目标。进程层只判断执行状态，编辑层和导出层分别验证工程和图像。工具成功返回文本或 JSON 字符串；预期失败抛 `ToolError`，SDK 转换为 `isError=true`。
+一次编辑先校验类型化参数、解析文件，再生成 Lua，在临时原生文件保存成功后替换目标。进程层判断执行状态，编辑层和导出层分别验证工程和图像。工具成功返回 `ToolOutput[T]`：`summary` 描述结果，`data` 是领域载荷；SDK 生成对应 outputSchema，structuredContent 可直接消费。预期失败抛 `ToolError`，SDK 转为 `isError=true`。
+
+`core/contracts.py` 定义共享输入与 Tool 构造规则，拒绝未定义字段；`core/results.py` 定义领域输出。`core/sprite_grid.py` 集中网格解析、镜像与 RGBA 编码；`core/composite.py` 提供可见合成。`draw_sprite_maps` 将有序图层/帧编辑合并为一次进程、保存与提交；`review_frame` 从一次合成的 RGBA 生成精确网格和 8× 预览。
 
 图像通过磁盘路径交付。Java Edition 工具另外返回会话临时的 8× PNG 路径，lifespan 在会话退出时清理它。
 
@@ -35,7 +37,7 @@ flowchart LR
 
 [`tool_catalog.py`](../aseprite_mcp/tool_catalog.py) 的字面量目录是核心／扩展归属及顺序的唯一来源。新增工具须明确加入对应目录，重名或无效符号在装配时失败。核心及固定发现入口直接公开；扩展通过 [`tool_discovery.py`](../aseprite_mcp/tool_discovery.py) 的 `search_tools`／`call_tool` 发现和执行。
 
-搜索返回扩展的完整 SDK schema、类别与说明，支持分词匹配、类别浏览和分页；结果同时提供可读 JSON 文本。代理使用 SDK 描述校验、补默认值和执行，保留 content、structuredContent 与 isError。外层 tools/call 持有一次串行锁，目标复用请求上下文。公开工具集合在搜索、调用与重连前后保持稳定。
+搜索覆盖核心与扩展，返回 SDK 输入/输出 schema、类别、说明、调用示例与 `invocation`，支持分词排序、类别浏览和分页；未知名称返回候选及入口。示例在装配时用目标参数模型校验。代理只执行扩展，与核心使用同一 ContractTool 校验规则，补默认值后执行，保留 content、structuredContent 与 isError。外层 tools/call 持有一次串行锁，目标复用请求上下文。公开工具集合在搜索、调用与重连前后保持稳定。
 
 工具参考从同一目录与函数 AST 生成，标注直接或代理调用。客户端使用方式见 [本地开发与接入](development.md#客户端配置)。
 
@@ -43,13 +45,13 @@ flowchart LR
 
 ```python
 filename = prepare_filename(filename)
-# 用户字符串先 lua_escape；像素字典中的坐标先 parse_pixel_xy。
+# 定位参数用 LayerRef，再用 lua_layer_ref 编码；普通字符串用 lua_escape。
 # Lua 用 EDIT_TARGET 明确目标，用 app.transaction 编辑，以 save_project(spr) 保存。
-await execute_edit_script(script, filename)
-return "编辑完成"
+execution = await execute_edit_script(script, filename)
+return edit_output("编辑完成", filename, execution)
 ```
 
-读取用 `await AsepriteCommand.execute_lua_script_checked(...)`，直接 CLI 用 `await AsepriteCommand.run_command(...)`。输出路径使用 `prepare_filename(path, must_exist=False, anchor=False)`。完整参数写入 Google 风格 docstring，供参考生成器解析。
+读取用 `await AsepriteCommand.execute_lua_script_checked(...)`，直接 CLI 用 `await AsepriteCommand.run_command(...)`。输出路径使用 `prepare_filename(path, must_exist=False, anchor=False)`。工具返回注解必须具体到 `ToolOutput[领域类型]`。Google 风格 docstring 的参数说明投影到运行时 schema 与静态参考；非直觉组合的示例放在目录的 TOOL_EXAMPLES。
 
 修改工具后同步运行指令 [SKILL.md](../SKILL.md)，生成并检查 [工具参考](reference/tools.md)，运行受影响场景。标准工具失败由异常表达，测试检查具体内容与产物。
 

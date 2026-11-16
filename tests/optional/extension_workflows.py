@@ -1,5 +1,7 @@
 """Explicit extension workflows; run this file directly when these outputs matter."""
 
+from support import payload
+
 import json
 
 from PIL import Image
@@ -16,9 +18,9 @@ def test_tilemap_paint_place_read_render_and_recover(new_sprite, tmp_path):
                                  pixels=[{"x": x, "y": y, "color": colour} for y in range(height) for x in range(8)]))
     run(tilemap.set_tiles(filename=filename, layer_name="terrain", frame_index=1,
                           tiles=[{"col": 0, "row": 0, "tile_index": 1}, {"col": 1, "row": 0, "tile_index": 2}]))
-    info = json.loads(run(tilemap.get_tilemap_info(filename=filename, layer_name="terrain")))
+    info = payload(run(tilemap.get_tilemap_info(filename=filename, layer_name="terrain")))
     assert info == {"tile_width": 8, "tile_height": 8, "tile_count": 2, "map_cols": 4, "map_rows": 4}
-    assert json.loads(run(tilemap.get_tile_at(filename=filename, layer_name="terrain", frame_index=1, col=1, row=0)))["tile_index"] == 2
+    assert payload(run(tilemap.get_tile_at(filename=filename, layer_name="terrain", frame_index=1, col=1, row=0)))["tile_index"] == 2
     original = digest(filename)
     assert "get_tile_at" in failure(pixel_read.get_pixels_rect(
         filename=filename, layer_name="terrain", frame_index=1, x=0, y=0, width=1, height=1,
@@ -39,7 +41,7 @@ def test_tilemap_paint_place_read_render_and_recover(new_sprite, tmp_path):
     expected.paste((116, 63, 57, 255), (8, 0, 16, 4))
     expected.paste((62, 137, 72, 255), (16, 0, 24, 8))
     assert frame_image(filename, 1, tmp_path).tobytes() == expected.tobytes()
-    pixels = json.loads(run(pixel_read.get_composite_rect(filename=filename, x=0, y=0, width=32, height=32)))
+    pixels = payload(run(pixel_read.get_composite_rect(filename=filename, x=0, y=0, width=32, height=32)))
     assert bytes(channel for p in pixels for channel in (p["r"], p["g"], p["b"], p["a"])) == expected.tobytes()
 
 
@@ -50,12 +52,12 @@ def test_slice_metadata_round_trip_and_duplicate_recovery(sprite):
     run(slices.set_slice_pivot(filename=sprite, name=name, x=8, y=6))
     expected = [{"name": name, "x": 1, "y": 2, "width": 16, "height": 16,
                  "center": {"x": 4, "y": 4, "width": 8, "height": 8}, "pivot": {"x": 8, "y": 6}}]
-    assert json.loads(run(slices.list_slices(filename=sprite))) == expected
+    assert payload(run(slices.list_slices(filename=sprite))) == expected
     original = digest(sprite)
     assert "already exists" in failure(slices.create_slice(filename=sprite, name=name, x=0, y=0, width=8, height=8))
     assert digest(sprite) == original
     run(slices.delete_slice(filename=sprite, name=name))
-    assert json.loads(run(slices.list_slices(filename=sprite))) == []
+    assert payload(run(slices.list_slices(filename=sprite))) == []
 
 
 def test_native_colour_processing_and_palette_readback(new_sprite, tmp_path):
@@ -63,7 +65,7 @@ def test_native_colour_processing_and_palette_readback(new_sprite, tmp_path):
     colours = ["#000000", "#ff0000", "#00ff00", "#0000ff", "#ffff00"]
     run(drawing.draw_pixels_at(filename=filename, layer_name="ink", frame_index=1,
                                pixels=[{"x": x, "y": 0, "color": colour} for x, colour in enumerate(colours)]))
-    extracted = json.loads(run(native_fx.extract_palette(filename=filename, max_colors=8)))
+    extracted = payload(run(native_fx.extract_palette(filename=filename, max_colors=8)))
     assert sorted(extracted["colors"]) == ["#000000", "#0000FF", "#00FF00", "#FF0000", "#FFFF00"]
     assert extracted["transparent_index"] == 0
     assert extracted["palette_size"] == extracted["count"] + 1

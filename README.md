@@ -12,6 +12,8 @@
 
 核心工具可以直接调用；文字、tilemap、slice 等扩展通过 `search_tools` 查找，再由 `call_tool` 执行。完整工具与参数见[工具参考](docs/reference/tools.md)。
 
+多层像素网格用 `draw_sprite_maps` 一次提交，再用 `review_frame` 取得同源精确网格和 8× 临时预览。所有成功结果统一为 `{summary,data}`，客户端读取 `structuredContent.data`；工具发现覆盖完整目录，并返回 schema、示例和调用入口。
+
 ## 安装与配置
 
 需要 Python 3.13+、[uv](https://docs.astral.sh/uv/) 和本机安装的 Aseprite。下载或克隆本项目后，在项目根目录安装依赖：

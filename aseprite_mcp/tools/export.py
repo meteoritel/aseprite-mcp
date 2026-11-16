@@ -1,21 +1,24 @@
 """Native-project exports, exact artifact publication and Java textures."""
 
-from contextlib import contextmanager
 import json
 import os
-from pathlib import Path
 import re
 import shutil
 import tempfile
 import uuid
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Literal
 
 from PIL import Image
 from mcp.server.mcpserver.exceptions import ToolError
 
 from ..core.commands import AsepriteCommand, lua_escape
-from ..core.editing import execute_edit_script, native_project_path, validate_native_project
+from ..core.contracts import FrameIndex, LayerRef, ToolOutput
+from ..core.editing import edit_output, execute_edit_script, native_project_path, validate_native_project
 from ..core.inspection import read_sprite_info
-from ..core.lua import EDIT_TARGET, NORMALIZE_CEL
+from ..core.lua import EDIT_TARGET, NORMALIZE_CEL, lua_layer_ref
+from ..core.results import EditReceipt, ExportReceipt, TextureDelivery
 from ..core.state import get_review_directory, prepare_filename
 
 REVIEW_SCALE = 8
@@ -129,7 +132,7 @@ def _read_sheet_data(path: Path, expected_frames: int) -> dict:
         raise ToolError(f"Aseprite returned invalid sheet metadata: {exc}") from exc
 
 
-async def export_sprite(*, filename: str = "", output_filename: str, format: str = "png") -> str:
+async def export_sprite(*, filename: str = "", output_filename: str, format: str = "png") -> ToolOutput[ExportReceipt]:
     """Export to an image or image sequence; report the exact published files.
 
     Args:
@@ -145,10 +148,10 @@ async def export_sprite(*, filename: str = "", output_filename: str, format: str
         produced = _generated_images(directory, staged)
         files = [(path, target.parent / path.name) for path in produced]
         _publish_files(files)
-    return "Sprite exported to " + ", ".join(str(target) for _, target in files)
+    return ToolOutput(summary="Sprite exported to " + ", ".join(str(target) for _, target in files), data=ExportReceipt(files=[str(path) for _, path in files]))
 
 
-async def copy_sprite(*, filename: str = "", output_filename: str, overwrite: bool = False) -> str:
+async def copy_sprite(*, filename: str = "", output_filename: str, overwrite: bool = False) -> ToolOutput[ExportReceipt]:
     """Copy a native project, preserving layers, frames and tags.
 
     Args:
@@ -161,12 +164,12 @@ async def copy_sprite(*, filename: str = "", output_filename: str, overwrite: bo
     if os.path.exists(target) and not overwrite:
         raise ToolError(f"Output file already exists: {target}")
     if os.path.exists(target) and os.path.samefile(filename, target):
-        return f"Sprite already at {target}"
-    await execute_edit_script("save_project(app.activeSprite)", filename, output_filename=target)
-    return f"Sprite copied to {target}"
+        return ToolOutput(summary=f"Sprite already at {target}", data=ExportReceipt(files=[str(target)]))
+    execution = await execute_edit_script("save_project(app.activeSprite)", filename, output_filename=target)
+    return ToolOutput(summary=f"Sprite copied to {target}", data=ExportReceipt(files=[str(target)]))
 
 
-async def export_frame(*, filename: str = "", frame_index: int, output_filename: str, scale: int = 1) -> str:
+async def export_frame(*, filename: str = "", frame_index: FrameIndex, output_filename: str, scale: int = 1) -> ToolOutput[ExportReceipt]:
     """Export one validated frame to an exact PNG path.
 
     Args:
@@ -189,13 +192,13 @@ async def export_frame(*, filename: str = "", frame_index: int, output_filename:
         if len(produced) != 1 or _image_size(produced[0]) != (info["width"] * scale, info["height"] * scale):
             raise ToolError("Aseprite returned an invalid single-frame image")
         _publish_files([(produced[0], target)])
-    return f"Frame {frame_index} exported to {target} at {scale}x"
+    return ToolOutput(summary=f"Frame {frame_index} exported to {target} at {scale}x", data=ExportReceipt(files=[str(target)]))
 
 
 async def export_spritesheet(*, filename: str = "", output_filename: str,
-                            sheet_type: str = "horizontal", data_filename: str = "",
+                            sheet_type: Literal["horizontal", "vertical", "rows", "columns", "packed"] = "horizontal", data_filename: str = "",
                             scale: int = 1, padding: int = 0, tag_name: str = "",
-                            data_format: str = "json-array", list_tags: bool = False) -> str:
+                            data_format: Literal["json-array", "json-hash"] = "json-array", list_tags: bool = False) -> ToolOutput[ExportReceipt]:
     """Export a sheet and optional Aseprite JSON from this invocation's artifacts.
 
     Args:
@@ -236,10 +239,10 @@ async def export_spritesheet(*, filename: str = "", output_filename: str,
             _read_sheet_data(staged_data, len(frames))
             files.append((staged_data, data_target))
         _publish_files(files)
-    return "Sprite sheet exported to " + ", ".join(str(path) for _, path in files)
+    return ToolOutput(summary="Sprite sheet exported to " + ", ".join(str(path) for _, path in files), data=ExportReceipt(files=[str(path) for _, path in files]))
 
 
-async def export_layers(*, filename: str = "", output_directory: str, include_hidden: bool = False) -> str:
+async def export_layers(*, filename: str = "", output_directory: str, include_hidden: bool = False) -> ToolOutput[ExportReceipt]:
     """Export layers into an exact set of newly generated PNG files.
 
     Args:
@@ -260,10 +263,10 @@ async def export_layers(*, filename: str = "", output_directory: str, include_hi
             _image_size(path)
         files = [(path, target / path.relative_to(directory)) for path in produced]
         _publish_files(files)
-    return "Layers exported to " + ", ".join(str(path) for _, path in files)
+    return ToolOutput(summary="Layers exported to " + ", ".join(str(path) for _, path in files), data=ExportReceipt(files=[str(path) for _, path in files]))
 
 
-async def export_tag(*, filename: str = "", tag_name: str, output_filename: str, scale: int = 1) -> str:
+async def export_tag(*, filename: str = "", tag_name: str, output_filename: str, scale: int = 1) -> ToolOutput[ExportReceipt]:
     """Export an existing tag as GIF or PNG sequence.
 
     Args:
@@ -285,7 +288,7 @@ async def export_tag(*, filename: str = "", tag_name: str, output_filename: str,
         produced = _generated_images(directory, staged)
         files = [(path, target.parent / path.name) for path in produced]
         _publish_files(files)
-    return f"Tag '{tag_name}' exported to " + ", ".join(str(path) for _, path in files)
+    return ToolOutput(summary=f"Tag '{tag_name}' exported to " + ", ".join(str(path) for _, path in files), data=ExportReceipt(files=[str(path) for _, path in files]))
 
 
 def _playback_indices(count: int, direction: str) -> list[int]:
@@ -298,8 +301,12 @@ def _playback_indices(count: int, direction: str) -> list[int]:
 
 
 async def export_minecraft_texture(*, filename: str = "", output_filename: str,
-                                   frame_index: int | None = None, tag_name: str = "") -> str:
+                                   frame_index: FrameIndex | None = None, tag_name: str = "") -> ToolOutput[TextureDelivery]:
     """Deliver Java Edition PNG and mcmeta, plus a temporary 8x review PNG.
+
+    PNG stores each selected source frame once. Source frames are 1-based;
+    mcmeta playback indexes are 0-based. A four-frame pingpong plays
+    [0,1,2,3,2,1] without duplicating PNG cells.
 
     Args:
         filename: Source native project (defaults to the active file)
@@ -363,16 +370,11 @@ async def export_minecraft_texture(*, filename: str = "", output_filename: str,
         if preview is not None:
             preview.unlink(missing_ok=True)
         raise
-    return json.dumps({
-        "png": str(target), "mcmeta": str(sidecar), "preview_png": str(preview),
-        "preview_scale": REVIEW_SCALE,
-        "frames": [{"source_frame": source, "index": index, "duration_ms": duration}
-                   for index, (source, duration) in enumerate(zip(frames, durations))],
-    })
+    return ToolOutput(summary='Export minecraft texture completed', data={'png': str(target), 'mcmeta': str(sidecar), 'preview_png': str(preview), 'preview_scale': REVIEW_SCALE, 'frames': [{'source_frame': source, 'index': index, 'duration_ms': duration} for index, (source, duration) in enumerate(zip(frames, durations))], 'preview_lifetime':'session'})
 
 
-async def import_image_as_layer(*, filename: str = "", image_path: str, layer_name: str,
-                                frame_index: int, x: int = 0, y: int = 0) -> str:
+async def import_image_as_layer(*, filename: str = "", image_path: str, layer_name: LayerRef,
+                                frame_index: FrameIndex, x: int = 0, y: int = 0) -> ToolOutput[EditReceipt]:
     """Import an image into an explicit layer/frame of a native project.
 
     Args:
@@ -393,12 +395,12 @@ async def import_image_as_layer(*, filename: str = "", image_path: str, layer_na
     local src = Image{{fromFile="{lua_escape(image_path.replace(chr(92), '/'))}"}}
     if not src then print("ERROR:Could not load image") return end
     app.transaction(function()
-        local layer = require_layer(spr, "{lua_escape(layer_name)}", true)
+        local layer = require_layer(spr, {lua_layer_ref(layer_name)}, true)
         require_cel(spr, layer, {frame_index}, true)
         local cel = normalize_cel(spr, layer, frame, false)
         cel.image:drawImage(src, Point({x}, {y}))
     end)
     save_project(spr)
     """
-    await execute_edit_script(script, filename)
-    return f"Image {image_path} imported on '{layer_name}' frame {frame_index} in {filename}"
+    execution = await execute_edit_script(script, filename)
+    return edit_output(f"Image {image_path} imported on '{layer_name}' frame {frame_index} in {filename}", filename, execution, frame_index)

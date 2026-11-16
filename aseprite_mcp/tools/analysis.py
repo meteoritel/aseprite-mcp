@@ -1,69 +1,15 @@
-from mcp.server.mcpserver.exceptions import ToolError
-import json
 import os
+
+from mcp.server.mcpserver.exceptions import ToolError
+
 from ..core.commands import AsepriteCommand, lua_escape
+from ..core.composite import COMPOSE_FRAME
+from ..core.contracts import Byte, FrameIndex, NonnegativeInt, PositiveInt, ToolOutput
+from ..core.results import ColorStats, ExportReceipt, FrameDifference
 from ..core.state import prepare_filename
 
-# Composite the *visible* layers of one frame into a canvas-sized RGB
-# image. Used by the analysis tools so layer offsets and trimmed cels do
-# not skew results.
-#
-# Sprite:flatten() (Aseprite 1.3.x) merges hidden layers too, so a flattened
-# clone reports colours the player never sees. Rather than re-implementing the
-# renderer — blend modes, group opacity and tilemap rasterisation are all easy
-# to get subtly wrong — drop every invisible layer from a throwaway clone and
-# only then flatten. The merge stays Aseprite's own code, so the result agrees
-# with export_frame pixel for pixel (tests/test_visibility.py asserts that).
-_COMPOSE_FRAME = """
-local function visible_clone(spr)
-    local clone = Sprite(spr)
 
-    -- flatten() needs a layer to produce, and this also keeps the sprite from
-    -- reaching zero layers while the hidden ones are being deleted.
-    local keep = clone:newLayer()
-    keep.name = "__visible_only__"
-
-    local doomed = {}
-    local function scan(layers)
-        for _, layer in ipairs(layers) do
-            if not layer.isVisible then
-                doomed[#doomed + 1] = layer
-            elseif layer.isGroup then
-                -- A hidden group takes its children with it, so do not descend
-                -- into it: they would be collected twice and the second delete
-                -- would fail.
-                scan(layer.layers)
-            end
-        end
-    end
-    scan(clone.layers)
-    for _, layer in ipairs(doomed) do clone:deleteLayer(layer) end
-
-    clone:flatten()
-    return clone
-end
-
-local function compose_frame(spr, frame_idx, bg)
-    local clone = visible_clone(spr)
-    local img = Image(spr.width, spr.height, ColorMode.RGB)
-    if bg then
-        for py = 0, img.height - 1 do
-            for px = 0, img.width - 1 do
-                img:putPixel(px, py, bg)
-            end
-        end
-    end
-    local layer = clone.layers[#clone.layers]
-    local cel = layer:cel(clone.frames[frame_idx])
-    if cel then
-        img:drawImage(cel.image, cel.position)
-    end
-    return img
-end
-"""
-
-
-async def render_onion_skin(filename: str = "", *, frame_index: int, output_filename: str, before: int = 1, after: int = 1, scale: int = 4, ghost_opacity: int = 100) -> str:
+async def render_onion_skin(filename: str = "", *, frame_index: FrameIndex, output_filename: str, before: NonnegativeInt = 1, after: NonnegativeInt = 1, scale: int = 4, ghost_opacity: Byte = 100) -> ToolOutput[ExportReceipt]:
     """Render a frame with neighboring frames as translucent onion-skin ghosts.
 
     Produces a PNG of the given frame composited over ghosted copies of
@@ -96,7 +42,7 @@ async def render_onion_skin(filename: str = "", *, frame_index: int, output_file
 
     safe_out = lua_escape(os.path.abspath(output_filename).replace("\\", "/"))
     script = f"""
-    {_COMPOSE_FRAME}
+    {COMPOSE_FRAME}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
@@ -145,12 +91,12 @@ async def render_onion_skin(filename: str = "", *, frame_index: int, output_file
 
     await AsepriteCommand.execute_lua_script_checked(script, filename)
     return (
-        f"Onion-skin render of frame {frame_index} "
-        f"(-{before}/+{after} ghosts) saved to {output_filename} at {scale}x"
+        ToolOutput(summary=f"Onion-skin render of frame {frame_index} "
+        f"(-{before}/+{after} ghosts) saved to {output_filename} at {scale}x", data=ExportReceipt(files=[output_filename]))
     )
 
 
-async def compare_frames(filename: str = "", *, frame_a: int, frame_b: int) -> str:
+async def compare_frames(filename: str = "", *, frame_a: FrameIndex, frame_b: FrameIndex) -> ToolOutput[FrameDifference]:
     """Compare two frames and report how much they differ.
 
     Composites the *visible* layers (non-destructively) and diffs the two
@@ -170,7 +116,7 @@ async def compare_frames(filename: str = "", *, frame_a: int, frame_b: int) -> s
     filename = prepare_filename(filename)
 
     script = f"""
-    {_COMPOSE_FRAME}
+    {COMPOSE_FRAME}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
@@ -237,11 +183,11 @@ async def compare_frames(filename: str = "", *, frame_a: int, frame_b: int) -> s
                     "width": max_x - min_x + 1,
                     "height": max_y - min_y + 1,
                 }
-            return json.dumps(result)
+            return ToolOutput(summary='Compare frames completed', data=result)
     raise ToolError("No diff data returned")
 
 
-async def get_color_stats(filename: str = "", frame_index: int = 1, top: int = 16) -> str:
+async def get_color_stats(filename: str = "", frame_index: FrameIndex = 1, top: PositiveInt = 16) -> ToolOutput[ColorStats]:
     """Report the colors used in a frame and how often each appears.
 
     Composites the *visible* layers (non-destructively) and histograms the
@@ -263,7 +209,7 @@ async def get_color_stats(filename: str = "", frame_index: int = 1, top: int = 1
         raise ToolError("top must be >= 1")
 
     script = f"""
-    {_COMPOSE_FRAME}
+    {COMPOSE_FRAME}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
@@ -312,9 +258,4 @@ async def get_color_stats(filename: str = "", frame_index: int = 1, top: int = 1
             unique = int(line[len("UNIQUE:"):])
 
     colors.sort(key=lambda c: c["count"], reverse=True)
-    return json.dumps({
-        "frame": frame_index,
-        "unique_colors": unique,
-        "opaque_pixels": opaque,
-        "top_colors": colors[:top],
-    })
+    return ToolOutput(summary='Get color stats completed', data={'frame': frame_index, 'unique_colors': unique, 'opaque_pixels': opaque, 'top_colors': colors[:top]})

@@ -1,6 +1,5 @@
 """Real sessions serialize edits, recover from cancellation and release processes."""
 import asyncio
-import json
 import os
 from pathlib import Path
 import queue
@@ -65,9 +64,9 @@ def test_proxy_edit_shares_serialization_cancellation_and_cleanup(tmp_path, bitm
             else:
                 assert receive(2)["isError"] is False
             assert receive(3)["isError"] is False
-            pixels = json.loads(call(send, receive, "get_pixels_rect", {
+            pixels = call(send, receive, "get_pixels_rect", {
                 "layer_name": "ink", "frame_index": 1, "x": 0, "y": 0, "width": 2, "height": 1,
-            })["content"][0]["text"])
+            })["structuredContent"]["data"]
             assert pixels[0] == {"x": 0, "y": 0, "r": 0, "g": 255, "b": 0, "a": 255, "hex": "#00ff00"}
             assert pixels[1]["a"] == (255 if mode == "serial" else 0)
             assert not call(send, receive, "call_tool", {"name": "draw_text", "arguments": arguments})["isError"]
@@ -132,7 +131,7 @@ def test_concurrent_calls_preserve_both_edits(tmp_path):
         }}, 4)
         result = receive(4)
         assert result["isError"] is False
-        pixels = json.loads(result["content"][0]["text"])
+        pixels = result["structuredContent"]["data"]
         assert [(p["r"], p["g"], p["b"], p["a"]) for p in pixels] == [(255, 0, 0, 255), (0, 255, 0, 255)]
 
 

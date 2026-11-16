@@ -1,6 +1,8 @@
 """Publish standard Lua edits only after a complete native project save."""
 
+import json
 import os
+from dataclasses import dataclass
 from pathlib import Path
 import struct
 import tempfile
@@ -8,10 +10,34 @@ import tempfile
 from mcp.server.mcpserver.exceptions import ToolError
 
 from .commands import AsepriteCommand, lua_escape
+from .contracts import ToolOutput
+from .results import EditReceipt
 
 NATIVE_EXTENSIONS = {".ase", ".aseprite"}
 ASEPRITE_MAGIC = 0xA5E0
 UNCHANGED_MARKER = "PROJECT_UNCHANGED"
+
+
+@dataclass
+class EditExecution:
+    stdout: str
+    layer_paths: list[list[str]]
+
+
+def edit_output(summary: str, filename: str, execution: EditExecution | None = None, frame: int | None = None) -> ToolOutput[EditReceipt]:
+    return ToolOutput(summary=summary, data=EditReceipt(
+        filename=filename, layer_paths=execution.layer_paths if execution else [], frame=frame,
+    ))
+
+
+def _edit_execution(output: str) -> EditExecution:
+    paths, lines = [], []
+    for line in output.splitlines():
+        if line.startswith("EDIT_TARGETS:"):
+            paths.extend(json.loads(line.removeprefix("EDIT_TARGETS:")))
+        elif line != UNCHANGED_MARKER:
+            lines.append(line)
+    return EditExecution("\n".join(lines), paths)
 
 
 def native_project_path(filename: str) -> str:
@@ -33,7 +59,7 @@ def validate_native_project(filename: str) -> None:
         raise ToolError("Aseprite saved an invalid native project")
 
 
-async def execute_edit_script(script: str, filename: str | None = None, *, output_filename: str | None = None) -> str:
+async def execute_edit_script(script: str, filename: str | None = None, *, output_filename: str | None = None) -> EditExecution:
     """Run Lua using save_project(sprite), then replace its exact native target.
 
     filename opens an existing source. output_filename selects a separate
@@ -45,18 +71,20 @@ async def execute_edit_script(script: str, filename: str | None = None, *, outpu
         with tempfile.TemporaryDirectory(prefix=".aseprite-edit-", dir=Path(destination).parent) as staging:
             staged = str(Path(staging) / Path(destination).name)
             safe_path = lua_escape(staged.replace("\\", "/"))
-            prelude = f'''local function save_project(sprite)
+            prelude = f'''_aseprite_edit_targets = {{}}
+            local function save_project(sprite)
                 sprite:saveAs("{safe_path}")
+                print("EDIT_TARGETS:" .. json.encode(_aseprite_edit_targets))
             end
             '''
             output = await AsepriteCommand.execute_lua_script_checked(prelude + script, filename)
             lines = output.splitlines()
             if UNCHANGED_MARKER in lines:
-                return "\n".join(line for line in lines if line != UNCHANGED_MARKER)
+                return _edit_execution(output)
             if not os.path.isfile(staged):
                 raise ToolError("Aseprite exited successfully but saved no project")
             validate_native_project(staged)
             os.replace(staged, destination)
-            return output
+            return _edit_execution(output)
     except OSError as exc:
         raise ToolError(f"Could not save project '{destination}': {exc}") from exc

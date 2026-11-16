@@ -73,6 +73,8 @@ ASERITE_MCP_WORKSPACE = "/absolute/path/to/art-project"
 
 连接后直接调用核心工具；扩展通过 `search_tools` 读取完整 schema，再使用 `call_tool(name=目标名称, arguments=参数对象)`。已知名称时可直接代理调用。搜索结果是普通工具输出，各客户端均使用标准 MCP `tools/list`／`tools/call`。客户端针对代理入口配置工具策略，逐目标独立策略由同一入口承载。
 
+成功结果统一消费 `structuredContent.data`；text content 是相同 `{summary,data}` 对象的 JSON。搜索覆盖核心与扩展，每条定义的 `invocation` 指明 direct 或 call_tool，同时提供输入/输出 schema 与已校验示例。更新服务后重启 stdio 会话并重新读取 schema。
+
 ## 环境变量与源码运行
 
 | 变量 | 默认值 | 用途 |
@@ -101,6 +103,7 @@ git diff --check
 |---|---|
 | MCP 发现、绘制、回读、文字代理、JE 交付与失败恢复 | `tests/test_mcp_workflow.py` |
 | 明确编辑目标、嵌套组、RGBA 回灌、区域编辑、复制与提交保全 | `tests/test_editing_workflow.py` |
+| 类型化完整目录、精确路径、quality 修复、批量单次提交及同源审阅 | `tests/test_toolchain_workflow.py` |
 | 可见合成、隐藏层和组、帧差与审阅图 | `tests/test_visual_workflow.py` |
 | PNG／GIF、JE 时序、产物校验与发布恢复 | `tests/test_delivery_workflow.py` |
 | 并发、取消、断开与客户端突然退出 | `tests/test_lifecycle.py` |
@@ -115,7 +118,7 @@ uv run --locked python -B -m pytest -p no:cacheprovider tests/maintenance/checks
 
 扩展链路验证 tilemap 的绘制、放置和渲染，slice 元数据往返，原生颜色处理与调色板读取，以及图层和 tag 精灵表交付。维护校验验证参考生成、接口变化检测和启动指令资源；这些文件不参与默认测试收集。
 
-参考生成器只解析目录字面量和源码 AST，无需 Git 元数据、第三方依赖或 Aseprite。归属、签名及 docstring 变化会使 `--check` 报过期。IDE 分析使用项目 `.venv`；包版本相关提示结合该解释器中的实际导入与协议测试判断。
+参考生成器只解析目录字面量和源码 AST，无需 Git 元数据、第三方依赖或 Aseprite；`python -S` 可运行。目录、签名、docstring、示例及共享类型变化会使 `--check` 报过期。IDE 分析使用项目 `.venv`；包版本相关提示结合该解释器中的实际导入与协议测试判断。
 
 客户端产品验收时，记录客户端版本，依次检查核心调用、搜索完整 schema、代理调用、工具错误的显示；协议自动测试独立覆盖服务端契约。
 
@@ -131,4 +134,6 @@ call_tool {"name":"list_convolution_matrices","arguments":{}}
 call_tool {"name":"measure_text","arguments":{"text":"A","font":"missing-for-client-smoke"}}
 ```
 
-核心调用返回调色板预设；搜索结果包含完整 inputSchema；代理返回卷积矩阵名称；最后一次调用应显示包含 measure_text 上下文的工具失败。调用前后公开列表保持一致，扩展目标通过 call_tool 执行。
+成功项从 structuredContent.data 读取：核心返回调色板预设，搜索包含 inputSchema/outputSchema/examples/invocation，代理返回卷积矩阵名称；最后一次调用显示包含 measure_text 上下文的工具失败。调用前后公开列表保持一致。
+
+生产闭环使用 `create_canvas`／`add_group`／`add_layer` → `draw_sprite_maps` → `review_frame` 并打开返回 PNG → `copy_frame` 与局部修改 → 设置时长/tag → `export_minecraft_texture` 并打开交付预览。所有单 cel 目标显式指定 layer/frame；复用元数据的 path 数组定位嵌套层。

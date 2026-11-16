@@ -1,6 +1,7 @@
 """Visible readback, frame analysis and review images agree with saved pixels."""
 
-import json
+from support import payload
+
 
 from PIL import Image
 
@@ -27,16 +28,16 @@ def test_visible_readback_analysis_and_review_images(new_sprite, tmp_path):
         if visible:
             expected.paste((0, 255, 0, 255), (4, 4, 8, 8))
         assert frame_image(filename, 1, tmp_path).tobytes() == expected.tobytes()
-        pixels = json.loads(run(pixel_read.get_composite_rect(
+        pixels = payload(run(pixel_read.get_composite_rect(
             filename=filename, frame_index=1, x=0, y=0, width=32, height=32,
         )))
         assert bytes(channel for p in pixels for channel in (p["r"], p["g"], p["b"], p["a"])) == expected.tobytes()
 
-    hidden = json.loads(run(pixel_read.get_pixels_rect(
+    hidden = payload(run(pixel_read.get_pixels_rect(
         filename=filename, layer_name="bg", frame_index=1, x=24, y=4, width=1, height=1,
     )))[0]
     assert (hidden["r"], hidden["g"], hidden["b"], hidden["a"]) == (255, 0, 0, 255)
-    stats = json.loads(run(analysis.get_color_stats(filename=filename, frame_index=1)))
+    stats = payload(run(analysis.get_color_stats(filename=filename, frame_index=1)))
     assert stats["unique_colors"] == 1
     assert stats["opaque_pixels"] == 512
     assert stats["top_colors"] == [{"color": "#0000FF", "count": 512}]
@@ -44,12 +45,12 @@ def test_visible_readback_analysis_and_review_images(new_sprite, tmp_path):
     run(animation.add_frames(filename=filename, count=1, duration_ms=100))
     run(drawing.draw_pixels_at(filename=filename, layer_name="bg", frame_index=2,
                                pixels=[{"x": 24, "y": 4, "color": "#00ff00"}]))
-    identical = json.loads(run(analysis.compare_frames(filename=filename, frame_a=1, frame_b=2)))
+    identical = payload(run(analysis.compare_frames(filename=filename, frame_a=1, frame_b=2)))
     assert identical["changed_pixels"] == 0
     assert "changed_bounds" not in identical
     run(drawing.draw_pixels_at(filename=filename, layer_name="fg", frame_index=2,
                                pixels=[{"x": 4, "y": 4, "color": "#00ff00"}]))
-    changed = json.loads(run(analysis.compare_frames(filename=filename, frame_a=1, frame_b=2)))
+    changed = payload(run(analysis.compare_frames(filename=filename, frame_a=1, frame_b=2)))
     assert changed["changed_pixels"] == 1
     assert changed["changed_bounds"] == {"x": 4, "y": 4, "width": 1, "height": 1}
 

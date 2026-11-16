@@ -4,20 +4,21 @@ Aseprite exposes no text API to Lua, so glyphs are rasterised here and the
 result is blitted into the sprite as an image.
 """
 
-from mcp.server.mcpserver.exceptions import ToolError
-from ..core.editing import execute_edit_script
-
 import os
 import tempfile
 from typing import Optional
 
 from PIL import Image
+from mcp.server.mcpserver.exceptions import ToolError
 
-from ..core.commands import lua_escape
-from ..core.state import prepare_filename
-from ..core.colors import parse_hex_color
-from ..core.lua import EDIT_TARGET, NORMALIZE_CEL
 from ..core import fonts as fontlib
+from ..core.colors import parse_hex_color
+from ..core.commands import lua_escape
+from ..core.contracts import FrameIndex, LayerRef, ToolOutput
+from ..core.editing import execute_edit_script
+from ..core.lua import EDIT_TARGET, NORMALIZE_CEL, lua_layer_ref
+from ..core.results import FontDescription, TextMetrics, TextReceipt
+from ..core.state import prepare_filename
 
 _ANCHORS = (
     "topleft", "top", "topright",
@@ -51,7 +52,7 @@ def _text_origin(anchor: str, x: int, y: int, metrics: dict) -> tuple[int, int]:
     return origin_x, y - metrics["top"]
 
 
-async def list_text_fonts() -> str:
+async def list_text_fonts() -> ToolOutput[list[FontDescription]]:
     """List fonts that draw_text can use.
 
     Covers bitmap sprite-sheet fonts and .ttf/.otf files installed under
@@ -63,19 +64,7 @@ async def list_text_fonts() -> str:
         found = fontlib.available_fonts()
     except Exception as exc:                                # pragma: no cover
         raise ToolError(f"ERROR: {exc}")
-    if not found:
-        return "No fonts found. Drop a .ttf into ~/.aseprite-mcp/fonts/."
-
-    user = [f for f in found if f["source"] == "user"]
-    system = [f for f in found if f["source"] == "system"]
-    lines = []
-    if user:
-        lines.append("User fonts (~/.aseprite-mcp/fonts):")
-        lines += [f"  {f['name']}  [{f['kind']}]" for f in user]
-    if system:
-        lines.append(f"System fonts ({len(system)}, all truetype):")
-        lines += [f"  {f['name']}" for f in system]
-    return "\n".join(lines)
+    return ToolOutput(summary='List text fonts completed', data=found)
 
 
 async def measure_text(
@@ -85,7 +74,7 @@ async def measure_text(
     letter_spacing: int = 0,
     bold: int = 0,
     antialias: bool = False,
-) -> str:
+) -> ToolOutput[TextMetrics]:
     """Measure text without drawing it.
 
     Use this to size a panel or centre a label in one shot instead of
@@ -111,17 +100,17 @@ async def measure_text(
     except Exception as exc:
         raise ToolError(f"ERROR: {exc}")
     return (
-        f"width={m['width']} height={m['height']} advance_width={m['advance_width']} "
-        f"above_baseline={-m['top']} below_baseline={m['bottom'] + 1} "
-        f"left_bearing={m['left']}"
+        ToolOutput(summary='Measure text completed', data={'width':m['width'],'height':m['height'],'advance_width':m['advance_width'],'above_baseline':-m['top'],'below_baseline':m['bottom']+1,'left_bearing':m['left']})
     )
 
 
-async def draw_text(filename: str='', *, text: str, x: int, y: int, font: str, size: int=1, color: str='#FFFFFF', layer_name: str, frame_index: int, anchor: str='topleft', letter_spacing: int=0, bold: int=0, outline_color: Optional[str]=None, outline_width: int=1, outline_diagonal: bool=True, shadow_color: Optional[str]=None, shadow_dx: int=1, shadow_dy: int=1, antialias: bool=False, create_if_missing: bool=True) -> str:
+async def draw_text(filename: str='', *, text: str, x: int, y: int, font: str, size: int=1, color: str='#FFFFFF', layer_name: LayerRef, frame_index: FrameIndex, anchor: str='topleft', letter_spacing: int=0, bold: int=0, outline_color: Optional[str]=None, outline_width: int=1, outline_diagonal: bool=True, shadow_color: Optional[str]=None, shadow_dx: int=1, shadow_dy: int=1, antialias: bool=False, create_if_missing: bool=True) -> ToolOutput[TextReceipt]:
     """Draw text onto a sprite.
 
     Glyphs are rasterised outside Aseprite and composited in, because the
-    Lua API has no text drawing of its own.
+    Lua API has no text drawing of its own. Normal alpha composition preserves
+    existing pixels in transparent glyph holes. stamp_bounds describes the
+    unclipped sprite-global stamp, including outline and shadow; the canvas clips it.
 
     Args:
         filename: Aseprite file to modify (optional; defaults to the session's active file)
@@ -175,7 +164,8 @@ async def draw_text(filename: str='', *, text: str, x: int, y: int, font: str, s
     except Exception as exc:
         raise ToolError(f"ERROR: {exc}")
     if not ink:
-        return "OK: nothing to draw (text has no visible glyphs)"
+        return ToolOutput(summary="Nothing to draw (text has no visible glyphs)",
+                          data=TextReceipt(filename=filename, frame=frame_index))
 
     # Build the layers of the stamp, back to front.
     outline = set()
@@ -231,7 +221,7 @@ async def draw_text(filename: str='', *, text: str, x: int, y: int, font: str, s
     local stamp = Image{{ fromFile = "{safe_png}" }}
     if not stamp then print("ERROR:Could not load rendered text") return end
 
-    local target = require_layer(spr, "{lua_escape(layer_name)}", {str(create_if_missing).lower()})
+    local target = require_layer(spr, {lua_layer_ref(layer_name)}, {str(create_if_missing).lower()})
     app.transaction(function()
         require_cel(spr, target, idx, {str(create_if_missing).lower()})
         local cel = normalize_cel(spr, target, spr.frames[idx], false)
@@ -243,12 +233,14 @@ async def draw_text(filename: str='', *, text: str, x: int, y: int, font: str, s
     """
 
     try:
-        await execute_edit_script(script, filename)
+        execution = await execute_edit_script(script, filename)
     finally:
         try:
             os.unlink(tmp.name)
         except OSError:
             pass
 
-    return (f"Drew '{text}' at ({blit_x}, {blit_y}), "
-            f"text box {metrics['width']}x{metrics['height']}, stamp {w}x{h}")
+    return ToolOutput(summary=f"Drew '{text}' with normal alpha composition", data=TextReceipt(
+        filename=filename, layer_paths=execution.layer_paths, frame=frame_index,
+        stamp_bounds={"x": blit_x, "y": blit_y, "width": w, "height": h},
+    ))
