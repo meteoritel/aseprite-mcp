@@ -1,419 +1,56 @@
-# Aseprite MCP Tools
+# Aseprite MCP
 
-A Python MCP server that gives AI assistants full control over [Aseprite](https://www.aseprite.org/) for creating pixel art and animated sprites.
+通过 MCP 让 AI 助手调用本机 [Aseprite](https://www.aseprite.org/)，创建、编辑和导出像素画、动画及游戏纹理。作品保存在 `.aseprite`／`.ase` 原生工程中，可继续用 Aseprite 编辑。
 
-Tools cover canvas, drawing, sprite maps, layers, animation, palettes, effects, slices, tilemaps, exports, native filters, visual-feedback/analysis tools, and a raw Lua escape hatch. The tool set is designed so an LLM has everything it needs to produce *good* pixel art, not just primitives: compact character-grid sprite maps, shading ramps with hue shifting, ordered dithering, outlines, retro palette presets with quantization, onion-skin renders, frame diffing for animation work, and composite reads that match what the player actually sees.
+## 可以做什么
 
-## Tool discovery and calls
+- **绘制与编辑**：绘制像素、图形和字符网格，管理图层、调色板与特效，导入图片。
+- **制作动画**：编辑帧和图层内容，设置帧时长、播放区间与补间。
+- **读取与审阅**：回读像素，检查可见合成、颜色统计和帧间差异，生成放大预览。
+- **导出交付**：输出 PNG、GIF、精灵表，以及 Minecraft Java Edition 纹理和 `.png.mcmeta`。
+- **文字与瓦片**：绘制文字，编辑 tilemap 和 slice。
 
-Every client uses the same stdio server. `tools/list` exposes core texture editing,
-inspection, palette, frame/cel/tag and common export tools, plus `search_tools` and
-`call_tool`. The public list stays fixed throughout the connection.
+核心工具可以直接调用；文字、tilemap、slice 等扩展通过 `search_tools` 查找，再由 `call_tool` 执行。完整工具与参数见[工具参考](docs/reference/tools.md)。
 
-Text, tilemaps, slices, motion tweening, extra filters, scene/quality tools, local
-HTTP preview, spritesheet and per-layer export are extensions. Discover their
-complete schemas, then execute them through the visible proxy:
+## 安装与配置
 
-```json
-{"name":"search_tools","arguments":{"query":"draw_text","category":"text"}}
-{"name":"call_tool","arguments":{"name":"draw_text","arguments":{"text":"A","font":"/path/to/font","x":0,"y":0,"layer_name":"label","frame_index":1}}}
+需要 Python 3.13+、[uv](https://docs.astral.sh/uv/) 和本机安装的 Aseprite。下载或克隆本项目后，在项目根目录安装依赖：
+
+```sh
+uv sync --locked
 ```
 
-These are ordinary MCP `tools/call` requests. Search returns readable JSON text,
-including the full `inputSchema`; the client uses that schema to fill `arguments`.
-A known extension can be called without searching first. Empty queries browse
-categories; follow `next_offset` to paginate. Core tools are called directly.
-See the [tool reference](docs/reference/tools.md) for each tool's invocation mode.
+项目从源码目录运行，请保留根目录的 [SKILL.md](SKILL.md)，服务会读取其中的运行指令。
 
-Client policies apply to the `call_tool` entry; extension targets share that
-policy. `run_lua_script` remains directly available for local Lua scripts.
-
-## Example: a swordsman, drawn and animated by Claude
-
-<table>
-  <tr>
-    <td align="center"><img src="examples/swordsman/swordsman.png" width="256" alt="Pixel-art swordsman drawn by Claude Fable 5"></td>
-    <td align="center"><img src="examples/swordsman/swordsman_slash.gif" width="256" alt="4-frame sword slash animation by Claude Fable 5"></td>
-  </tr>
-  <tr>
-    <td align="center"><sub><b>Task 1</b> — <em>"Draw me a pixel art of a swordsman."</em><br>32×32 still, exported at 10×.</sub></td>
-    <td align="center"><sub><b>Task 2</b> — <em>"…a sword slash attack sequence, from windup to follow-through."</em><br>4-frame animation, exported with <code>export_tag</code>.</sub></td>
-  </tr>
-  <tr>
-    <td align="center" colspan="2"><img src="examples/swordsman/swordsman_slash_sheet.png" width="520" alt="Slash sequence spritesheet: windup, extension, swing, follow-through"></td>
-  </tr>
-  <tr>
-    <td align="center" colspan="2"><sub>The same slash as a spritesheet (<code>export_spritesheet</code>): windup → extension → swing → follow-through.</sub></td>
-  </tr>
-</table>
-
-Both were created end-to-end by Claude Fable 5 through this server's MCP tools — drawing, checking its own work with scaled `export_frame` previews and `render_onion_skin`, then exporting. The tasks recreate the benchmark from [Draw Me a Swordsman](https://ljvmiranda921.github.io/notebook/2025/07/20/draw-me-a-swordsman/) by Lj Miranda, whose findings inspired this server's expanded toolset.
-
-## Tool Categories
-
-| Category | Description |
-|----------|-------------|
-| [Canvas](#canvas) | Create native projects and manage layers/frames |
-| [Drawing](#drawing) | Pixels, lines, rectangles, circles, ellipses, polygons, paths, fills, gradients |
-| [Sprite Maps](#sprite-maps) | Author or read back a whole region as a compact character grid |
-| [Text](#text) | Draw and measure text with bitmap sprite-sheet or TrueType fonts |
-| [Layers](#layers) | Delete, rename, duplicate, reorder, blend modes, merge, flatten |
-| [Selection & Regions](#selection--regions) | Move, copy, and erase rectangular regions or colors |
-| [Effects](#effects) | Outlines, color replacement, HSL adjustment, ordered dithering |
-| [Animation](#animation) | Frames, cels, tags, tweening with easing, propagation |
-| [Palette](#palette) | Get/set palettes, retro presets, color ramps, quantization, color modes |
-| [Transform](#transform) | Flip, rotate, resize, crop |
-| [Slices](#slices) | Named regions, 9-patch centers, pivot points |
-| [Tilemap](#tilemap) | Tilemap layers, tileset editing, tile placement |
-| [Export & Import](#export--import) | PNG, GIF, sprite sheets, per-layer/per-tag export, image import |
-| [Inspection](#inspection) | Read pixels and sprite metadata |
-| [Analysis & Visual Feedback](#analysis--visual-feedback) | Onion-skin renders, frame diffing, color statistics |
-| [Quality](#quality) | Validate and sanitize animation consistency |
-| [Scene](#scene) | Copy layers between sprite files |
-| [Preview](#preview) | Local HTTP preview server |
-| [Scripting](#scripting) | Raw Lua escape hatch for anything not covered above |
-
-### Canvas
-
-| Tool | Description |
-|------|-------------|
-| `create_canvas` | Create a new sprite with the given dimensions |
-| `add_layer` | Add a new layer, optionally inside a named group |
-| `add_group` | Add a new (optionally nested) group layer |
-| `add_frame` | Append a new frame |
-| `set_frame_duration` | Set one frame's duration in ms |
-
-### Drawing
-
-Every cel edit requires explicit `layer_name` and `frame_index`; drawing tools target that layer/frame and can create the cel on demand. Coordinates are sprite-global.
-
-| Tool | Description |
-|------|-------------|
-| `draw_pixels_at` | Plot pixels on a specific layer/frame |
-| `draw_line_at` | Lines with thickness |
-| `draw_rectangle_at` | Outlined or filled rectangles |
-| `draw_circle_at` | Outlined or filled circles |
-| `draw_ellipse_at` | Outlined or filled ellipses with separate x/y radii |
-| `draw_polygon` | Outlined or filled polygons from a point list |
-| `draw_path` | Polyline through a point list with thickness |
-| `fill_area_at` | Paint-bucket flood fill |
-| `apply_gradient_rect` | Smooth linear gradient fill in a rectangle |
-
-### Sprite Maps
-
-Drawing a small sprite one `{x, y, color}` object at a time is expensive and easy to get wrong: a 16×16 canvas is 256 objects, and every coordinate must be right on the first pass because the model cannot see the result mid-call. A **sprite map** replaces that with a character grid plus a palette — the rows carry the coordinate grid, so the same sprite becomes 16 short strings.
-
-```python
-draw_sprite_map(
-    layer_name="hero", frame_index=1,
-    rows=["..1111..",
-          ".122221.",
-          "12233221",
-          ".122221."],
-    palette={"1": "#3B2A1E", "2": "#8B5A2B", "3": "#F2C48D"},
-)
-```
-
-`.` (or whatever `transparent` is set to) means "no pixel here" and is skipped, so existing art shows through; pass `erase_transparent=true` to clear those cells instead. `mirror_x` / `mirror_y` additionally draw each cell at its reflection, so a symmetric sprite is authored once. It creates the target layer and cel on demand; frames must already exist.
-
-`get_sprite_map` defaults to exact RGB cel reading (`max_colors=0`, `alpha_threshold=1`) and reports `lossy` when filtering or quantization changes pixels. It is the inverse: it reads a rectangle back as the same `rows` / `palette` / `transparent` triple, so the result can be edited and passed straight back in. Against `get_pixels_rect`'s per-pixel JSON a 16×16 region goes from ~256 objects to 16 strings — and unlike judging an exported PNG by eye, the hex values are exact. Feed a previous result's `palette` back in to keep characters stable between reads, which makes two maps directly comparable.
-
-| Tool | Description |
-|------|-------------|
-| `draw_sprite_map` | Draw a region from a character grid and palette, with optional mirroring and transparent-cell erasing |
-| `get_sprite_map` | Read a region back as a character grid, reusing a supplied palette for stable characters |
-
-Reach for the grid form when the shape is small enough to hold in view (roughly ≤ 32×32) or when exact readback matters; `draw_pixels_at` / `get_pixels_rect` remain the tools for scattered individual pixels.
-
-### Text
-
-Aseprite's Lua API has no text drawing, so glyphs are rasterised on the server and composited into the sprite. Two font backends are supported: **bitmap** sprite-sheet fonts (the right choice for pixel art — glyphs are already pixels and `size` scales them by whole numbers) and **TrueType** `.ttf`/`.otf` files, rendered without antialiasing unless you ask for it.
-
-Fonts are discovered in `~/.aseprite-mcp/fonts`: a bitmap font is a directory containing `font.json` plus its sheet PNGs; a TrueType font is just the font file. Installed system fonts are listed too. `font` also accepts a direct path.
-
-| Tool | Description |
-|------|-------------|
-| `list_text_fonts` | List the bitmap and TrueType fonts available to `draw_text` |
-| `measure_text` | Width, height, advance and baseline extents — size a panel or centre a label without redrawing to find out |
-| `draw_text` | Draw text with anchors, faux bold, outline, drop shadow and letter spacing |
-
-Call `measure_text` first when the layout depends on the text: it returns the same metrics `draw_text` will use, so a label can be centred or a plate sized in one pass.
-
-```python
-search_tools(category="text")
-call_tool(name="measure_text", arguments={"text": "MODERATOR", "font": "minecraft", "size": 2, "bold": 1})
-call_tool(name="draw_text", arguments={
-    "filename": "badge.aseprite", "text": "MODERATOR", "x": 64, "y": 17,
-    "font": "minecraft", "size": 2, "anchor": "baseline", "bold": 1,
-    "color": "#FFFFFF", "shadow_color": "#14237A",
-    "layer_name": "label", "frame_index": 1
-})
-```
-
-Anchors are `topleft`/`top`/`topright`, `left`/`center`/`right`, `bottomleft`/`bottom`/`bottomright`, plus `baselineleft`/`baseline`/`baselineright` for pinning several labels to one baseline. Outline and shadow grow the stamp but never move the glyphs.
-
-#### font.json
-
-```json
-{
-  "name": "my-font",
-  "letter_gap": 1,
-  "space_width": 3,
-  "sheets": [{
-    "file": "sheet.png",
-    "cell_w": 8, "cell_h": 8,
-    "ascent": 7,
-    "chars": [" !\"#$%&'()*+,-./", "0123456789:;<=>?"]
-  }],
-  "overrides": {
-    "86": {"ascent": 7, "rows": ["#...#", "#...#", ".#.#.", "..#.."]}
-  }
-}
-```
-
-Each sheet carries its own `ascent`, so sheets with different cell sizes still share a baseline — that is how a compact ASCII sheet and a taller accented sheet combine into one run. `origin` shifts the cell grid when the sheet has a margin, `ink_rule: "dark"` reads sheets that use an opaque white background to delimit variable-width glyph boxes, and `advance: "box"` takes the advance from the box rather than the ink. `overrides` replaces individual glyphs with hand-drawn rows, which is useful when a sheet ships a glyph that is off-centre or too tall to sit on the line.
-
-### Layers
-
-| Tool | Description |
-|------|-------------|
-| `delete_layer` | Delete a layer by name |
-| `rename_layer` | Rename a layer |
-| `duplicate_layer` | Duplicate a layer with all cels, opacity, and blend mode, optionally into a group |
-| `reorder_layer` | Move a layer to a position in the stack |
-| `set_layer_blend_mode` | Set blend mode (multiply, screen, overlay, ... supported modes) |
-| `merge_layer_down` | Merge a layer into the one below it |
-| `flatten_sprite` | Flatten all layers into one |
-
-### Selection & Regions
-
-| Tool | Description |
-|------|-------------|
-| `move_region` | Cut a rectangle of pixels and paste it elsewhere |
-| `copy_region` | Copy a rectangle to another position, layer, or frame |
-| `erase_region` | Make a rectangle transparent |
-| `erase_color` | Magic-eraser: make all pixels of a color transparent (with tolerance) |
-
-### Effects
-
-The pixel-art toolbox: clean outlines, palette-respecting blends, and shading variants.
-
-| Tool | Description |
-|------|-------------|
-| `outline_cel` | Add a 1px outline around all opaque pixels |
-| `replace_color` | Replace one color with another (with tolerance), preserving alpha |
-| `adjust_hsl` | Shift hue/saturation/lightness of a cel — palette swaps, night scenes, shadows |
-| `apply_dither_gradient` | Two-color gradient using Bayer 4×4 ordered dithering |
-| `apply_dither_pattern` | Uniform dithered mix of two colors at a given density |
-
-### Animation
-
-| Tool | Description |
-|------|-------------|
-| `add_frames` | Append N frames with optional duration |
-| `delete_frame` | Delete a frame |
-| `set_frame_duration_all` | Set every frame's duration |
-| `duplicate_frame_range` | Duplicate a frame range N times |
-| `copy_frame` / `propagate_frame_to_range` | Copy all cels of a frame to other frames |
-| `create_cel` / `clear_cel` / `copy_cel` | Cel lifecycle on a layer/frame |
-| `propagate_cels` | Copy selected layers' cels across a frame range |
-| `set_cel_position` | Place a cel at x,y |
-| `set_cel_opacity` | Set a single cel's opacity |
-| `offset_cel_positions` | Shift cels by a delta across frames |
-| `tween_cel_positions` | Linear position tween across frames |
-| `tween_cel_positions_eased` | Position tween with easing (ease_in/out, smoothstep) |
-| `tween_cel_opacity_eased` | Opacity tween with easing |
-| `tween_cel_scale_eased` | Scale tween with easing and anchor |
-| `oscillate_cel_positions` | Sine-wave motion (bobbing, breathing, hovering) |
-| `set_tag` / `delete_tag` | Animation tags with direction (forward/reverse/pingpong) |
-| `set_layer_visibility` / `set_layer_opacity` | Layer-level visibility and opacity |
-| `get_sprite_info` | Sprite metadata: size, layers, frames, durations, tags |
-
-### Palette
-
-| Tool | Description |
-|------|-------------|
-| `get_palette` | Read the palette as hex colors |
-| `set_palette` | Set the palette from a list of hex colors |
-| `list_palette_presets` | List built-in retro palettes |
-| `apply_palette_preset` | Apply a preset: `gameboy`, `pico8`, `c64`, `cga`, `dawnbringer16`, `dawnbringer32`, `grayscale_4`, `monochrome` |
-| `generate_color_ramp` | Build a dark→light shading ramp with hue shifting from a base color |
-| `quantize_to_palette` | Snap every pixel to the nearest palette color |
-| `remap_colors_in_cel_range` | Remap specific colors across a frame range |
-| `set_color_mode` | Convert between RGB, grayscale, and indexed |
-
-### Transform
-
-| Tool | Description |
-|------|-------------|
-| `flip_layer` | Flip a cel horizontally or vertically |
-| `rotate_layer` | Rotate a cel 90/180/270° |
-| `resize_canvas` | Scale the sprite to new dimensions |
-| `crop_canvas` | Crop to a rectangle |
-
-### Slices
-
-| Tool | Description |
-|------|-------------|
-| `create_slice` | Create a named rectangular region |
-| `set_slice_center` | Set the 9-patch stretchable center |
-| `set_slice_pivot` | Set the pivot point |
-| `list_slices` | List all slices with bounds, centers, pivots as JSON |
-| `delete_slice` | Delete a slice |
-
-### Tilemap
-
-| Tool | Description |
-|------|-------------|
-| `create_tilemap_layer` | Add a tilemap layer with its own tileset and tile grid |
-| `draw_on_tile` | Paint pixels into a tileset tile (auto-appends new tiles) |
-| `set_tiles` | Place tiles on the map by grid position |
-| `get_tile_at` | Read which tile occupies a grid cell |
-| `get_tilemap_info` | Tile size, tile count, and map dimensions as JSON |
-
-### Export & Import
-
-| Tool | Description |
-|------|-------------|
-| `export_minecraft_texture` | Java Edition original-size PNG and mcmeta, plus a session-temporary 8× nearest-neighbor review PNG |
-| `export_sprite` | Export to PNG, GIF, JPG, ... |
-| `export_frame` | Export one frame as PNG with integer upscaling — the core visual-feedback loop: draw, export at 8×, look, iterate |
-| `export_spritesheet` | Sprite sheet (horizontal/vertical/rows/columns/packed) with optional JSON metadata and per-tag filtering |
-| `export_layers` | One PNG per layer |
-| `export_tag` | Export an animation tag as GIF or PNG sequence |
-| `import_image_as_layer` | Import a PNG into a layer (references, premade parts) |
-| `copy_sprite` | Duplicate the .aseprite file |
-
-### Inspection
-
-| Tool | Description |
-|------|-------------|
-| `get_pixel_color` | Read one pixel's RGBA |
-| `get_pixels_rect` | Read a rectangle of pixels as JSON |
-| `get_sprite_info` | Sprite metadata (also listed under Animation) |
-
-### Analysis & Visual Feedback
-
-Batch-mode equivalents of what a human artist gets from the Aseprite UI.
-
-| Tool | Description |
-|------|-------------|
-| `render_onion_skin` | Render a frame over translucent ghosts of neighboring frames — check motion continuity without opening Aseprite |
-| `compare_frames` | Diff two frames: changed pixel count, percentage, bounding box |
-| `get_color_stats` | Color histogram of a frame — catches palette drift and near-duplicate colors |
-
-### Quality
-
-| Tool | Description |
-|------|-------------|
-| `ensure_layers_present` | Create missing cels for layers across a frame range |
-| `validate_scene` | Report missing layers/cels as JSON |
-| `audit_animation` | Audit frames for overlaps and out-of-range layer activity |
-| `animation_sanitize` | Normalize layer order, coverage, and overlaps |
-
-### Scene
-
-| Tool | Description |
-|------|-------------|
-| `copy_layers_between_sprites` | Copy layers by name from one .aseprite file to another |
-
-### Preview
-
-| Tool | Description |
-|------|-------------|
-| `start_preview_server` / `stop_preview_server` | Serve exported files over local HTTP |
-
-### Scripting
-
-| Tool | Description |
-|------|-------------|
-| `run_lua_script` | Execute arbitrary Aseprite Lua ([API docs](https://www.aseprite.org/api/)) in batch mode. The escape hatch when no dedicated tool fits: one script can batch many operations into a single Aseprite launch. Remember to `spr:saveAs(spr.filename)` and `print()` your results. ⚠️ Runs unrestricted code on the host — only pass scripts you trust. |
-
-## Minecraft Java Edition delivery
-
-Create and retain a `.aseprite` or `.ase` source project. `create_canvas` adds `.aseprite` when no extension is supplied and requires `overwrite=true` to replace an existing project. Every cel edit explicitly names a layer and 1-based frame.
-
-`export_minecraft_texture(output_filename="D:/art/texture.png")` delivers original-size PNG and `.png.mcmeta`. Animation frames form a vertical strip without padding; tag direction and per-frame timing become local playback indices and game ticks. Durations must be positive multiples of 50 ms. Choose an optional `frame_index` or `tag_name`, or export the full timeline.
-
-The returned JSON also names an 8× nearest-neighbor `preview_png`. Review it before the stdio session ends; session shutdown deletes it. The game files and native source remain on disk. Resource-pack manifests depend on the selected game version.
-
-## Workspace & Filenames
-
-Every tool that touches a sprite file takes an **optional** `filename`, with
-one exception: `create_canvas` **requires** `filename` as an absolute path
-and rejects relative paths, so a new canvas always lands exactly where the
-caller intends instead of inside the server's own folder.
-
-The session tracks one *active file*: the first call that names a file
-(`create_canvas`, or any explicit `filename`) anchors it, and later calls may
-omit `filename` entirely. Pass `filename` again at any time to switch files.
-
-Relative paths on other tools resolve against the
-workspace directory:
-
-1. the `ASERITE_MCP_WORKSPACE` environment variable, if set;
-2. otherwise the server's working directory.
-
-To keep generated files inside your AI project folder, set the variable
-per-project in the client config (Claude Code `.mcp.json` example):
+在支持 `mcpServers` 配置的客户端中添加以下条目，将路径替换为本机的绝对路径：
 
 ```json
 {
   "mcpServers": {
     "aseprite": {
+      "type": "stdio",
       "command": "uv",
-      "args": ["--directory", "/path/to/aseprite_mcp", "run", "--locked", "-m", "aseprite_mcp"],
-      "env": { "ASERITE_MCP_WORKSPACE": "/absolute/path/to/art-project" }
+      "args": [
+        "--directory", "YOUR_ASEPRITE_MCP_PATH",
+        "run", "--locked", "-m", "aseprite_mcp"
+      ],
+      "env": {
+        "ASEPRITE_PATH": "YOUR_ASEPRITE_PATH",
+        "ASERITE_MCP_WORKSPACE": "YOUR_WORKSPACE_PATH"
+      }
     }
   }
 }
 ```
 
-Absolute paths are always used as-is, and `..` traversal is rejected. The
-server also exposes the same rules as its MCP `instructions` (loaded from
-[SKILL.md](SKILL.md)), so capable clients show them to the model at connect
-time.
+`ASEPRITE_PATH` 指向 Aseprite 可执行文件；已加入 PATH 时可省略。`ASERITE_MCP_WORKSPACE` 指定素材工作目录，用于解析相对路径，变量名按示例保留。macOS 和 Linux 使用对应的本机绝对路径。
 
-## Recommended Workflow for LLMs
+保存配置后重新连接 MCP。Codex、Claude Code 等客户端的配置位置和格式见[客户端配置](docs/development.md#客户端配置)。如果客户端找不到 `uv`，将 `command` 改为 uv 可执行文件的绝对路径。
 
-1. **Plan the palette first**: `generate_color_ramp` for each material (skin, armor, blade), or `apply_palette_preset` for a retro look.
-2. **Build in layers**: background / body / equipment / effects, so parts can be animated and edited independently.
-3. **Draw coarse to fine**: silhouette with `draw_rectangle_at` / `draw_ellipse_at` / `fill_area_at`, then refine with `draw_pixels_at`. On a small canvas (roughly ≤ 32×32) skip the two-step and author the whole thing as a single `draw_sprite_map` grid, then read it back with `get_sprite_map` to check it.
-4. **Look at your work**: `export_frame` at 8×, inspect, fix, repeat. Use `get_color_stats` to keep the palette tight.
-5. **Shade with intent**: use palette ramps and core `replace_color`; discover extra filters with `search_tools(category="fx")` and execute them through `call_tool`.
-6. **Animate frame by frame**: copy a frame with `copy_frame`, edit its explicit layer/frame, then set tick-compatible durations and tags. Check `render_onion_skin` and `compare_frames`, and deliver with `export_minecraft_texture`. Discover motion tweening as an extension when needed.
+## 详细文档
 
-## Local Installation
-
-Requires Python 3.13+, [uv](https://docs.astral.sh/uv/) and a locally installed Aseprite.
-From a source checkout, install the locked dependencies:
-
-```text
-uv sync --locked
-```
-
-Copy `sample.env` to `.env` and set `ASEPRITE_PATH` if Aseprite is not on PATH.
-Client/process environment variables take priority over the repository-root `.env`.
-Keep the root `SKILL.md` alongside the source: it supplies the MCP runtime instructions.
-
-Start from the repository or from another directory:
-
-```text
-uv run --locked -m aseprite_mcp
-uv --directory /absolute/path/to/aseprite_mcp_2 run --locked -m aseprite_mcp
-```
-
-For client configuration examples, see [development](docs/development.md#客户端配置).
-
-## Server Lifecycle
-
-The MCP Python SDK owns the stdio transport lifecycle. When the client closes
-its input pipe, the server transport finishes and the process exits. The
-`tests/test_lifecycle.py` regression test verifies this after a client
-process is force-killed.
-
-## Developer Documentation
-
-Architecture, internals, and contribution guides live in [docs/](docs/README.md):
-the Lua bridge and stdout protocol, path/error/process conventions, one doc per
-subsystem, the full generated tool reference, and local setup and testing notes.
+- [使用流程与工程约定](SKILL.md)：创建工程、明确编辑目标、网格回灌与审阅。
+- [工具参考](docs/reference/tools.md)：工具归属、参数和调用方式。
+- [导出与纹理交付](docs/07-output.md)：图像导出、Minecraft 动画时序和审阅图。
+- [本地开发与验证](docs/development.md)：环境变量、启动方式和测试入口。
+- [开发者文档](docs/README.md)：架构、数据流和各领域的实现说明。
