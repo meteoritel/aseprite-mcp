@@ -1,3 +1,5 @@
+from mcp.server.mcpserver.exceptions import ToolError
+from ..core.editing import execute_edit_script
 import json
 from ..core.commands import AsepriteCommand, lua_escape
 from ..core.state import prepare_filename
@@ -26,13 +28,11 @@ async def create_slice(filename: str = "", *, name: str, x: int, y: int, width: 
         width: Slice width
         height: Slice height
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
     if width <= 0 or height <= 0:
-        return "Width and height must be > 0"
+        raise ToolError("Width and height must be > 0")
     if not name:
-        return "Slice name cannot be empty"
+        raise ToolError("Slice name cannot be empty")
 
     safe_name = lua_escape(name)
     script = f"""
@@ -47,14 +47,12 @@ async def create_slice(filename: str = "", *, name: str, x: int, y: int, width: 
         slice.name = "{safe_name}"
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return f"Slice '{name}' created at ({x},{y}) {width}x{height} in {filename}"
-    return f"Failed to create slice: {output}"
+    await execute_edit_script(script, filename)
+    return f"Slice '{name}' created at ({x},{y}) {width}x{height} in {filename}"
 
 
 @mcp.tool()
@@ -73,11 +71,9 @@ async def set_slice_center(filename: str = "", *, name: str, x: int, y: int, wid
         width: Center-rect width
         height: Center-rect height
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
     if width <= 0 or height <= 0:
-        return "Width and height must be > 0"
+        raise ToolError("Width and height must be > 0")
 
     safe_name = lua_escape(name)
     script = f"""
@@ -92,14 +88,12 @@ async def set_slice_center(filename: str = "", *, name: str, x: int, y: int, wid
         slice.center = Rectangle({x}, {y}, {width}, {height})
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return f"Slice '{name}' 9-patch center set to ({x},{y}) {width}x{height} in {filename}"
-    return f"Failed to set slice center: {output}"
+    await execute_edit_script(script, filename)
+    return f"Slice '{name}' 9-patch center set to ({x},{y}) {width}x{height} in {filename}"
 
 
 @mcp.tool()
@@ -113,9 +107,7 @@ async def set_slice_pivot(filename: str = "", *, name: str, x: int, y: int) -> s
         x: Pivot x, relative to the slice
         y: Pivot y, relative to the slice
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
 
     safe_name = lua_escape(name)
     script = f"""
@@ -130,14 +122,12 @@ async def set_slice_pivot(filename: str = "", *, name: str, x: int, y: int) -> s
         slice.pivot = Point({x}, {y})
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return f"Slice '{name}' pivot set to ({x},{y}) in {filename}"
-    return f"Failed to set slice pivot: {output}"
+    await execute_edit_script(script, filename)
+    return f"Slice '{name}' pivot set to ({x},{y}) in {filename}"
 
 
 @mcp.tool()
@@ -151,9 +141,7 @@ async def list_slices(filename: str = "") -> str:
     Returns:
         JSON array of {name, x, y, width, height, center?, pivot?}.
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
 
     # Emit one JSON object per slice (name via Lua %q) instead of a
     # '|'-delimited line, so a '|' (or comma/colon) in a slice name can no
@@ -179,9 +167,7 @@ async def list_slices(filename: str = "") -> str:
     print("DONE")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if not success:
-        return f"Failed to list slices: {output}"
+    output = await AsepriteCommand.execute_lua_script_checked(script, filename)
 
     slices = []
     for line in output.splitlines():
@@ -200,9 +186,7 @@ async def delete_slice(filename: str = "", *, name: str) -> str:
             session's active file)
         name: Slice name to delete
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
 
     safe_name = lua_escape(name)
     script = f"""
@@ -217,11 +201,9 @@ async def delete_slice(filename: str = "", *, name: str) -> str:
         spr:deleteSlice(slice)
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return f"Slice '{name}' deleted from {filename}"
-    return f"Failed to delete slice: {output}"
+    await execute_edit_script(script, filename)
+    return f"Slice '{name}' deleted from {filename}"

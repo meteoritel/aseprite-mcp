@@ -1,3 +1,5 @@
+from mcp.server.mcpserver.exceptions import ToolError
+from ..core.editing import execute_edit_script
 import json
 from typing import List
 from ..core.commands import AsepriteCommand, lua_escape
@@ -56,11 +58,9 @@ def _parse_overlap_pairs(overlap_pairs: List[str] | None) -> str:
 @mcp.tool()
 async def ensure_layers_present(filename: str = "", *, layer_names: List[str], start_frame: int = 1, end_frame: int | None = None) -> str:
     """Ensure cels exist for layers across a frame range."""
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
     if not layer_names:
-        return "Layer names list cannot be empty"
+        raise ToolError("Layer names list cannot be empty")
 
     end_frame_val = "nil" if end_frame is None else str(end_frame)
     layers_lua = "{" + ",".join([f"\"{lua_escape(name)}\"" for name in layer_names]) + "}"
@@ -101,7 +101,7 @@ async def ensure_layers_present(filename: str = "", *, layer_names: List[str], s
         end
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
@@ -112,13 +112,11 @@ async def ensure_layers_present(filename: str = "", *, layer_names: List[str], s
         .replace("__LAYERS__", layers_lua)
     )
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return (
-            f"Ensured cels for layers {', '.join(layer_names)} "
-            f"on frames {start_frame}-{end_frame or 'end'} in {filename}"
-        )
-    return f"Failed to ensure cels: {output}"
+    await execute_edit_script(script, filename)
+    return (
+        f"Ensured cels for layers {', '.join(layer_names)} "
+        f"on frames {start_frame}-{end_frame or 'end'} in {filename}"
+    )
 
 @mcp.tool()
 async def validate_scene(filename: str = "", *, required_layers: List[str], start_frame: int = 1, end_frame: int | None = None) -> str:
@@ -126,11 +124,9 @@ async def validate_scene(filename: str = "", *, required_layers: List[str], star
 
     Returns JSON with missing layers and missing cels.
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
     if not required_layers:
-        return "Required layers list cannot be empty"
+        raise ToolError("Required layers list cannot be empty")
 
     end_frame_val = "nil" if end_frame is None else str(end_frame)
     layers_lua = "{" + ",".join([f"\"{lua_escape(name)}\"" for name in required_layers]) + "}"
@@ -197,10 +193,8 @@ async def validate_scene(filename: str = "", *, required_layers: List[str], star
         .replace("__LAYERS__", layers_lua)
     )
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return output
-    return f"Failed to validate scene: {output}"
+    output = await AsepriteCommand.execute_lua_script_checked(script, filename)
+    return output
 
 @mcp.tool()
 async def audit_animation(
@@ -221,15 +215,13 @@ async def audit_animation(
     layer_frame_ranges format: ["layer:1-8,17-24", "clouds:1-12"]
     Returns JSON for AI consumption (summary, overlaps, out_of_range, optional cels).
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
     if start_frame < 1:
-        return "Start frame must be >= 1"
+        raise ToolError("Start frame must be >= 1")
     if end_frame is not None and end_frame < start_frame:
-        return "End frame must be >= start frame"
+        raise ToolError("End frame must be >= start frame")
     if max_overlaps < 0 or max_out_of_range < 0:
-        return "Max limits must be >= 0"
+        raise ToolError("Max limits must be >= 0")
 
     layers_lua = "nil"
     if layer_names:
@@ -434,10 +426,8 @@ async def audit_animation(
     print(table.concat(parts))
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return output
-    return f"Failed to audit animation: {output}"
+    output = await AsepriteCommand.execute_lua_script_checked(script, filename)
+    return output
 
 @mcp.tool()
 async def animation_sanitize(
@@ -464,19 +454,17 @@ async def animation_sanitize(
     ignore_full_canvas_overlaps: skip overlap checks when a cel is full canvas
     Returns JSON for AI consumption (summary, layer_stats, alerts, overlaps).
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
     if start_frame < 1:
-        return "Start frame must be >= 1"
+        raise ToolError("Start frame must be >= 1")
     if end_frame is not None and end_frame < start_frame:
-        return "End frame must be >= start frame"
+        raise ToolError("End frame must be >= start frame")
     if max_overlaps < 0:
-        return "max_overlaps must be >= 0"
+        raise ToolError("max_overlaps must be >= 0")
     if out_of_range_action not in {"set_opacity_zero", "delete_cels", "none"}:
-        return "Unsupported out_of_range_action"
+        raise ToolError("Unsupported out_of_range_action")
     if out_of_range_opacity < 0 or out_of_range_opacity > 255:
-        return "out_of_range_opacity must be 0-255"
+        raise ToolError("out_of_range_opacity must be 0-255")
 
     layers_lua = "nil"
     if layer_names:
@@ -759,7 +747,9 @@ async def animation_sanitize(
     end
 
     if not {report_only_flag} and changed then
-        spr:saveAs(spr.filename)
+        save_project(spr)
+    else
+        print("PROJECT_UNCHANGED")
     end
     local parts = {{}}
     table.insert(parts, "{{")
@@ -849,7 +839,5 @@ async def animation_sanitize(
     return output
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return output
-    return f"Failed to sanitize animation: {output}"
+    output = await execute_edit_script(script, filename)
+    return output

@@ -1,12 +1,15 @@
+from ..core.editing import execute_edit_script
 import os
+from mcp.server.mcpserver.exceptions import ToolError
 
-from ..core.commands import AsepriteCommand, lua_escape
+from ..core.commands import lua_escape
 from ..core.state import prepare_filename, set_active_file
+from ..core.editing import native_project_path
 from ..core.lua import FIND_LAYER, LAYER_NAMES
 from .. import mcp
 
 @mcp.tool()
-async def create_canvas(width: int, height: int, *, filename: str) -> str:
+async def create_canvas(width: int, height: int, *, filename: str, overwrite: bool = False) -> str:
     """Create a new Aseprite canvas with specified dimensions.
 
     Args:
@@ -15,37 +18,34 @@ async def create_canvas(width: int, height: int, *, filename: str) -> str:
         filename: REQUIRED. Absolute path for the output file, e.g.
             "D:/art/sprites/coin.aseprite". Relative paths are rejected, so
             the canvas can never silently land in the server's own folder.
+        overwrite: Replace an existing native project (default False)
     """
     if width <= 0 or height <= 0:
-        return "Width and height must be > 0"
+        raise ToolError("Width and height must be > 0")
     # Hard requirement: an absolute path. A relative path would resolve
     # against the server's workspace (its own folder), silently dropping
     # the canvas somewhere the caller never intended.
     if not os.path.isabs(filename):
-        return (
+        raise ToolError(
             "create_canvas requires an ABSOLUTE filename, e.g. "
             f"'D:/art/sprites/coin.aseprite'. Got: '{filename}'"
         )
     # anchor=False: only anchor after the canvas actually exists on disk,
     # so a failed create does not point the active file at a missing file.
-    filename, err = prepare_filename(filename, must_exist=False, anchor=False)
-    if err:
-        return err
-
-    safe_path = lua_escape(filename.replace("\\", "/"))
+    filename = prepare_filename(filename, must_exist=False, anchor=False)
+    filename = native_project_path(filename)
+    if os.path.exists(filename) and not overwrite:
+        raise ToolError(f"Project already exists: {filename}; pass overwrite=true to replace it")
     script = f"""
     local spr = Sprite({width}, {height})
-    spr:saveAs("{safe_path}")
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script)
+    await execute_edit_script(script, output_filename=filename)
 
-    if success:
-        set_active_file(filename)
-        return f"Canvas created and anchored as active file: {filename}. Subsequent tool calls may omit filename."
-    else:
-        return f"Failed to create canvas: {output}"
+    set_active_file(filename)
+    return f"Canvas created and anchored as active file: {filename}. Subsequent tool calls may omit filename."
 
 @mcp.tool()
 async def add_layer(filename: str = "", *, layer_name: str, group: str = "") -> str:
@@ -57,9 +57,7 @@ async def add_layer(filename: str = "", *, layer_name: str, group: str = "") -> 
         group: Optional group to place the new layer inside, by name or
             "group/subgroup" path (default: top level)
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
 
     safe_layer_name = lua_escape(layer_name)
     safe_group = lua_escape(group)
@@ -82,17 +80,14 @@ async def add_layer(filename: str = "", *, layer_name: str, group: str = "") -> 
         if parent then lyr.parent = parent end
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
+    await execute_edit_script(script, filename)
 
-    if success:
-        location = f" inside group '{group}'" if group else ""
-        return f"Layer '{layer_name}' added{location} to {filename}"
-    else:
-        return f"Failed to add layer: {output}"
+    location = f" inside group '{group}'" if group else ""
+    return f"Layer '{layer_name}' added{location} to {filename}"
 
 @mcp.tool()
 async def add_group(filename: str = "", *, group_name: str, parent_group: str = "") -> str:
@@ -107,9 +102,7 @@ async def add_group(filename: str = "", *, group_name: str, parent_group: str = 
         parent_group: Optional existing group to nest the new group inside, by
             name or "group/subgroup" path (default: top level)
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
 
     safe_group = lua_escape(group_name)
     safe_parent = lua_escape(parent_group)
@@ -132,16 +125,14 @@ async def add_group(filename: str = "", *, group_name: str, parent_group: str = 
         if parent then grp.parent = parent end
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
+    await execute_edit_script(script, filename)
 
-    if success:
-        location = f" inside '{parent_group}'" if parent_group else ""
-        return f"Group '{group_name}' created{location} in {filename}"
-    return f"Failed to create group: {output}"
+    location = f" inside '{parent_group}'" if parent_group else ""
+    return f"Group '{group_name}' created{location} in {filename}"
 
 @mcp.tool()
 async def add_frame(filename: str = "") -> str:
@@ -150,9 +141,7 @@ async def add_frame(filename: str = "") -> str:
     Args:
         filename: Aseprite file to modify (optional; defaults to the session's active file)
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
     
     script = """
     local spr = app.activeSprite
@@ -162,52 +151,14 @@ async def add_frame(filename: str = "") -> str:
         spr:newFrame()
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
+    await execute_edit_script(script, filename)
 
-    if success:
-        return f"New frame added successfully to {filename}"
-    else:
-        return f"Failed to add frame: {output}"
+    return f"New frame added successfully to {filename}"
 
-@mcp.tool()
-async def set_frame(filename: str = "", *, frame_index: int) -> str:
-    """Set the active frame by index (1-based).
-
-    Args:
-        filename: Aseprite file to modify (optional; defaults to the session's active file)
-        frame_index: Frame index starting at 1
-    """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
-
-    script = f"""
-    local spr = app.activeSprite
-    if not spr then print("ERROR:No active sprite") return end
-
-    local idx = {frame_index}
-    if idx < 1 or idx > #spr.frames then
-        print("ERROR:Frame index out of range") return
-    end
-
-    app.transaction(function()
-        app.activeFrame = spr.frames[idx]
-    end)
-
-    spr:saveAs(spr.filename)
-    print("OK")
-    """
-
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-
-    if success:
-        return f"Active frame set to {frame_index} in {filename}"
-    else:
-        return f"Failed to set frame: {output}"
 
 @mcp.tool()
 async def set_frame_duration(filename: str = "", *, frame_index: int, duration_ms: int) -> str:
@@ -218,11 +169,9 @@ async def set_frame_duration(filename: str = "", *, frame_index: int, duration_m
         frame_index: Frame index starting at 1
         duration_ms: Duration in milliseconds
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
     if duration_ms <= 0:
-        return "Duration must be > 0"
+        raise ToolError("Duration must be > 0")
 
     script = f"""
     local spr = app.activeSprite
@@ -237,60 +186,10 @@ async def set_frame_duration(filename: str = "", *, frame_index: int, duration_m
         spr.frames[idx].duration = {duration_ms} / 1000.0
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
+    await execute_edit_script(script, filename)
 
-    if success:
-        return f"Frame {frame_index} duration set to {duration_ms}ms in {filename}"
-    else:
-        return f"Failed to set frame duration: {output}"
-
-@mcp.tool()
-async def set_layer(filename: str = "", *, layer_name: str, create_if_missing: bool = False) -> str:
-    """Set the active layer by name.
-
-    Args:
-        filename: Aseprite file to modify (optional; defaults to the session's active file)
-        layer_name: Layer name to activate
-        create_if_missing: Create layer if it does not exist
-    """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
-
-    create_flag = "true" if create_if_missing else "false"
-    safe_layer_name = lua_escape(layer_name)
-
-    script = f"""
-    local spr = app.activeSprite
-    if not spr then print("ERROR:No active sprite") return end
-
-    {FIND_LAYER}
-    {LAYER_NAMES}
-    local target = find_layer(spr, "{safe_layer_name}")
-
-    app.transaction(function()
-        if not target then
-            if {create_flag} then
-                target = spr:newLayer()
-                target.name = "{safe_layer_name}"
-            else
-                return
-            end
-        end
-        app.activeLayer = target
-    end)
-
-    spr:saveAs(spr.filename)
-    print("OK")
-    """
-
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-
-    if success:
-        return f"Active layer set to '{layer_name}' in {filename}"
-    else:
-        return f"Failed to set layer: {output}"
+    return f"Frame {frame_index} duration set to {duration_ms}ms in {filename}"

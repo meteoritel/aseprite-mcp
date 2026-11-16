@@ -1,4 +1,6 @@
-from ..core.commands import AsepriteCommand, lua_escape
+from mcp.server.mcpserver.exceptions import ToolError
+from ..core.editing import execute_edit_script
+from ..core.commands import lua_escape
 from ..core.lua import FIND_LAYER, LAYER_NAMES, NORMALIZE_CEL, PSET
 from ..core.state import prepare_filename
 from ..core.colors import parse_hex_color
@@ -12,7 +14,7 @@ def _parse_hex_color(value: str) -> tuple[int, int, int] | None:
 
 
 @mcp.tool()
-async def move_region(filename: str = "", *, layer_name: str, frame_index: int, x: int, y: int, width: int, height: int, dest_x: int, dest_y: int) -> str:
+async def move_region(filename: str='', *, layer_name: str, frame_index: int, x: int, y: int, width: int, height: int, dest_x: int, dest_y: int) -> str:
     """Cut a rectangular region of pixels and paste it at a new position.
 
     Coordinates are sprite-global. The source area is left transparent.
@@ -30,11 +32,9 @@ async def move_region(filename: str = "", *, layer_name: str, frame_index: int, 
         dest_x: New left edge for the region
         dest_y: New top edge for the region
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
     if width <= 0 or height <= 0:
-        return "Width and height must be > 0"
+        raise ToolError("Width and height must be > 0")
 
     safe_layer = lua_escape(layer_name)
     script = f"""
@@ -81,21 +81,19 @@ async def move_region(filename: str = "", *, layer_name: str, frame_index: int, 
         end
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return (
-            f"Moved {width}x{height} region from ({x},{y}) to ({dest_x},{dest_y}) "
-            f"on '{layer_name}' frame {frame_index} in {filename}"
-        )
-    return f"Failed to move region: {output}"
+    await execute_edit_script(script, filename)
+    return (
+        f"Moved {width}x{height} region from ({x},{y}) to ({dest_x},{dest_y}) "
+        f"on '{layer_name}' frame {frame_index} in {filename}"
+    )
 
 
 @mcp.tool()
-async def copy_region(filename: str = "", *, layer_name: str, frame_index: int, x: int, y: int, width: int, height: int, dest_x: int, dest_y: int, target_layer_name: str = "", target_frame_index: int = 0) -> str:
+async def copy_region(filename: str='', *, layer_name: str, frame_index: int, x: int, y: int, width: int, height: int, dest_x: int, dest_y: int, target_layer_name: str='', target_frame_index: int=0) -> str:
     """Copy a rectangular region of pixels to another position, layer, or frame.
 
     Coordinates are sprite-global. Fully transparent source pixels do not
@@ -114,11 +112,9 @@ async def copy_region(filename: str = "", *, layer_name: str, frame_index: int, 
         target_layer_name: Destination layer (default: same as source)
         target_frame_index: Destination frame (default: same as source)
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
     if width <= 0 or height <= 0:
-        return "Width and height must be > 0"
+        raise ToolError("Width and height must be > 0")
 
     safe_layer = lua_escape(layer_name)
     safe_target_layer = lua_escape(target_layer_name or layer_name)
@@ -173,21 +169,19 @@ async def copy_region(filename: str = "", *, layer_name: str, frame_index: int, 
         end
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return (
-            f"Copied {width}x{height} region from ({x},{y}) to ({dest_x},{dest_y}) "
-            f"in {filename}"
-        )
-    return f"Failed to copy region: {output}"
+    await execute_edit_script(script, filename)
+    return (
+        f"Copied {width}x{height} region from ({x},{y}) to ({dest_x},{dest_y}) "
+        f"in {filename}"
+    )
 
 
 @mcp.tool()
-async def erase_region(filename: str = "", *, layer_name: str, frame_index: int, x: int, y: int, width: int, height: int) -> str:
+async def erase_region(filename: str='', *, layer_name: str, frame_index: int, x: int, y: int, width: int, height: int) -> str:
     """Erase (make transparent) a rectangular region of pixels.
 
     Coordinates are sprite-global.
@@ -201,11 +195,9 @@ async def erase_region(filename: str = "", *, layer_name: str, frame_index: int,
         width: Region width
         height: Region height
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
     if width <= 0 or height <= 0:
-        return "Width and height must be > 0"
+        raise ToolError("Width and height must be > 0")
 
     safe_layer = lua_escape(layer_name)
     script = f"""
@@ -232,21 +224,19 @@ async def erase_region(filename: str = "", *, layer_name: str, frame_index: int,
         end
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return (
-            f"Erased {width}x{height} region at ({x},{y}) on '{layer_name}' "
-            f"frame {frame_index} in {filename}"
-        )
-    return f"Failed to erase region: {output}"
+    await execute_edit_script(script, filename)
+    return (
+        f"Erased {width}x{height} region at ({x},{y}) on '{layer_name}' "
+        f"frame {frame_index} in {filename}"
+    )
 
 
 @mcp.tool()
-async def erase_color(filename: str = "", *, layer_name: str, frame_index: int, color: str, tolerance: int = 0) -> str:
+async def erase_color(filename: str='', *, layer_name: str, frame_index: int, color: str, tolerance: int=0) -> str:
     """Make all pixels of a given color transparent (like a magic eraser).
 
     Args:
@@ -256,16 +246,14 @@ async def erase_color(filename: str = "", *, layer_name: str, frame_index: int, 
         color: Hex color to erase, e.g. "#FF00FF"
         tolerance: Per-channel tolerance 0-255 (default 0 = exact match)
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
 
     rgb = _parse_hex_color(color)
     if rgb is None:
-        return f"Invalid color value: {color}"
+        raise ToolError(f"Invalid color value: {color}")
     r, g, b = rgb
     if tolerance < 0 or tolerance > 255:
-        return "Tolerance must be between 0 and 255"
+        raise ToolError("Tolerance must be between 0 and 255")
 
     safe_layer = lua_escape(layer_name)
     script = f"""
@@ -302,13 +290,11 @@ async def erase_color(filename: str = "", *, layer_name: str, frame_index: int, 
         end
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("COUNT:" .. count)
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if not success:
-        return f"Failed to erase color: {output}"
+    output = await execute_edit_script(script, filename)
 
     count = "?"
     for line in output.splitlines():

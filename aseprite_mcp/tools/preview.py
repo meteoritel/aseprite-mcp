@@ -1,3 +1,4 @@
+from mcp.server.mcpserver.exceptions import ToolError
 import os
 import subprocess
 import sys
@@ -34,7 +35,7 @@ async def start_preview_server(directory: str = "", port: int = 8000) -> str:
     """
     directory = resolve_path(directory) if directory else get_workspace_dir()
     if not os.path.isdir(directory):
-        return f"Directory {directory} not found"
+        raise ToolError(f"Directory {directory} not found")
 
     pid_file = _pid_path(port)
     if os.path.exists(pid_file):
@@ -68,7 +69,7 @@ async def stop_preview_server(port: int = 8000) -> str:
     """
     pid_file = _pid_path(port)
     if not os.path.exists(pid_file):
-        return f"No preview server PID found for port {port}"
+        raise ToolError(f"No preview server PID found for port {port}")
 
     with open(pid_file, "r", encoding="utf-8") as f:
         pid = int(f.read().strip())

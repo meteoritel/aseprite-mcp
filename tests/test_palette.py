@@ -1,7 +1,9 @@
 """Palette tools (palette.py)."""
+
+from conftest import failure
 import json
 
-from conftest import ok, run
+from conftest import run
 
 from aseprite_mcp.tools import palette
 
@@ -13,17 +15,17 @@ def test_list_palette_presets():
 
 
 def test_apply_palette_preset(sprite):
-    result = ok(run(palette.apply_palette_preset(filename=sprite, preset="dawnbringer16")))
+    result = run(palette.apply_palette_preset(filename=sprite, preset="dawnbringer16"))
     assert "16 colors" in result
 
 
 def test_apply_palette_preset_rejects_unknown(sprite):
-    result = run(palette.apply_palette_preset(filename=sprite, preset="nonsense"))
+    result = failure(palette.apply_palette_preset(filename=sprite, preset="nonsense"))
     assert result.startswith("Unknown preset")
 
 
 def test_quantize_to_palette(sprite):
-    result = ok(run(palette.quantize_to_palette(filename=sprite)))
+    result = run(palette.quantize_to_palette(filename=sprite))
     assert "Quantized" in result
 
 
@@ -34,5 +36,5 @@ def test_generate_color_ramp():
 
 
 def test_color_mode_roundtrip(sprite):
-    ok(run(palette.set_color_mode(filename=sprite, mode="indexed")))
-    ok(run(palette.set_color_mode(filename=sprite, mode="rgb")))
+    run(palette.set_color_mode(filename=sprite, mode="indexed"))
+    run(palette.set_color_mode(filename=sprite, mode="rgb"))

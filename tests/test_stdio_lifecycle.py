@@ -6,6 +6,8 @@ close the server process when the client disappears.
 
 import os
 import signal
+import queue
+import threading
 import subprocess
 import sys
 import time
@@ -13,7 +15,7 @@ import time
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 CLIENT_CODE = """
-import json, os, subprocess, sys, time
+import json, os, subprocess, sys, time, queue, threading
 env = dict(os.environ)
 env["PYTHONPATH"] = r"{repo}"
 server = subprocess.Popen(
@@ -29,7 +31,13 @@ request = {{
 }}
 server.stdin.write(json.dumps(request) + "\\n")
 server.stdin.flush()
-reply = server.stdout.readline()
+lines = queue.Queue()
+threading.Thread(target=lambda: lines.put(server.stdout.readline()), daemon=True).start()
+try:
+    reply = lines.get(timeout=10)
+except queue.Empty:
+    server.kill(); server.wait(timeout=5)
+    raise SystemExit("HANDSHAKE_TIMEOUT")
 if not reply or '"result"' not in reply:
     print("HANDSHAKE_FAILED", flush=True)
     sys.exit(1)
@@ -79,7 +87,9 @@ def test_stdio_server_exits_when_client_process_dies():
     )
     server_pid = None
     try:
-        line = (client.stdout.readline() or "").strip()
+        lines = queue.Queue()
+        threading.Thread(target=lambda: lines.put(client.stdout.readline()), daemon=True).start()
+        line = (lines.get(timeout=15) or "").strip()
         client.stdout.close()
         assert line.startswith("READY "), (
             f"server did not complete initialize handshake: {line!r}"

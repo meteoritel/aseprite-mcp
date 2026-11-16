@@ -1,5 +1,7 @@
+from mcp.server.mcpserver.exceptions import ToolError
+from ..core.editing import execute_edit_script
 from typing import List
-from ..core.commands import AsepriteCommand, lua_escape
+from ..core.commands import lua_escape
 from ..core.lua import FIND_LAYER
 from ..core.state import prepare_filename
 from .. import mcp
@@ -22,14 +24,10 @@ async def copy_layers_between_sprites(
         replace: Overwrite existing cels in target layers
         create_missing_frames: Add frames to target if needed
     """
-    source_filename, err = prepare_filename(source_filename)
-    if err:
-        return err
-    target_filename, err = prepare_filename(target_filename, anchor=False)
-    if err:
-        return err
+    source_filename = prepare_filename(source_filename)
+    target_filename = prepare_filename(target_filename, anchor=False)
     if not layer_names:
-        return "Layer names list cannot be empty"
+        raise ToolError("Layer names list cannot be empty")
 
     src_path = lua_escape(source_filename.replace("\\", "/"))
     dst_path = lua_escape(target_filename.replace("\\", "/"))
@@ -98,16 +96,14 @@ async def copy_layers_between_sprites(
         end
     end)
 
-    dst:saveAs(dst.filename)
+    save_project(dst)
     if #missing > 0 then
         print("MISSING:" .. table.concat(missing, ", "))
     end
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script)
-    if not success:
-        return f"Failed to copy layers: {output}"
+    output = await execute_edit_script(script, source_filename, output_filename=target_filename)
     missing = next(
         (line[len("MISSING:"):] for line in output.splitlines() if line.startswith("MISSING:")),
         None,

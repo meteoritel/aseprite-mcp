@@ -1,55 +1,48 @@
 # Aseprite MCP — AI 助手使用指南
 
-## 文件处理
+## 文件与编辑目标
 
-- 所有涉及精灵文件的工具都接受可选的 `filename`。第一个指明文件的调用会把它记为会话的**活跃文件**；后续调用可省略 `filename` 直接作用于它。会话中途再次传入 `filename` 即可切换文件。
-- `create_canvas` 是例外：其 `filename` **必填**且必须是**绝对路径**（如 `"D:/art/sprites/coin.aseprite"`），相对路径会被拒绝。
-- 其它工具中，绝对路径按原样使用，而相对路径基于 `ASERITE_MCP_WORKSPACE`（若客户端已设置）或 server 的工作目录解析 —— 因此优先使用绝对路径，且导出时 `output_filename` / `data_filename` 一律传绝对路径。
-- 所有位置都拒绝父目录穿越（`..`）。
+- 用 `create_canvas(width, height, filename=绝对路径)` 创建可编辑工程。省略扩展名会补 `.aseprite`，接受 `.aseprite`／`.ase`；覆盖已有工程须明确传 `overwrite=true`。
+- 第一个成功解析的已有 `filename`，或成功创建的工程，会成为会话活跃文件；后续调用可省略 `filename`。其它相对路径基于 `ASERITE_MCP_WORKSPACE` 或 server 工作目录。导出路径应传绝对路径，输出不会切换活跃工程。路径拒绝 `..`。
+- 每次 cel 编辑都明确传 `layer_name` 与 `frame_index`。所有外部帧号从 1 开始。批处理进程之间只保存工程内容，不保存 UI 的选层、选帧状态。
+- 绘图用 `draw_pixels_at`、`draw_line_at`、`draw_rectangle_at`、`draw_circle_at`、`draw_ellipse_at`、`fill_area_at`、`draw_polygon`、`draw_path`、`apply_gradient_rect`、`draw_sprite_map` 或 `draw_text`。编辑坐标以画布左上角为原点。
+- 绘图默认可自动创建顶层图层和 cel；帧须先用 `add_frame`／`add_frames` 建立。含 `/` 的层名按组路径查找，组和子层须先用 `add_group`／`add_layer(group=…)` 创建。其它编辑多数要求图层已存在；用 `get_sprite_info` 查层树、帧时长和 tag。
+- `copy_frame` 复制所有叶层，包括隐藏层与嵌套组中的 cel；同帧复制保持工程原值。`copy_cel` 默认可补齐目标帧，`create_target_frame=false` 时越界报错。复制保留 cel 偏移、不透明度与 zIndex。
+- 标准编辑在新原生工程保存、校验成功后提交；错误会作为 MCP 工具失败返回。`run_lua_script` 是任意 Lua 入口，脚本自行负责保存。
 
-## 图层与帧
+## 小画布与精确回灌
 
-- 帧号在**所有位置都是 1-based**。
-- **绘图类工具会自动创建图层和 cel**（`create_if_missing=true` 时，这是默认值）：`draw_pixels_at`、`draw_sprite_map`、`draw_line_at`、`draw_rectangle_at`、`draw_circle_at`、`draw_ellipse_at`、`fill_area_at`、`draw_polygon`、`draw_path`、`apply_gradient_rect`、`apply_dither_pattern`、`apply_dither_gradient`、`draw_text`。因此可以直接对一个尚不存在的图层名作画。
-- 自动创建**只处理顶层图层名**。含 `/` 的名字会被当作 `group/child` 路径解析，永远不会被凭空创建 —— 请先调用 `add_layer(group=…)` / `add_group(…)`。
-- **其余多数工具要求图层已存在** —— 特效、变换、选区、tilemap、调色板、像素读取、多数动画操作。请先调用 `add_layer(layer_name=…)`，或用 `get_sprite_info()` 查询现有图层名。
-- `copy_cel` 可以扩展精灵：当 `create_target_frame=true`（默认值）且 `target_frame` 超出末尾时，会自动补齐缺失的帧，并在回复中说明补了几帧。传 `false` 则改为报错。
+16×16／32×32 纹理优先用 `draw_sprite_map`。`rows` 自上而下，每行等宽；`palette` 将单字符映射为 `#RGB`／`#RGBA`／`#RRGGBB`／`#RRGGBBAA`。
 
-## 读取像素：先选对工具族
+- `transparent` 默认为 `"."`，默认跳过该格；传 `erase_transparent=true` 才擦除。
+- `mirror_x`／`mirror_y` 在原网格宽高内补出反射坐标。着色先合并，透明擦除只作用于剩余格；不同显式颜色在同一镜像位置相撞会报错。
+- `get_sprite_map` 默认 `max_colors=0, alpha_threshold=1`，保留 alpha 大于零的原 RGBA。单 cel RGB 读取的 `rows`／`palette`／`transparent` 可回灌；要删除透明格时同时传 `erase_transparent=true`。
+- 返回 `lossy` 表示阈值过滤或量化是否实际改变像素。显式过滤或量化后的结果用于观察或有意简化配色；自动字符分配排除 transparent 和已占字符，容量不足时报错，可分区读取或显式量化。
+- 精确网格要求 RGB 工程；其它模式先 `set_color_mode(mode="rgb")`。
 
-- `get_pixel_color` / `get_pixels_rect` / `get_sprite_map` 读取**单个图层自己的 cel** —— 无论该图层是否隐藏，也不管其上方和下方的任何内容（`get_sprite_map` 传 `composite=true` 时改读可见合成）。
-- `get_composite_pixel` / `get_composite_rect` / `get_color_stats` / `compare_frames` / `render_onion_skin` 读取**实际可见的结果**：`isVisible=false` 的图层会被排除，因此像素值与导出的 PNG 一致（`render_onion_skin` 会额外在画面及其幽灵帧下铺一层白底）。做配色、对比度、明度检查时用这几个。
-- **tilemap 图层无法逐像素读取** —— tilemap 的 cel 存的是瓦片索引而非像素。`get_pixel_color` / `get_pixels_rect` / `get_sprite_map` 在读指定图层时会拒绝执行；请用 `get_tile_at` 读取某个格子的瓦片索引，或用 `get_composite_*` 读取渲染后的颜色。
-- `extract_palette(max_colors=N)` 能给出的颜色**最多是 N−1**：Aseprite 固定把调色板 0 号槽留给精灵的透明色（即返回值里的 `transparent_index`），且量化器有时还填不满。`max_colors` 是槽位预算而非承诺 —— 真实槽位数看 `palette_size`，别按 `max_colors` 去规划配色。
+## 读取与审阅
 
-## 小画布：用字符网格整批作图
+- `get_pixel_color`／`get_pixels_rect`／默认的 `get_sprite_map` 读取明确 layer/frame 的单 cel，忽略图层可见性。
+- `get_composite_pixel`／`get_composite_rect`／`get_sprite_map(composite=true)`／`get_color_stats`／`compare_frames` 读取实际可见合成。隐藏层和隐藏组被排除；合成网格适合审阅。
+- tilemap 的 cel 保存索引；用 `get_tile_at` 读瓦片，用合成读取查看渲染色。
+- `extract_palette(max_colors=N)` 的预算包含透明槽，实际颜色看返回的 `colors` 和 `palette_size`。
+- 普通 PNG／GIF 用 `export_frame`／`export_sprite`／`export_tag`；`render_onion_skin` 输出白底幽灵帧 PNG。`set_onion_skin` 只说明 UI 状态，批处理不修改它。
 
-16×16 ~ 32×32 这类小图**不要**用 `draw_pixels_at` 逐个列 `{x,y,color}`（256 个对象、坐标全靠心算、一次写错就白画）。改用 `draw_sprite_map`：`rows` 是一组**等长**字符串（自上而下，**行号即 y、列偏移即 x**），`palette` 把字符映到颜色。
+## Java Edition 交付
 
-- `transparent`（默认 `"."`）表示该格**跳过**，已有像素保留。要让 `"."` 真正**擦除**，必须传 `erase_transparent=true` —— 否则"把某格改成 `"."`"这个删除操作会被静默忽略。
-- `mirror_x` / `mirror_y` 是**原地镜像**（网格宽度不变，不是半宽翻倍）：画对称精灵时写满整宽、把远端一半留成 `"."` 即可。
-- 画完用 `get_sprite_map` 读回**同一格式**，`rows` / `palette` / `transparent` 可以直接回灌给 `draw_sprite_map`，且 hex 值是精确的（比对着导出的 PNG 用眼睛看可靠）。传回 `palette` 可让字符跨调用稳定，便于对比两次结果。
-- 字符表只有 62 格：颜色更多时会报错并提示你传 `max_colors`，不会静默截断。
+`export_minecraft_texture(output_filename=游戏PNG绝对路径)` 默认导出完整时间线；可选 `frame_index` 或 `tag_name`，两者互斥。
 
-## 典型工作流
+- 游戏 PNG 保持原尺寸：静态为原画布，动画为无间距的垂直条带，每个选中源帧只存一次。
+- 相邻 `.png.mcmeta`：静态为 `{}`；动画按 tag 方向生成区间内从 0 开始的播放索引，每次引用使用源帧时长，关闭插帧。
+- 动画时长须为正整数 tick，即 50 ms 的正整数倍；不满足时先用 `set_frame_duration` 调整。
+- 返回 JSON 包含 `png`、`mcmeta`、`preview_png`、`preview_scale` 和源帧映射。`preview_png` 是最终游戏 PNG 的 8× nearest-neighbor 审阅图，随 stdio 会话退出删除；审阅须在会话结束前完成。
+- 用原生工程持续编辑，PNG 和 mcmeta 放入游戏纹理目录。此工具交付纹理及 metadata，资源包 manifest 由目标游戏版本决定。
 
-小画布优先整批作图 —— 行列本身就是坐标系：
-
+```python
+create_canvas(16, 16, filename="D:/art/coin.aseprite")
+draw_sprite_map(layer_name="coin", frame_index=1,
+                rows=[".AA.", "ABBA", ".AA."],
+                palette={"A": "#8B5A2B", "B": "#F2C48D"})
+get_sprite_map(layer_name="coin", frame_index=1, x=0, y=0, width=4, height=3)
+export_minecraft_texture(output_filename="D:/art/coin.png")
 ```
-create_canvas(16, 16, filename="D:/art/sprites/hero.aseprite")   # 记为活跃文件
-draw_sprite_map(layer_name="hero", frame_index=1,
-                rows=["..1111..", ".122221.", "12233221", ".122221."],
-                palette={"1": "#3B2A1E", "2": "#8B5A2B", "3": "#F2C48D"})
-export_frame(frame_index=1, output_filename="D:/art/sprites/hero.png", scale=10)
-```
-
-大画布或零散几笔则用图元 + 逐像素：
-
-```
-create_canvas(32, 32, filename="D:/art/sprites/coin.aseprite")   # 记为活跃文件
-draw_circle_at(layer_name="coin", frame_index=1, center_x=16, center_y=16, radius=8)
-add_frames(count=3)                        # 只在需要更多帧时调用
-export_sprite(output_filename="D:/art/sprites/coin.png")
-```
-
-当图层名或帧号不确定时先调用 `get_sprite_info()` —— 比猜测后重试更划算。

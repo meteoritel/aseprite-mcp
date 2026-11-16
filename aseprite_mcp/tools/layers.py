@@ -1,4 +1,6 @@
-from ..core.commands import AsepriteCommand, lua_escape
+from mcp.server.mcpserver.exceptions import ToolError
+from ..core.editing import execute_edit_script
+from ..core.commands import lua_escape
 from ..core.lua import FIND_LAYER, LAYER_NAMES
 from ..core.state import prepare_filename
 from .. import mcp
@@ -35,9 +37,7 @@ async def delete_layer(filename: str = "", *, layer_name: str) -> str:
             session's active file)
         layer_name: Name of the layer to delete
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
 
     safe_layer = lua_escape(layer_name)
     script = f"""
@@ -54,14 +54,12 @@ async def delete_layer(filename: str = "", *, layer_name: str) -> str:
         spr:deleteLayer(target)
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return f"Layer '{layer_name}' deleted from {filename}"
-    return f"Failed to delete layer: {output}"
+    await execute_edit_script(script, filename)
+    return f"Layer '{layer_name}' deleted from {filename}"
 
 
 @mcp.tool()
@@ -74,11 +72,9 @@ async def rename_layer(filename: str = "", *, layer_name: str, new_name: str) ->
         layer_name: Current layer name
         new_name: New layer name
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
     if not new_name:
-        return "New name cannot be empty"
+        raise ToolError("New name cannot be empty")
 
     safe_layer = lua_escape(layer_name)
     safe_new = lua_escape(new_name)
@@ -95,14 +91,12 @@ async def rename_layer(filename: str = "", *, layer_name: str, new_name: str) ->
         target.name = "{safe_new}"
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return f"Layer '{layer_name}' renamed to '{new_name}' in {filename}"
-    return f"Failed to rename layer: {output}"
+    await execute_edit_script(script, filename)
+    return f"Layer '{layer_name}' renamed to '{new_name}' in {filename}"
 
 
 @mcp.tool()
@@ -121,9 +115,7 @@ async def duplicate_layer(filename: str = "", *, layer_name: str, new_name: str 
         group: Optional group to place the copy inside, by name or
             "group/subgroup" path (default: directly above the source)
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
 
     final_name = new_name or f"{layer_name} copy"
     safe_layer = lua_escape(layer_name)
@@ -164,15 +156,13 @@ async def duplicate_layer(filename: str = "", *, layer_name: str, new_name: str 
         end
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        location = f" inside group '{group}'" if group else ""
-        return f"Layer '{layer_name}' duplicated as '{final_name}'{location} in {filename}"
-    return f"Failed to duplicate layer: {output}"
+    await execute_edit_script(script, filename)
+    location = f" inside group '{group}'" if group else ""
+    return f"Layer '{layer_name}' duplicated as '{final_name}'{location} in {filename}"
 
 
 @mcp.tool()
@@ -185,11 +175,9 @@ async def reorder_layer(filename: str = "", *, layer_name: str, position: int) -
         layer_name: Layer to move
         position: Target stack position, 1-based where 1 is the bottom layer
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
     if position < 1:
-        return "Position must be >= 1"
+        raise ToolError("Position must be >= 1")
 
     safe_layer = lua_escape(layer_name)
     script = f"""
@@ -206,14 +194,12 @@ async def reorder_layer(filename: str = "", *, layer_name: str, position: int) -
         target.stackIndex = {position}
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return f"Layer '{layer_name}' moved to position {position} in {filename}"
-    return f"Failed to reorder layer: {output}"
+    await execute_edit_script(script, filename)
+    return f"Layer '{layer_name}' moved to position {position} in {filename}"
 
 
 @mcp.tool()
@@ -229,13 +215,11 @@ async def set_layer_blend_mode(filename: str = "", *, layer_name: str, mode: str
             difference, exclusion, subtract, divide, hue, saturation,
             color, luminosity
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
 
     blend = _BLEND_MODES.get(mode.lower())
     if blend is None:
-        return f"Unknown blend mode '{mode}'. Valid modes: {', '.join(sorted(_BLEND_MODES))}"
+        raise ToolError(f"Unknown blend mode '{mode}'. Valid modes: {', '.join(sorted(_BLEND_MODES))}")
 
     safe_layer = lua_escape(layer_name)
     script = f"""
@@ -251,14 +235,12 @@ async def set_layer_blend_mode(filename: str = "", *, layer_name: str, mode: str
         target.blendMode = {blend}
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return f"Layer '{layer_name}' blend mode set to {mode} in {filename}"
-    return f"Failed to set blend mode: {output}"
+    await execute_edit_script(script, filename)
+    return f"Layer '{layer_name}' blend mode set to {mode} in {filename}"
 
 
 @mcp.tool()
@@ -270,9 +252,7 @@ async def merge_layer_down(filename: str = "", *, layer_name: str) -> str:
             session's active file)
         layer_name: Layer to merge down (must not be the bottom layer)
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
 
     safe_layer = lua_escape(layer_name)
     script = f"""
@@ -288,14 +268,12 @@ async def merge_layer_down(filename: str = "", *, layer_name: str) -> str:
     app.activeLayer = target
     app.command.MergeDownLayer()
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return f"Layer '{layer_name}' merged down in {filename}"
-    return f"Failed to merge layer down: {output}"
+    await execute_edit_script(script, filename)
+    return f"Layer '{layer_name}' merged down in {filename}"
 
 
 @mcp.tool()
@@ -306,9 +284,7 @@ async def flatten_sprite(filename: str = "") -> str:
         filename: Aseprite file to modify (optional; defaults to the
             session's active file)
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
 
     script = """
     local spr = app.activeSprite
@@ -318,11 +294,9 @@ async def flatten_sprite(filename: str = "") -> str:
         spr:flatten()
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return f"Sprite flattened in {filename}"
-    return f"Failed to flatten sprite: {output}"
+    await execute_edit_script(script, filename)
+    return f"Sprite flattened in {filename}"

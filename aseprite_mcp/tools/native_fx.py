@@ -1,16 +1,10 @@
-"""Native Aseprite filter/command wrappers (app.command.*).
+"""Native Aseprite filters with explicit layer/frame targeting."""
 
-These delegate to Aseprite's own engine filters instead of hand-rolling
-pixel math in Lua — higher quality and faster than the equivalents in
-fx.py. All verified to run headless under --batch (T0, 2026-06-18). They
-are added ALONGSIDE the hand-rolled tools (outline_cel / adjust_hsl /
-quantize_to_palette stay) per the "deprecate, don't break" policy.
-
-General value (upstream-able): nothing Chimera-specific here.
-"""
+from mcp.server.mcpserver.exceptions import ToolError
+from ..core.editing import execute_edit_script
 import json
 
-from ..core.commands import AsepriteCommand, lua_escape
+from ..core.commands import lua_escape
 from ..core.native import build_native_command_script
 from ..core.state import prepare_filename
 from .fx import _parse_hex_color
@@ -38,14 +32,7 @@ def _region(x: int, y: int, width: int, height: int):
 
 
 @mcp.tool()
-async def outline_native(
-    filename: str = "",
-    layer_name: str = "",
-    frame_index: int = 1,
-    color: str = "#000000",
-    place: str = "outside",
-    matrix: str = "circle",
-) -> str:
+async def outline_native(filename: str='', *, layer_name: str, frame_index: int, color: str='#000000', place: str='outside', matrix: str='circle') -> str:
     """Native Aseprite Outline around opaque pixels (app.command.Outline).
 
     Higher quality than the 1px hand-rolled outline_cel: inside/outside
@@ -60,39 +47,24 @@ async def outline_native(
         place: "outside" or "inside"
         matrix: "circle" or "square"
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
     rgb = _parse_hex_color(color)
     if not rgb:
-        return "Invalid color (expected #RRGGBB)"
+        raise ToolError("Invalid color (expected #RRGGBB)")
     if place not in ("outside", "inside"):
-        return "place must be 'outside' or 'inside'"
+        raise ToolError("place must be 'outside' or 'inside'")
     if matrix not in ("circle", "square"):
-        return "matrix must be 'circle' or 'square'"
+        raise ToolError("matrix must be 'circle' or 'square'")
     r, g, b = rgb
     cmd = (f'        app.command.Outline{{ui=false, color=Color{{r={r}, g={g}, '
            f'b={b}, a=255}}, place="{place}", matrix="{matrix}"}}')
     script = build_native_command_script(cmd, layer_name, frame_index)
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return f"Outlined ({place}, {matrix}) {layer_name or 'active layer'} in {filename}"
-    return f"Failed to outline: {output}"
+    await execute_edit_script(script, filename)
+    return f"Outlined ({place}, {matrix}) {layer_name or 'active layer'} in {filename}"
 
 
 @mcp.tool()
-async def adjust_hsl_native(
-    filename: str = "",
-    layer_name: str = "",
-    frame_index: int = 1,
-    hue: int = 0,
-    saturation: int = 0,
-    lightness: int = 0,
-    x: int = 0,
-    y: int = 0,
-    width: int = 0,
-    height: int = 0,
-) -> str:
+async def adjust_hsl_native(filename: str='', *, layer_name: str, frame_index: int, hue: int=0, saturation: int=0, lightness: int=0, x: int=0, y: int=0, width: int=0, height: int=0) -> str:
     """Native Hue/Saturation/Lightness filter (engine-quality vs adjust_hsl).
 
     Args:
@@ -105,35 +77,21 @@ async def adjust_hsl_native(
         lightness: -100..100
         x, y, width, height: optional region (width>0 & height>0 to scope)
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
     if not (-180 <= hue <= 180):
-        return "hue must be -180..180"
+        raise ToolError("hue must be -180..180")
     if not (-100 <= saturation <= 100) or not (-100 <= lightness <= 100):
-        return "saturation and lightness must be -100..100"
+        raise ToolError("saturation and lightness must be -100..100")
     cmd = (f'        app.command.HueSaturation{{ui=false, hue={hue}, '
            f'saturation={saturation}, lightness={lightness}, alpha=0}}')
     script = build_native_command_script(cmd, layer_name, frame_index,
                                          _region(x, y, width, height))
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return f"Adjusted HSL on {layer_name or 'active layer'} in {filename}"
-    return f"Failed to adjust HSL: {output}"
+    await execute_edit_script(script, filename)
+    return f"Adjusted HSL on {layer_name or 'active layer'} in {filename}"
 
 
 @mcp.tool()
-async def adjust_brightness_contrast(
-    filename: str = "",
-    layer_name: str = "",
-    frame_index: int = 1,
-    brightness: int = 0,
-    contrast: int = 0,
-    x: int = 0,
-    y: int = 0,
-    width: int = 0,
-    height: int = 0,
-) -> str:
+async def adjust_brightness_contrast(filename: str='', *, layer_name: str, frame_index: int, brightness: int=0, contrast: int=0, x: int=0, y: int=0, width: int=0, height: int=0) -> str:
     """Native Brightness/Contrast filter (app.command.BrightnessContrast).
 
     Args:
@@ -145,31 +103,19 @@ async def adjust_brightness_contrast(
         contrast: -100..100
         x, y, width, height: optional region (width>0 & height>0 to scope)
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
     if not (-100 <= brightness <= 100) or not (-100 <= contrast <= 100):
-        return "brightness and contrast must be -100..100"
+        raise ToolError("brightness and contrast must be -100..100")
     cmd = (f'        app.command.BrightnessContrast{{ui=false, '
            f'brightness={brightness}, contrast={contrast}}}')
     script = build_native_command_script(cmd, layer_name, frame_index,
                                          _region(x, y, width, height))
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return f"Adjusted brightness/contrast on {layer_name or 'active layer'} in {filename}"
-    return f"Failed to adjust brightness/contrast: {output}"
+    await execute_edit_script(script, filename)
+    return f"Adjusted brightness/contrast on {layer_name or 'active layer'} in {filename}"
 
 
 @mcp.tool()
-async def invert_colors(
-    filename: str = "",
-    layer_name: str = "",
-    frame_index: int = 1,
-    x: int = 0,
-    y: int = 0,
-    width: int = 0,
-    height: int = 0,
-) -> str:
+async def invert_colors(filename: str='', *, layer_name: str, frame_index: int, x: int=0, y: int=0, width: int=0, height: int=0) -> str:
     """Native colour inversion (app.command.InvertColor).
 
     Args:
@@ -179,20 +125,16 @@ async def invert_colors(
         frame_index: 1-based frame
         x, y, width, height: optional region (width>0 & height>0 to scope)
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
     cmd = "        app.command.InvertColor{ui=false}"
     script = build_native_command_script(cmd, layer_name, frame_index,
                                          _region(x, y, width, height))
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return f"Inverted colours on {layer_name or 'active layer'} in {filename}"
-    return f"Failed to invert: {output}"
+    await execute_edit_script(script, filename)
+    return f"Inverted colours on {layer_name or 'active layer'} in {filename}"
 
 
 @mcp.tool()
-async def apply_convolution(filename: str = "", *, matrix: str, layer_name: str = "", frame_index: int = 1, x: int = 0, y: int = 0, width: int = 0, height: int = 0) -> str:
+async def apply_convolution(filename: str='', *, matrix: str, layer_name: str, frame_index: int, x: int=0, y: int=0, width: int=0, height: int=0) -> str:
     """Native convolution filter (blur / sharpen / edge / emboss …).
 
     Args:
@@ -204,19 +146,15 @@ async def apply_convolution(filename: str = "", *, matrix: str, layer_name: str 
         frame_index: 1-based frame
         x, y, width, height: optional region (width>0 & height>0 to scope)
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
     if matrix not in CONVOLUTION_MATRICES:
-        return (f"Unknown matrix {matrix!r}; call list_convolution_matrices for "
+        raise ToolError(f"Unknown matrix {matrix!r}; call list_convolution_matrices for "
                 f"the {len(CONVOLUTION_MATRICES)} valid names")
     cmd = f'        app.command.ConvolutionMatrix{{ui=false, fromResource="{lua_escape(matrix)}"}}'
     script = build_native_command_script(cmd, layer_name, frame_index,
                                          _region(x, y, width, height))
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return f"Applied convolution '{matrix}' on {layer_name or 'active layer'} in {filename}"
-    return f"Failed to apply convolution: {output}"
+    await execute_edit_script(script, filename)
+    return f"Applied convolution '{matrix}' on {layer_name or 'active layer'} in {filename}"
 
 
 @mcp.tool()
@@ -261,11 +199,9 @@ async def extract_palette(
         none), so `count` (= palette_size - 1 when the slot is present) is
         the number of usable colours.
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
     if not (1 <= max_colors <= 256):
-        return "max_colors must be 1..256"
+        raise ToolError("max_colors must be 1..256")
     wa = "true" if with_alpha else "false"
     script = f"""
     local spr = app.activeSprite
@@ -273,7 +209,7 @@ async def extract_palette(
     app.transaction(function()
         app.command.ColorQuantization{{ui=false, maxColors={max_colors}, withAlpha={wa}}}
     end)
-    spr:saveAs(spr.filename)
+    save_project(spr)
     local pal = spr.palettes[1]
     -- Slot 0 of an Aseprite palette is conventionally the transparent colour
     -- (alpha 0). It paints nothing, so listing it as a colour invents a
@@ -292,9 +228,7 @@ async def extract_palette(
     print("TRANSPARENT:" .. transparent_index)
     print("OK")
     """
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if not success:
-        return f"Failed to extract palette: {output}"
+    output = await execute_edit_script(script, filename)
     colors = [ln[len("PALETTE:"):] for ln in output.splitlines() if ln.startswith("PALETTE:")]
     transparent_index = None
     palette_size = None

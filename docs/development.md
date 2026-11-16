@@ -55,7 +55,7 @@ uv run -m aseprite_mcp
 
 ### `.env` 的加载时机
 
-[`commands.py:7-8`](../aseprite_mcp/core/commands.py#L7)：
+[`commands.py:7-8`](../aseprite_mcp/core/commands.py)：
 
 ```python
 _ENV_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
@@ -74,8 +74,8 @@ dotenv.load_dotenv(dotenv_path=_ENV_PATH)
 
 | 变量 | 精确拼写 | 读取位置 | 默认值 | 作用 |
 |---|---|---|---|---|
-| `ASEPRITE_PATH` | ✅ | [`commands.py:75`](../aseprite_mcp/core/commands.py#L75)；shell: [`docker-entrypoint.sh:12-13`](../scripts/docker-entrypoint.sh#L12) | `aseprite`（查 `PATH`） | 所有 Aseprite 子进程的可执行文件路径 |
-| `ASERITE_MCP_WORKSPACE` | ⚠️ **少一个 `P`** | [`state.py:28,58`](../aseprite_mcp/core/state.py#L28) | 未设 → `os.getcwd()` | 相对文件名解析的基准目录 |
+| `ASEPRITE_PATH` | ✅ | [`commands.py:75`](../aseprite_mcp/core/commands.py)；shell: [`docker-entrypoint.sh:12-13`](../scripts/docker-entrypoint.sh#L12) | `aseprite`（查 `PATH`） | 所有 Aseprite 子进程的可执行文件路径 |
+| `ASERITE_MCP_WORKSPACE` | ⚠️ **少一个 `P`** | [`state.py:28,58`](../aseprite_mcp/core/state.py) | 未设 → `os.getcwd()` | 相对文件名解析的基准目录 |
 | `STEAM_USERNAME` | ✅ | [`docker-entrypoint.sh:5`](../scripts/docker-entrypoint.sh#L5)、[`install-aseprite-steam.sh:15,28`](../scripts/install-aseprite-steam.sh#L15) | 未设 | 容器内 SteamCMD 登录 |
 | `STEAM_PASSWORD` | ✅ | 同上 | 未设 | 同上 |
 | `STEAM_GUARD_CODE` | ✅ | [`install-aseprite-steam.sh:29-30`](../scripts/install-aseprite-steam.sh#L29) | 未设 | Steam Guard 二次验证码 |
@@ -86,11 +86,11 @@ dotenv.load_dotenv(dotenv_path=_ENV_PATH)
 
 这是**代码里的既有拼写**，缺一个 `P`。它在以下位置完全一致地出现：
 
-- [`state.py:28`](../aseprite_mcp/core/state.py#L28) 的常量定义、[`state.py:55`](../aseprite_mcp/core/state.py#L55) 的 docstring
+- [`state.py:28`](../aseprite_mcp/core/state.py) 的常量定义、[`state.py:55`](../aseprite_mcp/core/state.py) 的 docstring
 - [`sample.env:6`](../sample.env#L6)
 - 根 [`README.md`](../README.md) 与 [`SKILL.md`](../SKILL.md)
 - [`tests/test_path_resolution.py`](../tests/test_path_resolution.py) 的 6 处
-- [`__init__.py:13`](../aseprite_mcp/__init__.py#L13) 的 fallback instructions
+- [`__init__.py:13`](../aseprite_mcp/__init__.py) 的 fallback instructions
 
 所以**不要"顺手修正"文档里的这个名字** —— 那会让文档与实现不符，用户照文档设的变量名会失效。真要更正需要代码与文档同时改，属于破坏兼容的变更。
 
@@ -102,25 +102,14 @@ dotenv.load_dotenv(dotenv_path=_ENV_PATH)
 
 [`pyproject.toml`](../pyproject.toml) **没有 `[build-system]`**，也没有 `[project.scripts]`：
 
-```toml
-[project]
-name = "aseprite-mcp"
-version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
-requires-python = ">=3.13"
-dependencies = ["httpx>=0.28.1", "mcp[cli]>=1.6.0", "pillow>=10.0.0"]
-
-[dependency-groups]
-dev = ["pytest>=9.0.3"]
-```
+运行依赖与版本约束以 `pyproject.toml` 和 `uv.lock` 为准。
 
 后果：
 
 - `uv.lock` 把项目记为 `source = { virtual = "." }`，即**永不安装为包**。唯一受支持的运行方式是原地 `uv run -m aseprite_mcp`。
 - 没有 console script，所以 `aseprite-mcp` 不是命令。
 - `description` 还是脚手架占位符 `"Add your description here"`。
-- `__version__` **有两处来源**：`pyproject.toml` 的 `0.1.0` 与 [`__init__.py:35`](../aseprite_mcp/__init__.py#L35) 里硬编码的 `"0.1.0"`，没有单一事实源。
+- `__version__` **有两处来源**：`pyproject.toml` 的 `0.1.0` 与 [`__init__.py:35`](../aseprite_mcp/__init__.py) 里硬编码的 `"0.1.0"`，没有单一事实源。
 
 ### `requirements.txt` 与 `pyproject.toml` 冲突
 
@@ -137,7 +126,7 @@ dev = ["pytest>=9.0.3"]
 
 ### `python-dotenv` 是未声明的直接依赖
 
-[`commands.py:5`](../aseprite_mcp/core/commands.py#L5) 直接 `import dotenv`，但 `python-dotenv` **没有**列在 `pyproject.toml` 的 `dependencies` 里。它目前只是靠 `mcp` 的传递依赖恰好存在（`uv.lock` 里能看到 python-dotenv）。
+[`commands.py:5`](../aseprite_mcp/core/commands.py) 直接 `import dotenv`，但 `python-dotenv` **没有**列在 `pyproject.toml` 的 `dependencies` 里。它目前只是靠 `mcp` 的传递依赖恰好存在（`uv.lock` 里能看到 python-dotenv）。
 
 **风险**：上游若收紧依赖，`.env` 加载会以 `ImportError` 崩掉。加新依赖时顺带把它补进 `pyproject.toml` 是低风险改进。
 
@@ -145,101 +134,28 @@ dev = ["pytest>=9.0.3"]
 
 ## 四、测试
 
-### 定位：以集成测试为主
-
-[`tests/conftest.py:1-4`](../tests/conftest.py#L1) 说得很直接：
-
-> These tests run each MCP tool against a real Aseprite (`ASEPRITE_PATH`), so they are smoke/integration tests, not unit tests. Tests within a file form a sequence on a module-scoped sprite; files are independent.
-
-所以跑测试**需要一个真的 Aseprite**：
+集成测试使用真实 Aseprite，`ASEPRITE_PATH` 指向二进制或已有 wrapper。Pillow 独立解码 PNG／GIF；工程读取会重新打开原生文件。执行与发布失败条件使用受控 Python 子进程或定向注入。
 
 ```bash
-# 确保 ASEPRITE_PATH 指向真实二进制（或它在 PATH 上）
-uv run pytest
+uv run python -B -m pytest -p no:cacheprovider
+uv run python -B -m pytest tests/test_export.py::test_export_tag_gif tests/test_export.py::test_import_image_as_layer tests/test_visibility.py::test_compare_frames_ignores_hidden_layer
 ```
 
-### `conftest.py` 提供的四样东西
+`tests/conftest.py` 在平台临时根下创建每次运行独有目录，兼容 wrapper 的临时路径挂载。`new_sprite` 工厂和 `sprite` fixture 为各场景创建独立工程；测试自建 tag、导入图片和输出文件，活跃文件在测试间重置。清理只删除本次运行拥有的文件和 review 目录。
 
-| 名称 | 作用 |
+`run(coro)` 驱动直接工具调用；`failure(coro)` 验证抛出 `ToolError` 并提供诊断供断言。成功还须检查手写预期的像素、结构或产物；MCP 测试检查 `isError`。
+
+| 场景 | 入口 |
 |---|---|
-| `BASE` | 固定的临时目录：Windows `%TEMP%/ase-pytest`，其它 `/tmp/ase-pytest` |
-| `run(coro)` | `asyncio.run` 的包装，同步测试里调用 async 工具 |
-| `ok(result)` | 断言返回值**不以** `Failed` / `ERROR` / `Invalid` / `Script failed` 开头 |
-| `sprite` fixture | 每个测试模块一个全新的 32×32 sprite，含 `body` 图层与一块 `#D04648` 填充矩形 |
+| 原生编辑、group、cel 元数据与失败保全 | `test_project_editing.py` |
+| 网格 RGBA、镜像冲突与回灌 | `test_sprite_map.py`、`test_project_editing.py` |
+| PNG／GIF、JE 时序、发布恢复 | `test_export.py`、`test_minecraft_export.py` |
+| 隐藏层差异与可见合成 | `test_visibility.py` |
+| 超时、取消、输出预算与进程回收 | `test_execution.py`、`test_encoding.py` |
+| discovery、tools/call、取消恢复、并发编辑 | `test_protocol.py` |
+| 客户端断开退出 | `test_stdio_lifecycle.py` |
 
-**为什么 `BASE` 不用 pytest 的 `tmp_path`**（[`conftest.py:6-11`](../tests/conftest.py#L6)）：
-
-> Scratch files live under a fixed temp path (not pytest's `tmp_path`) so they resolve identically inside the Docker-wrapped Aseprite, which only mounts `/tmp` and `/var/folders`. On Windows, `/tmp/...` stopped counting as an absolute path in Python 3.13 (no drive letter), which `create_canvas` rejects — so use the platform temp dir there instead.
-
-即：为了与 Docker 包装的 Aseprite 路径一致，以及绕开 Python 3.13 在 Windows 上不再把 `/tmp/...` 当绝对路径的问题。
-
-`sprite` fixture 里那条额外的断言值得注意（[`conftest.py:58-61`](../tests/conftest.py#L58)）：
-
-```python
-# ok() only matches a few error prefixes; a message like "create_canvas
-# requires an ABSOLUTE filename..." would slip through it silently.
-# Asserting existence catches any such silent failure.
-assert os.path.exists(path), f"sprite fixture did not create {path}"
-```
-
-这正是 [02 §7 那个陷阱](02-paths-errors-lifecycle.md#陷阱ok-覆盖不了范围校验类消息)在实践中的补丁。
-
-### `ok()` 的局限
-
-`ok()` 只认四个前缀。**范围校验类错误不在其中**，会被静默放过：
-
-```text
-Width and height must be > 0
-Start frame must be >= 1
-Opacity must be between 0 and 255
-Scale must be > 0
-Pixels list cannot be empty
-Unsupported anchor (center, topleft)
-Unsupported easing (...)
-create_canvas requires an ABSOLUTE filename, ...
-No diff data returned
-```
-
-写新测试时**不要只依赖 `ok()`** —— 对关键断言补上具体的内容检查或文件存在性检查。完整的消息清单见 [02 §7](02-paths-errors-lifecycle.md#陷阱ok-覆盖不了范围校验类消息)。
-
-### 不需要真实 Aseprite 的测试
-
-这些测试可以独立验证，运行时不必配 Aseprite：
-
-| 测试 | 为什么能脱离 Aseprite |
-|---|---|
-| [`tests/test_protocol.py`](../tests/test_protocol.py) | 真 stdio server 响应 `server/discover`，并继续提供 `tools/list` |
-| [`tests/test_stdio_lifecycle.py`](../tests/test_stdio_lifecycle.py) | 真 stdio server 在客户端进程崩溃后退出 |
-| [`tests/test_path_resolution.py`](../tests/test_path_resolution.py) | monkeypatch 掉 `execute_lua_script_checked` / `execute_lua_script` |
-| [`tests/test_pixel_xy_validation.py`](../tests/test_pixel_xy_validation.py) | 校验在拼脚本前就返回，用一个 0 字节占位文件即可 |
-| [`tests/test_encoding.py`](../tests/test_encoding.py) | monkeypatch `run_command`；两处用 `ASEPRITE_PATH=sys.executable` 当假 Aseprite |
-
-[`tests/test_text.py`](../tests/test_text.py) 的 bitmap 与 measure 测试用 PIL 在磁盘上现造一个字体，只有 TrueType 那条需要系统装有字体，没装则 skip。
-
-### 命名有两套风格
-
-| 风格 | 命名 | 例子 |
-|---|---|---|
-| **镜像源模块** | `test_<模块名>.py` | `test_drawing` `test_sprite_map` `test_export` `test_layers` `test_text` `test_tilemap` `test_palette` `test_selection` `test_slices` `test_animation` `test_analysis` `test_fx` `test_native_fx` `test_script` |
-| **按 bug / issue 命名** | `test_<主题>.py`，docstring 里写清 bug 经过 | `test_error_propagation` `test_group_layers` `test_create_into_group` `test_drawing_fixes` `test_auto_create` `test_visibility` `test_composite_read` `test_slices_pipe` `test_sprite_info_groups` `test_path_resolution` `test_pixel_xy_validation` `test_protocol` `test_stdio_lifecycle` `test_encoding` |
-
-新建回归测试请用第二种，并在模块 docstring 里写清"原来错在哪、现在为什么不会错"。
-
-### 回归测试 ↔ 提交/issue 对照
-
-| 测试 | 对应 |
-|---|---|
-| `test_error_propagation.py` | issue #15（退出码 0 却伪造成功） |
-| `test_group_layers.py` + `test_create_into_group.py` + `test_sprite_info_groups.py` | issue #17（组图层可达性） |
-| `test_slices_pipe.py` | `f51c97b`（slice 名里的 `\|` 破坏解析） |
-| `test_drawing_fixes.py` | `20c5409`（多边形越界、渐变坐标、RGBA 颜色） |
-| `test_composite_read.py` | `1676f8d`（合成读取） |
-| `test_visibility.py` | `04d77ca`（合成读取排除隐藏层） |
-| `test_auto_create.py` | `0f2bebf`（绘图工具自动建层） |
-| `test_path_resolution.py` / `test_encoding.py` | `721a31e` / `2987155`（路径与 UTF-8 集中化） |
-
-
----
+协议读取和生命周期握手都有截止时间，失败时回收测试拥有的进程。IDE 分析应使用项目 `.venv`；系统解释器中的不同 MCP 版本可能产生导入和类型误报，以项目实际依赖与运行结果核对。
 
 ## 五、Docker
 
@@ -311,7 +227,7 @@ docs/
 
 两个后果：
 
-1. **`SKILL.md` 不在镜像里**，所以 [`_load_skill_instructions()`](../aseprite_mcp/__init__.py#L18) 在容器内**恒定**走 `_FALLBACK_INSTRUCTIONS`。容器里的模型收到的是那段英文精简版，不是完整的中文 `SKILL.md`。
+1. **`SKILL.md` 不在镜像里**，所以 [`_load_skill_instructions()`](../aseprite_mcp/__init__.py) 在容器内**恒定**走 `_FALLBACK_INSTRUCTIONS`。容器里的模型收到的是那段英文精简版，不是完整的中文 `SKILL.md`。
 2. 本套 `docs/` 也不会进镜像 —— 对镜像体积是好事，但要知道容器里查不到文档。
 
 ### 文档与实现的偏差（尚未修）
@@ -365,7 +281,7 @@ uv run python scripts/gen_tool_reference.py --check   # CI 友好：过期则退
 
 ### `SKILL.md` 是运行时契约，不是普通文档
 
-[`SKILL.md`](../SKILL.md) 被 [`_load_skill_instructions()`](../aseprite_mcp/__init__.py#L18) 读进 `MCPServer(instructions=...)`，在**客户端连接时推给模型**。它讲的是"模型应该怎样使用这些工具"（文件处理规则、哪些工具会自动建层、该用哪族读取工具、典型工作流）。
+[`SKILL.md`](../SKILL.md) 被 [`_load_skill_instructions()`](../aseprite_mcp/__init__.py) 读进 `MCPServer(instructions=...)`，在**客户端连接时推给模型**。它讲的是"模型应该怎样使用这些工具"（文件处理规则、哪些工具会自动建层、该用哪族读取工具、典型工作流）。
 
 **改了工具契约就要同步它**，否则模型会拿着过时规则去调用。典型的触发场景：
 
@@ -390,9 +306,9 @@ uv run python scripts/gen_tool_reference.py --check   # CI 友好：过期则退
 | 4 | 改了工具契约？更新 `SKILL.md` |
 | 5 | 本地跑 `uv run pytest`（CI 不会替你跑） |
 | 6 | 新增回归测试按 bug 主题命名，docstring 里写清"原来错在哪" |
-| 7 | 错误消息尽量落在 `Failed` / `Invalid` / `ERROR` / `Script failed` 四个前缀内，否则 `ok()` 拦不住 |
-| 8 | 碰了输出路径？确认带 `must_exist=False, anchor=False`（[02 §4](02-paths-errors-lifecycle.md#四输出路径铁律)） |
-| 9 | 碰了原生命令？用 `build_native_command_script` 而不是手写目标激活（[01 §6](01-lua-bridge.md#六corenativepy原生命令为什么要包装)） |
+| 7 | 预期失败抛 `ToolError`；直接测试检查异常，协议测试检查 `isError` |
+| 8 | 碰了输出路径？确认带 `must_exist=False, anchor=False`（[02 §4](02-paths-errors-lifecycle.md)） |
+| 9 | 碰了原生命令？用 `build_native_command_script` 而不是手写目标激活（[01 §6](01-lua-bridge.md)） |
 | 10 | 碰了合成读取？复用 `_COMPOSE_FRAME`，不要自己 `flatten()`（[08 §2](08-inspection-and-quality.md#二_compose_frame为什么不能直接用-flatten)） |
 
 ---

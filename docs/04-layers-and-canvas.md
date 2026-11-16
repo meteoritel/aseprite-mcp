@@ -9,10 +9,10 @@
 
 **不负责**：
 
-- **可见性与不透明度** —— 这两个工具（`set_layer_visibility`、`set_layer_opacity`）在 [`animation.py`](../aseprite_mcp/tools/animation.py) 里，因为它们和帧渲染关系更近。见 [05 · 动画](05-animation.md#五图层可见性与不透明度)
+- **可见性与不透明度** —— 这两个工具（`set_layer_visibility`、`set_layer_opacity`）在 [`animation.py`](../aseprite_mcp/tools/animation.py) 里，因为它们和帧渲染关系更近。见 [05 · 动画](05-animation.md)
 - 把像素画进 cel → [03 · 绘图与像素编辑](03-painting.md)
 - 帧的增删与 cel 生命周期 → [05 · 动画](05-animation.md)
-- 图层名如何解析成对象 → [01 · Lua 桥](01-lua-bridge.md#五共享-lua-片段库-coreluapy)
+- 图层名如何解析成对象 → [01 · Lua 桥](01-lua-bridge.md)
 
 ---
 
@@ -32,17 +32,17 @@ spr.layers
 
 ### 名字解析
 
-所有工具都靠 [`core/lua.py` 的 `FIND_LAYER`](../aseprite_mcp/core/lua.py#L22) 把用户给的名字变成图层对象。它的两段式策略（BFS 精确全名匹配 → `group/child` 路径最长前缀回溯）在 [01 §5](01-lua-bridge.md#五共享-lua-片段库-coreluapy) 有完整说明。
+所有工具都靠 [`core/lua.py` 的 `FIND_LAYER`](../aseprite_mcp/core/lua.py) 把用户给的名字变成图层对象。它的两段式策略（BFS 精确全名匹配 → `group/child` 路径最长前缀回溯）在 [01 §5](01-lua-bridge.md) 有完整说明。
 
 需要记住的三条后果：
 
 1. **名字里的 `/` 有歧义**：`abc/x/y` 既可能指一个叫 `abc/x` 的组里的 `y`，也可能指 `abc → x → y` 三级结构。两种都成立时取最长的组名前缀。
 2. **裸名匹配优先取较浅的层**：不同组里有同名图层时，靠树的 BFS 顺序决定命中哪个。
-3. **判重只看顶层**。这是刻意的 —— Aseprite 允许不同组里有同名图层，所以"这个名字是否已存在"的检查必须限定在顶层，否则会误报。见 [`lua.py:20-21`](../aseprite_mcp/core/lua.py#L20) 的注释与 [`tests/test_group_layers.py:87-91`](../tests/test_group_layers.py#L87)。
+3. **判重只看顶层**。这是刻意的 —— Aseprite 允许不同组里有同名图层，所以"这个名字是否已存在"的检查必须限定在顶层，否则会误报。见 [`lua.py:20-21`](../aseprite_mcp/core/lua.py) 的注释与 [`tests/test_group_layers.py:87-91`](../tests/test_group_layers.py)。
 
 ### 自动创建只处理顶层
 
-`ENSURE_LAYER` 里的守卫（[`lua.py:82`](../aseprite_mcp/core/lua.py#L82)）：
+`ENSURE_LAYER` 里的守卫（[`lua.py:82`](../aseprite_mcp/core/lua.py)）：
 
 ```lua
 if create and not string.find(name, "/", 1, true) then
@@ -54,36 +54,13 @@ if create and not string.find(name, "/", 1, true) then
 
 ## 二、工具一览与职责
 
-### `canvas.py` —— 创建与活跃状态
+### `canvas.py` —— 原生工程、图层与帧
 
-| 工具 | 关键点 |
-|---|---|
-| `create_canvas` | `Sprite(width, height)` 后立即 `saveAs`。`filename` **必填且必须绝对**，失败不锚定（[02 §3](02-paths-errors-lifecycle.md#create_canvas-是唯一的例外)） |
-| `add_layer` | `spr:newLayer()`；给 `group` 时挂 `lyr.parent = parent` |
-| `add_group` | `spr:newGroup()`；给 `parent_group` 时挂 `grp.parent = parent` |
-| `add_frame` | `spr:newFrame()`，追加到末尾 |
-| `set_frame` | 设置 `app.activeFrame`，越界报错 |
-| `set_frame_duration` | `spr.frames[idx].duration = ms / 1000.0` |
-| `set_layer` | 设置 `app.activeLayer`；`create_if_missing` 可顺带建层 |
+`create_canvas` 要求绝对路径，只接受 `.aseprite`／`.ase`，无扩展名补 `.aseprite`。默认拒绝覆盖，`overwrite=true` 才替换已有工程；保存校验成功后锚定。
 
-新 sprite 只有一个隐式图层 `Layer 1`，且必然出现在第 1 帧。
+`add_layer`／`add_group` 可指定父组，父目标须已存在且为 group。`add_frame` 追加帧，`set_frame_duration` 设置明确帧的时长。cel 编辑由各工具显式指定 layer/frame。
 
-**`add_layer` / `add_group` 的组校验**（[`canvas.py:73-77`](../aseprite_mcp/tools/canvas.py#L73)）：
-
-```lua
-parent = find_layer(spr, "{safe_group}")
-if not parent then print("ERROR:Group '...' not found. ...") return end
-if not parent.isGroup then print("ERROR:Target is not a group") return end
-```
-
-命中一个**图像图层**而不是组时，报错是 `Target is not a group`。错误消息都会列出既有图层并提示先 `add_group`。
-
-**`set_layer` 与绘图工具的差异**（[`canvas.py:267-285`](../aseprite_mcp/tools/canvas.py#L267)）：它用 `find_layer` 而不是 `ensure_layer`，`create_if_missing=True` 时直接 `spr:newLayer()` 并用**字面名字**命名。所以：
-
-- 它**不会**因为名字里有 `/` 而拒绝创建（与绘图工具不一致）。
-- 它创建的永远是**顶层**图层，即使名字长得像路径。
-
-把它当成"设置当前图层"用是安全的；想建组内图层请用 `add_layer(group=...)`。
+标准修改调用 `execute_edit_script`：Lua 用 `save_project(spr)` 保存到目标同目录暂存，原生头验证后精确替换目标。失败保全源工程，见 [01 · 编辑提交](01-lua-bridge.md)。
 
 ### `layers.py` —— 图层运维
 
@@ -93,7 +70,7 @@ if not parent.isGroup then print("ERROR:Target is not a group") return end
 | `rename_layer` | 空名字被拒 |
 | `duplicate_layer` | 深拷贝所有帧的 cel，继承不透明度与混合模式 |
 | `reorder_layer` | 设 `stackIndex`（1-based，**1 是最底层**） |
-| `set_layer_blend_mode` | 19 种模式，未知模式报出全部合法值 |
+| `set_layer_blend_mode` | 未知模式报错并列出合法值 |
 | `merge_layer_down` | `app.command.MergeDownLayer()`，最底层拒绝 |
 | `flatten_sprite` | `spr:flatten()`，全部图层合成一层 |
 
@@ -101,7 +78,7 @@ if not parent.isGroup then print("ERROR:Target is not a group") return end
 
 ## 三、深拷贝：`duplicate_layer`
 
-[`layers.py:148-165`](../aseprite_mcp/tools/layers.py#L148) 是这个模块里最值得细看的一段：
+[`layers.py:148-165`](../aseprite_mcp/tools/layers.py) 是这个模块里最值得细看的一段：
 
 ```lua
 local copy = spr:newLayer()
@@ -128,7 +105,7 @@ end
 - **`cel.position` 被保留**，所以被裁剪过的 cel 复制后位置不变。
 - **`cel.opacity` 逐帧复制**（`spr:newCel` 不会继承它）。
 - 放置策略：给了 `group` 就挂进组（此时**不**设 `stackIndex`），否则放在源层正上方（`src.stackIndex + 1`）。
-- 默认名字是 `"{layer_name} copy"`（[`layers.py:128`](../aseprite_mcp/tools/layers.py#L128)）。
+- 默认名字是 `"{layer_name} copy"`（[`layers.py:128`](../aseprite_mcp/tools/layers.py)）。
 
 注意它复制的是**图层的图像内容**，不是图层树结构 —— `src` 本身是组时，`src:cel(frame)` 返回 nil，循环什么也不做，结果是一个空的同名副本。
 
@@ -136,19 +113,19 @@ end
 
 ## 四、堆叠顺序
 
-`reorder_layer` 直接写 `target.stackIndex`（[`layers.py:206`](../aseprite_mcp/tools/layers.py#L206)），语义：
+`reorder_layer` 直接写 `target.stackIndex`（[`layers.py:206`](../aseprite_mcp/tools/layers.py)），语义：
 
 - **1-based，1 是最底层。** 与帧号一致。
-- 越界检查用的是 `#spr.layers`，也就是**顶层图层的数量**（[`layers.py:203`](../aseprite_mcp/tools/layers.py#L203)）。
+- 越界检查用的是 `#spr.layers`，也就是**顶层图层的数量**（[`layers.py:203`](../aseprite_mcp/tools/layers.py)）。
 - 因此这个工具本质上是**顶层内的重排**：对嵌套在组里的图层设 `stackIndex` 不会把它移出组。
 
-`merge_layer_down` 同理依赖 `stackIndex`：`target.stackIndex <= 1` 表示已经是最底层，报 `Layer is the bottom layer; nothing to merge into`。它先 `app.activeLayer = target` 再调 `app.command.MergeDownLayer()`，因为该命令作用于**当前图层**（这正是 [01 §6](01-lua-bridge.md#六corenativepy原生命令为什么要包装) 描述的"原生命令不接受目标参数"问题的手写版本）。
+`merge_layer_down` 同理依赖 `stackIndex`：`target.stackIndex <= 1` 表示已经是最底层，报 `Layer is the bottom layer; nothing to merge into`。它先 `app.activeLayer = target` 再调 `app.command.MergeDownLayer()`，因为该命令作用于**当前图层**（这正是 [01 §6](01-lua-bridge.md) 描述的"原生命令不接受目标参数"问题的手写版本）。
 
 ---
 
 ## 五、混合模式
 
-`_BLEND_MODES`（[`layers.py:6-26`](../aseprite_mcp/tools/layers.py#L6)）把 19 个 snake_case 名字映射到 Aseprite 的 `BlendMode.*` 常量：
+`_BLEND_MODES`（[`layers.py:6-26`](../aseprite_mcp/tools/layers.py)）把 snake_case 名字映射到 Aseprite 的 `BlendMode.*` 常量：
 
 | 分组 | 名字 |
 |---|---|
@@ -168,7 +145,7 @@ end
 "luminosity": "BlendMode.HSL_LUMINOSITY",
 ```
 
-查表失败时返回的报错会列出**全部**合法模式（[`layers.py:238`](../aseprite_mcp/tools/layers.py#L238)），调用方一轮就能自我纠正。
+查表失败时返回的报错会列出**全部**合法模式（[`layers.py:238`](../aseprite_mcp/tools/layers.py)），调用方一轮就能自我纠正。
 
 ---
 
@@ -179,7 +156,7 @@ end
 - 对 `flatten_sprite` 本身，这意味着"隐藏"并不等于"不影响结果"：展平后隐藏图层的内容会变成可见像素。
 - 对**分析类工具**，这意味着不能用 `flatten()` 来求"玩家实际看到的画面"。
 
-后者就是 [`analysis.py` 的 `_COMPOSE_FRAME`](../aseprite_mcp/tools/analysis.py#L17) 存在的原因：它先克隆 sprite、逐个删掉不可见图层、再 `flatten()`。详见 [08 · 读取、分析与质量校验](08-inspection-and-quality.md#二_compose_frame为什么不能直接用-flatten)。
+后者就是 [`analysis.py` 的 `_COMPOSE_FRAME`](../aseprite_mcp/tools/analysis.py) 存在的原因：它先克隆 sprite、逐个删掉不可见图层、再 `flatten()`。详见 [08 · 读取、分析与质量校验](08-inspection-and-quality.md#二_compose_frame为什么不能直接用-flatten)。
 
 如果你要写新的"合成读取"类工具，**不要**直接用 `spr:flatten()`，复用 `_COMPOSE_FRAME`。
 
@@ -187,19 +164,19 @@ end
 
 ## 七、跨文件复制：`copy_layers_between_sprites`
 
-[`scene.py`](../aseprite_mcp/tools/scene.py) 只有一个工具，但它的实现方式和其它工具**都不一样**：它不靠 `--batch <file>` 打开文件，而是在 Lua 里用 `app.open()` 开两个。
+[`scene.py`](../aseprite_mcp/tools/scene.py) 只有一个工具，但它的实现方式和其它工具**都不一样**：Lua 使用 `app.open()` 取得源和目标，提交路径由标准编辑层管理。
 
 ### 路径与锚定
 
 ```python
-source_filename, err = prepare_filename(source_filename)
+source_filename = prepare_filename(source_filename)
 ...
-target_filename, err = prepare_filename(target_filename, anchor=False)
+target_filename = prepare_filename(target_filename, anchor=False)
 ```
 
-[`scene.py:25-30`](../aseprite_mcp/tools/scene.py#L25)。源文件按常规解析（**会**锚定，可省略）；目标文件用 `anchor=False`（存在性仍要求），所以"把图层搬到另一个文件"不会改变会话的活跃文件 —— 这与导出类工具遵循同一条[输出路径铁律](02-paths-errors-lifecycle.md#四输出路径铁律)。
+[`scene.py:25-30`](../aseprite_mcp/tools/scene.py)。源文件按常规解析（**会**锚定，可省略）；目标文件用 `anchor=False`（存在性仍要求），所以"把图层搬到另一个文件"不会改变会话的活跃文件 —— 这与导出类工具遵循同一条[输出路径铁律](02-paths-errors-lifecycle.md)。
 
-路径在插入 Lua 前统一 `\` → `/` 再转义（[`scene.py:34-35`](../aseprite_mcp/tools/scene.py#L34)）。
+路径在插入 Lua 前统一 `\` → `/` 再转义（[`scene.py:34-35`](../aseprite_mcp/tools/scene.py)）。
 
 ### 执行流程
 
@@ -214,16 +191,16 @@ app.transaction(...)
      目标层不存在 → dst:newLayer() 并命名
      replace 时先删掉目标层所有帧的 cel
      逐帧 clone 源 cel 的 image 与 position
-dst:saveAs(dst.filename)        ← 只保存目标
+save_project(dst)               ← 暂存校验后提交目标
 缺失的名字通过 MISSING: 回报
 ```
 
 ### 交付语义
 
-- 返回 `Layers copied from X to Y`，若有跳过则追加 `(skipped missing layers: a, b)`（[`scene.py:111-118`](../aseprite_mcp/tools/scene.py#L111)）。
+- 返回 `Layers copied from X to Y`，若有跳过则追加 `(skipped missing layers: a, b)`（[`scene.py:111-118`](../aseprite_mcp/tools/scene.py)）。
 - **部分成功不算失败**：只要至少复制了一个图层就返回成功消息，缺失的通过 `MISSING:` 告知。只有**全部**缺失才是 `ERROR`。
 - **目标层不会被重命名或复用判重**：同名目标层存在就直接往里写，`replace=True`（默认）会先清空它的 cel。
-- **源文件只读**：脚本结尾只 `dst:saveAs(...)`。
+- **源文件只读**：脚本结尾只 `save_project(dst)`，由标准编辑层提交目标。
 - 目标层如果不存在会**自动创建**，且是顶层的 —— 不保留源文件的组结构。
 
 ### 与 `duplicate_layer` 的分工
@@ -241,11 +218,10 @@ dst:saveAs(dst.filename)        ← 只保存目标
 
 | 项 | 说明 |
 |---|---|
-| `set_layer` 用 `find_layer` 而非 `ensure_layer` | 与绘图工具不一致：名字含 `/` 时它会创建顶层图层，而绘图工具会拒绝 |
 | `reorder_layer` 只作用于顶层 | `position` 上限是顶层图层数，嵌套层无法借此移出组 |
 | `duplicate_layer` 复制组会得到空层 | 组没有 cel |
 | `flatten_sprite` 会合入隐藏图层 | 见第六节，这是 `_COMPOSE_FRAME` 存在的原因 |
-| 可见性/不透明度不在本文档 | 在 [`animation.py`](../aseprite_mcp/tools/animation.py)，见 [05 §5](05-animation.md#五图层可见性与不透明度) |
+| 可见性/不透明度不在本文档 | 在 [`animation.py`](../aseprite_mcp/tools/animation.py)，见 [05 §5](05-animation.md) |
 | `copy_layers_between_sprites` 不保留组结构 | 一律建成顶层图层 |
 | `delete_layer` 拒绝删最后一个图层 | Aseprite 要求 sprite 至少有一层 |
 | `add_frame` 不带时长参数 | 新帧用 Aseprite 的默认时长；批量设时长用 `set_frame_duration_all`（在 [05](05-animation.md)） |
@@ -264,7 +240,7 @@ dst:saveAs(dst.filename)        ← 只保存目标
 
 ## 相关文档
 
-- [01 · Lua 桥](01-lua-bridge.md#五共享-lua-片段库-coreluapy) —— `FIND_LAYER` / `ENSURE_LAYER` 的解析规则
+- [01 · Lua 桥](01-lua-bridge.md) —— `FIND_LAYER` / `ENSURE_LAYER` 的解析规则
 - [02 · 路径、错误与进程生命周期](02-paths-errors-lifecycle.md) —— `create_canvas` 的路径要求、输出路径铁律
 - [05 · 动画](05-animation.md) —— 帧/cel/tag，以及图层可见性与不透明度
 - [08 · 读取、分析与质量校验](08-inspection-and-quality.md#二_compose_frame为什么不能直接用-flatten) —— `flatten()` 陷阱的消费方

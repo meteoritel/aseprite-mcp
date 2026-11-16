@@ -1,8 +1,13 @@
+import asyncio
 import re
+import signal
 import subprocess
 import tempfile
 import os
 import dotenv
+
+from anyio import CancelScope
+from mcp.server.mcpserver.exceptions import ToolError
 
 _ENV_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
 dotenv.load_dotenv(dotenv_path=_ENV_PATH)
@@ -58,92 +63,102 @@ def reject_traversal(path: str) -> str | None:
     return None
 
 
-class AsepriteCommand:
-    """Helper class for running Aseprite commands."""
-    
-    @staticmethod
-    def run_command(args):
-        """Run an Aseprite command with proper error handling.
-        
-        Args:
-            args: List of command arguments
-            
-        Returns:
-            tuple: (success, output) where success is a boolean and output is the command output
-        """
-        try:
-            cmd = [os.getenv('ASEPRITE_PATH', 'aseprite')] + args
-            # Aseprite writes UTF-8 to stdout/stderr. Decode explicitly:
-            # text=True alone would use the Windows ANSI code page (GBK),
-            # garbling any non-ASCII output (paths, layer names, errors).
-            result = subprocess.run(
-                cmd,
-                check=True,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
+PROCESS_TIMEOUT_SECONDS = 60
+MAX_OUTPUT_BYTES = 16 * 1024 * 1024
+READ_CHUNK_BYTES = 64 * 1024
+
+
+async def _terminate_process(process: asyncio.subprocess.Process) -> None:
+    if os.name == "nt":
+        if process.returncode is None:
+            killer = await asyncio.create_subprocess_exec(
+                "taskkill", "/PID", str(process.pid), "/T", "/F",
+                stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
+                creationflags=subprocess.CREATE_NO_WINDOW,
             )
-            return True, result.stdout
-        except subprocess.CalledProcessError as e:
-            # Batch-mode Aseprite reports Lua errors (runtime and syntax) on
-            # *stdout* and exits non-zero, leaving stderr empty — reporting
-            # only stderr would surface every crash as an empty message.
-            # Keep stdout first: when both streams carry text the script's own
-            # output is the useful half.
-            parts = [p.strip() for p in (e.stdout, e.stderr) if p and p.strip()]
-            return False, "\n".join(parts)
-    
-    @staticmethod
-    def execute_lua_script(script_content, filename=None):
-        """Execute a Lua script in Aseprite.
-        
-        Args:
-            script_content: Lua script code to execute
-            filename: Optional filename to open before executing script
-            
-        Returns:
-            tuple: (success, output)
-        """
-        # Create a temporary file for the script. Aseprite reads Lua files
-        # as UTF-8; without an explicit encoding the file would be written
-        # in the Windows ANSI code page (GBK), so any non-ASCII path in the
-        # script (e.g. Chinese filenames) would end up as mojibake and the
-        # file would be saved to the wrong location.
-        with tempfile.NamedTemporaryFile(
-            suffix='.lua', delete=False, mode='w', encoding='utf-8'
-        ) as tmp:
-            tmp.write(script_content)
-            script_path = tmp.name
-        
+            await killer.wait()
+            if process.returncode is None:
+                process.kill()
+    else:
         try:
-            args = ["--batch"]
-            if filename and os.path.exists(filename):
-                args.append(filename)
-            args.extend(["--script", script_path])
-            
-            success, output = AsepriteCommand.run_command(args)
-            return success, output
-        finally:
-            # Clean up the temporary script file
-            os.remove(script_path)
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    await process.wait()
+
+
+class AsepriteCommand:
+    """Execute one owned Aseprite batch process with bounded resources."""
 
     @staticmethod
-    def execute_lua_script_checked(script_content, filename=None):
-        """Execute a Lua script and surface in-script errors.
+    async def run_command(args: list[str]) -> str:
+        cmd = [os.getenv("ASEPRITE_PATH", "aseprite"), *args]
+        options = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW}
+                   if os.name == "nt" else {"start_new_session": True})
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, **options,
+            )
+        except OSError as exc:
+            raise ToolError(f"Could not start Aseprite: {exc}") from exc
 
-        Scripts using this helper signal failure by printing a line
-        starting with "ERROR:" (batch-mode scripts cannot affect the
-        process exit code from Lua).
+        stdout, stderr = bytearray(), bytearray()
+        output_size = 0
 
-        Returns:
-            tuple: (success, output) where output is the error message
-            when an ERROR: line was printed, or the raw stdout otherwise.
-        """
-        success, output = AsepriteCommand.execute_lua_script(script_content, filename)
-        if not success:
-            return False, output
+        async def read_stream(stream, destination):
+            nonlocal output_size
+            while chunk := await stream.read(READ_CHUNK_BYTES):
+                output_size += len(chunk)
+                if output_size > MAX_OUTPUT_BYTES:
+                    raise ToolError(f"Aseprite output exceeded {MAX_OUTPUT_BYTES} bytes; read a smaller region or print less data")
+                destination.extend(chunk)
+
+        tasks = [asyncio.create_task(read_stream(process.stdout, stdout)),
+                 asyncio.create_task(read_stream(process.stderr, stderr)),
+                 asyncio.create_task(process.wait())]
+        try:
+            async with asyncio.timeout(PROCESS_TIMEOUT_SECONDS):
+                await asyncio.gather(*tasks)
+        except BaseException as exc:
+            # SDK cancellation uses an AnyIO scope; cleanup must finish before
+            # that scope can cancel the next subprocess wait as well.
+            with CancelScope(shield=True):
+                await _terminate_process(process)
+                for task in tasks:
+                    task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
+            if isinstance(exc, TimeoutError):
+                raise ToolError(f"Aseprite timed out after {PROCESS_TIMEOUT_SECONDS} seconds") from exc
+            raise
+
+        output = stdout.decode("utf-8", errors="replace")
+        diagnostic = stderr.decode("utf-8", errors="replace")
+        if process.returncode:
+            detail = "\n".join(part.strip() for part in (output, diagnostic) if part.strip())
+            raise ToolError(f"Aseprite exited with code {process.returncode}: {detail}")
+        return output
+
+    @staticmethod
+    async def execute_lua_script(script_content: str, filename: str | None = None) -> str:
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".lua", delete=False, mode="w", encoding="utf-8") as script:
+                script.write(script_content)
+                script_path = script.name
+            try:
+                args = ["--batch"]
+                if filename is not None:
+                    args.append(filename)
+                args.extend(["--script", script_path])
+                return await AsepriteCommand.run_command(args)
+            finally:
+                os.unlink(script_path)
+        except OSError as exc:
+            raise ToolError(f"Could not prepare Aseprite script: {exc}") from exc
+
+    @staticmethod
+    async def execute_lua_script_checked(script_content: str, filename: str | None = None) -> str:
+        output = await AsepriteCommand.execute_lua_script(script_content, filename)
         for line in output.splitlines():
             if line.startswith("ERROR:"):
-                return False, line[len("ERROR:"):]
-        return True, output
+                raise ToolError(line[len("ERROR:"):])
+        return output

@@ -1,15 +1,9 @@
-"""Issue #17 follow-up: create layers and groups inside named groups.
-
-add_layer / duplicate_layer used to create only at the top level; add_group
-did not exist. These tests check that a group can be created (optionally
-nested), that a new or duplicated layer lands inside a named group (resolved
-by name or "group/subgroup" path), and that a bad / non-group target fails.
-"""
+"""Create or duplicate layers inside explicit groups; reject invalid parents."""
 import json
 
 import pytest
 
-from conftest import BASE, ok, run
+from conftest import BASE, failure, run
 from aseprite_mcp.tools import animation, canvas, drawing, layers
 
 
@@ -27,47 +21,45 @@ def _top_level(path):
 @pytest.fixture
 def fresh(base_dir, request):
     path = f"{BASE}/cig_{request.node.name}.aseprite"
-    ok(run(canvas.create_canvas(width=16, height=16, filename=path)))
+    run(canvas.create_canvas(width=16, height=16, filename=path))
     return path
 
 
 def test_add_group_top_level(fresh):
-    ok(run(canvas.add_group(filename=fresh, group_name="GRP")))
+    run(canvas.add_group(filename=fresh, group_name="GRP"))
     assert _top_level(fresh).get("GRP") is True
 
 
 def test_add_layer_into_group(fresh):
-    ok(run(canvas.add_group(filename=fresh, group_name="GRP")))
-    ok(run(canvas.add_layer(filename=fresh, layer_name="child", group="GRP")))
+    run(canvas.add_group(filename=fresh, group_name="GRP"))
+    run(canvas.add_layer(filename=fresh, layer_name="child", group="GRP"))
     assert "child" not in _top_level(fresh), "child must be inside GRP, not top level"
     # reachable by path and (recursively) by bare name
-    ok(run(drawing.draw_rectangle_at(filename=fresh, layer_name="GRP/child", frame_index=1, x=0, y=0, width=4, height=4, color="#ffffff", fill=True)))
-    ok(run(layers.rename_layer(filename=fresh, layer_name="child", new_name="child_renamed")))
+    run(drawing.draw_rectangle_at(filename=fresh, layer_name="GRP/child", frame_index=1, x=0, y=0, width=4, height=4, color="#ffffff", fill=True))
+    run(layers.rename_layer(filename=fresh, layer_name="child", new_name="child_renamed"))
 
 
 def test_add_group_nested_then_layer_two_deep(fresh):
-    ok(run(canvas.add_group(filename=fresh, group_name="GRP")))
-    ok(run(canvas.add_group(filename=fresh, group_name="SUB", parent_group="GRP")))
+    run(canvas.add_group(filename=fresh, group_name="GRP"))
+    run(canvas.add_group(filename=fresh, group_name="SUB", parent_group="GRP"))
     assert "SUB" not in _top_level(fresh), "SUB must be inside GRP"
-    ok(run(canvas.add_layer(filename=fresh, layer_name="deep", group="GRP/SUB")))
-    ok(run(drawing.draw_rectangle_at(filename=fresh, layer_name="GRP/SUB/deep", frame_index=1, x=0, y=0, width=2, height=2, color="#ffffff", fill=True)))
+    run(canvas.add_layer(filename=fresh, layer_name="deep", group="GRP/SUB"))
+    run(drawing.draw_rectangle_at(filename=fresh, layer_name="GRP/SUB/deep", frame_index=1, x=0, y=0, width=2, height=2, color="#ffffff", fill=True))
 
 
 def test_duplicate_into_group(fresh):
-    ok(run(canvas.add_layer(filename=fresh, layer_name="body")))
-    ok(run(drawing.draw_rectangle_at(filename=fresh, layer_name="body", frame_index=1, x=0, y=0, width=8, height=8, color="#D04648", fill=True)))
-    ok(run(canvas.add_group(filename=fresh, group_name="GRP")))
-    ok(run(layers.duplicate_layer(filename=fresh, layer_name="body", new_name="body_copy", group="GRP")))
+    run(canvas.add_layer(filename=fresh, layer_name="body"))
+    run(drawing.draw_rectangle_at(filename=fresh, layer_name="body", frame_index=1, x=0, y=0, width=8, height=8, color="#D04648", fill=True))
+    run(canvas.add_group(filename=fresh, group_name="GRP"))
+    run(layers.duplicate_layer(filename=fresh, layer_name="body", new_name="body_copy", group="GRP"))
     assert "body_copy" not in _top_level(fresh), "copy must be inside GRP"
-    ok(run(drawing.draw_rectangle_at(filename=fresh, layer_name="GRP/body_copy", frame_index=1, x=0, y=0, width=2, height=2, color="#ffffff", fill=True)))
+    run(drawing.draw_rectangle_at(filename=fresh, layer_name="GRP/body_copy", frame_index=1, x=0, y=0, width=2, height=2, color="#ffffff", fill=True))
 
 
 def test_add_layer_unknown_group_fails(fresh):
-    result = run(canvas.add_layer(filename=fresh, layer_name="child", group="NOPE"))
-    assert str(result).startswith(("Failed", "ERROR")), result
+    result = failure(canvas.add_layer(filename=fresh, layer_name="child", group="NOPE"))
 
 
 def test_add_layer_target_not_a_group_fails(fresh):
-    ok(run(canvas.add_layer(filename=fresh, layer_name="plain")))  # a normal layer, not a group
-    result = run(canvas.add_layer(filename=fresh, layer_name="child", group="plain"))
-    assert str(result).startswith(("Failed", "ERROR")), result
+    run(canvas.add_layer(filename=fresh, layer_name="plain"))  # a normal layer, not a group
+    result = failure(canvas.add_layer(filename=fresh, layer_name="child", group="plain"))

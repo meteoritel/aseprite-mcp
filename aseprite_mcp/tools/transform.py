@@ -1,11 +1,13 @@
-from ..core.commands import AsepriteCommand, lua_escape
+from mcp.server.mcpserver.exceptions import ToolError
+from ..core.editing import execute_edit_script
+from ..core.commands import lua_escape
 from ..core.lua import FIND_LAYER, LAYER_NAMES
 from ..core.state import prepare_filename
 from .. import mcp
 
 
 @mcp.tool()
-async def flip_layer(filename: str = "", *, layer_name: str, frame_index: int, direction: str = "horizontal") -> str:
+async def flip_layer(filename: str='', *, layer_name: str, frame_index: int, direction: str='horizontal') -> str:
     """Flip a layer's image horizontally or vertically.
 
     Args:
@@ -14,11 +16,9 @@ async def flip_layer(filename: str = "", *, layer_name: str, frame_index: int, d
         frame_index: Frame index starting at 1
         direction: "horizontal" or "vertical"
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
     if direction not in ("horizontal", "vertical"):
-        return "direction must be 'horizontal' or 'vertical'"
+        raise ToolError("direction must be 'horizontal' or 'vertical'")
 
     safe_layer = lua_escape(layer_name)
     flip_h = "true" if direction == "horizontal" else "false"
@@ -63,18 +63,16 @@ async def flip_layer(filename: str = "", *, layer_name: str, frame_index: int, d
         end
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return f"Layer '{layer_name}' flipped {direction}ly in {filename}"
-    return f"Failed to flip layer: {output}"
+    await execute_edit_script(script, filename)
+    return f"Layer '{layer_name}' flipped {direction}ly in {filename}"
 
 
 @mcp.tool()
-async def rotate_layer(filename: str = "", *, layer_name: str, frame_index: int, angle: int = 90) -> str:
+async def rotate_layer(filename: str='', *, layer_name: str, frame_index: int, angle: int=90) -> str:
     """Rotate a layer's image 90, 180, or 270 degrees clockwise.
 
     Args:
@@ -83,11 +81,9 @@ async def rotate_layer(filename: str = "", *, layer_name: str, frame_index: int,
         frame_index: Frame index starting at 1
         angle: Rotation angle: 90, 180, or 270 (clockwise)
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
     if angle not in (90, 180, 270):
-        return "angle must be 90, 180, or 270"
+        raise ToolError("angle must be 90, 180, or 270")
 
     safe_layer = lua_escape(layer_name)
 
@@ -155,14 +151,12 @@ async def rotate_layer(filename: str = "", *, layer_name: str, frame_index: int,
         {rotate_lua}
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return f"Layer '{layer_name}' rotated {angle}° clockwise in {filename}"
-    return f"Failed to rotate layer: {output}"
+    await execute_edit_script(script, filename)
+    return f"Layer '{layer_name}' rotated {angle}° clockwise in {filename}"
 
 
 @mcp.tool()
@@ -174,11 +168,9 @@ async def resize_canvas(filename: str = "", *, width: int, height: int) -> str:
         width: New canvas width in pixels
         height: New canvas height in pixels
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
     if width <= 0 or height <= 0:
-        return "Width and height must be > 0"
+        raise ToolError("Width and height must be > 0")
 
     script = f"""
     local spr = app.activeSprite
@@ -188,14 +180,12 @@ async def resize_canvas(filename: str = "", *, width: int, height: int) -> str:
         spr:resize({width}, {height})
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return f"Canvas resized to {width}x{height} in {filename}"
-    return f"Failed to resize canvas: {output}"
+    await execute_edit_script(script, filename)
+    return f"Canvas resized to {width}x{height} in {filename}"
 
 
 @mcp.tool()
@@ -209,11 +199,9 @@ async def crop_canvas(filename: str = "", *, x: int, y: int, width: int, height:
         width: Width of the crop area
         height: Height of the crop area
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
     if width <= 0 or height <= 0:
-        return "Width and height must be > 0"
+        raise ToolError("Width and height must be > 0")
 
     script = f"""
     local spr = app.activeSprite
@@ -227,11 +215,9 @@ async def crop_canvas(filename: str = "", *, x: int, y: int, width: int, height:
         spr:crop({x}, {y}, {width}, {height})
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return f"Canvas cropped to ({x},{y}) {width}x{height} in {filename}"
-    return f"Failed to crop canvas: {output}"
+    await execute_edit_script(script, filename)
+    return f"Canvas cropped to ({x},{y}) {width}x{height} in {filename}"

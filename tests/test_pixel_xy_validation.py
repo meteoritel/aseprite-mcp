@@ -5,6 +5,8 @@ validation and are interpolated into Lua scripts. Bad values must be
 rejected with a friendly error BEFORE any script is built or run —
 these tests therefore only need an existing file, not a real Aseprite.
 """
+
+from conftest import failure
 from conftest import BASE, run
 
 from aseprite_mcp.tools import drawing, tilemap
@@ -23,16 +25,16 @@ _INJECTION_X = "0) os.execute('boom') --"
 
 def test_draw_pixels_rejects_non_integer_xy(base_dir):
     sprite = _placeholder("xy_guard_draw.aseprite")
-    res = run(drawing.draw_pixels(
+    res = failure(drawing.draw_pixels_at(
         filename=sprite,
         pixels=[{"x": _INJECTION_X, "y": 0, "color": "#FF0000"}],
-    ))
+     frame_index=1, layer_name="body"))
     assert res.startswith("Invalid pixel coordinates"), res
 
 
 def test_draw_pixels_at_rejects_non_integer_xy(base_dir):
     sprite = _placeholder("xy_guard_draw_at.aseprite")
-    res = run(drawing.draw_pixels_at(
+    res = failure(drawing.draw_pixels_at(
         filename=sprite,
         layer_name="body",
         frame_index=1,
@@ -46,7 +48,7 @@ def test_draw_on_tile_rejects_non_integer_xy(base_dir):
     # Used to raise a raw ValueError (ToolError); now a friendly string
     # consistent with the other drawing tools.
     sprite = _placeholder("xy_guard_tile.aseprite")
-    res = run(tilemap.draw_on_tile(
+    res = failure(tilemap.draw_on_tile(
         filename=sprite,
         layer_name="tilemap",
         tile_index=1,
@@ -57,9 +59,9 @@ def test_draw_on_tile_rejects_non_integer_xy(base_dir):
 
 def test_draw_pixels_rejects_mixed_bad_values(base_dir):
     sprite = _placeholder("xy_guard_mixed.aseprite")
-    res = run(drawing.draw_pixels(
+    res = failure(drawing.draw_pixels_at(
         filename=sprite,
         pixels=[{"x": 3, "y": 4, "color": "#FF0000"},
                 {"x": 3.5, "y": "abc", "color": "#FF0000"}],
-    ))
+     frame_index=1, layer_name="body"))
     assert res.startswith("Invalid pixel coordinates"), res

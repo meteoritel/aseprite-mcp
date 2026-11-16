@@ -12,7 +12,7 @@
 - 基础绘图图元 → [03 · 绘图与像素编辑](03-painting.md)
 - 调色板的读写与色阶生成（`quantize_to_palette` 用**已有**调色板吸附） → [03 §7](03-painting.md#七调色板)。本文档的 `extract_palette` 是**从画面推导**调色板，两者互补
 - 逐像素读取与合成分析 → [08 · 读取、分析与质量校验](08-inspection-and-quality.md)
-- 原生命令包装的通用机制 → [01 §6](01-lua-bridge.md#六corenativepy原生命令为什么要包装)
+- 原生命令包装的通用机制 → [01 §6](01-lua-bridge.md)
 
 ---
 
@@ -31,7 +31,7 @@
 | 质量 | 简单、可读、可魔改 | 更好（引擎级算法，如正确的卷积与中值切分） |
 | 速度 | 慢（Lua 逐像素） | 快（C++ 实现） |
 
-`native_fx.py` 的模块 docstring 说明了它的定位（[`native_fx.py:1-9`](../aseprite_mcp/tools/native_fx.py#L1)）：
+`native_fx.py` 的模块 docstring 说明了它的定位（[`native_fx.py:1-9`](../aseprite_mcp/tools/native_fx.py)）：
 
 > These delegate to Aseprite's own engine filters instead of hand-rolling pixel math in Lua — higher quality and faster than the equivalents in fx.py. All verified to run headless under `--batch`. They are added ALONGSIDE the hand-rolled tools (outline_cel / adjust_hsl / quantize_to_palette stay) per the "deprecate, don't break" policy.
 
@@ -75,13 +75,13 @@ for py = 0, img.height - 1 do
             if not touch and {diag} then ... end
 ```
 
-[`fx.py:59-81`](../aseprite_mcp/tools/fx.py#L59)。逻辑是"**透明像素**如果邻接不透明像素，就填成描边色"。`include_diagonals=False`（默认）是 4 邻域，`True` 额外看 4 个对角。
+[`fx.py:59-81`](../aseprite_mcp/tools/fx.py)。逻辑是"**透明像素**如果邻接不透明像素，就填成描边色"。`include_diagonals=False`（默认）是 4 邻域，`True` 额外看 4 个对角。
 
 它用 `normalize_cel(..., false)` —— **不会**创建缺失的 cel，没有就报 `No cel at that layer/frame`。
 
 ### Bayer 4×4 有序抖动
 
-两个抖动工具共用同一张矩阵和同一个判定式（[`fx.py:306-328`](../aseprite_mcp/tools/fx.py#L306)）：
+两个抖动工具共用同一张矩阵和同一个判定式（[`fx.py:306-328`](../aseprite_mcp/tools/fx.py)）：
 
 ```lua
 local bayer = {
@@ -113,7 +113,7 @@ if f >= threshold then pset(img, px, py, c2) else pset(img, px, py, c1) end
 
 注意 `apply_dither_gradient` 的 `horizontal` 默认值是 **`False`**，与 `drawing.apply_gradient_rect` 的默认 `True` **相反**。这是个容易踩的不一致。
 
-两个工具都走 `ENSURE_LAYER` + `normalize_cel`，所以能自动创建缺失的顶层图层与 cel —— 这是 [commit `0f2bebf`](03-painting.md#三本子系统工具一览) 那批改动的产物，回归测试见 [`tests/test_visibility.py:239-265`](../tests/test_visibility.py#L239)。
+两个工具都走 `ENSURE_LAYER` + `normalize_cel`，所以能自动创建缺失的顶层图层与 cel —— 这是 [commit `0f2bebf`](03-painting.md#三本子系统工具一览) 那批改动的产物，回归测试见 [`tests/test_visibility.py:239-265`](../tests/test_visibility.py)。
 
 ---
 
@@ -131,7 +131,7 @@ if f >= threshold then pset(img, px, py, c2) else pset(img, px, py, c1) end
 
 ### 区域作用域
 
-五个能作用于区域的工具用同一个约定（[`native_fx.py:36-37`](../aseprite_mcp/tools/native_fx.py#L36)）：
+五个能作用于区域的工具用同一个约定（[`native_fx.py:36-37`](../aseprite_mcp/tools/native_fx.py)）：
 
 ```python
 def _region(x: int, y: int, width: int, height: int):
@@ -144,11 +144,11 @@ def _region(x: int, y: int, width: int, height: int):
 spr.selection = Selection(Rectangle(x, y, w, h))
 ```
 
-执行完再 `deselect()`。这是唯一用 Aseprite **选区**机制限定作用范围的地方（[01 §6](01-lua-bridge.md#六corenativepy原生命令为什么要包装)）。
+执行完再 `deselect()`。这是唯一用 Aseprite **选区**机制限定作用范围的地方（[01 §6](01-lua-bridge.md)）。
 
 ### 卷积矩阵名单是被冻结的
 
-`CONVOLUTION_MATRICES`（[`native_fx.py:20-33`](../aseprite_mcp/tools/native_fx.py#L20)）是 **Aseprite 内置资源 `data/convmatr.def` 的名字快照**，38 项：
+`CONVOLUTION_MATRICES`（[`native_fx.py:20-33`](../aseprite_mcp/tools/native_fx.py)）是 **Aseprite 内置资源 `data/convmatr.def` 的名字快照**，38 项：
 
 | 类别 | 名字 |
 |---|---|
@@ -167,11 +167,11 @@ spr.selection = Selection(Rectangle(x, y, w, h))
 
 ### `extract_palette` 的槽位语义
 
-这是全套工具里语义最绕的一个，docstring 花了很长篇幅解释（[`native_fx.py:238-263`](../aseprite_mcp/tools/native_fx.py#L238)）：
+这是全套工具里语义最绕的一个，docstring 花了很长篇幅解释（[`native_fx.py:238-263`](../aseprite_mcp/tools/native_fx.py)）：
 
 > `max_colors` is a slot budget, not a promise of that many colours: Aseprite always reserves palette slot 0 for the sprite's transparent colour, and the quantiser's median cut can also come up short. Expect at most `max_colors - 1` usable colours, sometimes fewer — and asking for `max_colors + 1` does not reliably recover the difference.
 
-实现上的关键处理（[`native_fx.py:278-291`](../aseprite_mcp/tools/native_fx.py#L278)）：
+实现上的关键处理（[`native_fx.py:278-291`](../aseprite_mcp/tools/native_fx.py)）：
 
 ```lua
 -- Slot 0 of an Aseprite palette is conventionally the transparent colour
@@ -216,8 +216,8 @@ print("TRANSPARENT:" .. transparent_index)
 
 | 项 | 说明 |
 |---|---|
-| `tilemap.py` 有本地 `_parse_hex_color` | 只支持 6 位、无 alpha，**未**统一到 `core/colors.py`（[`tilemap.py:9-16`](../aseprite_mcp/tools/tilemap.py#L9)） |
-| `native_fx` 从 `fx` 借用解析器 | `from .fx import _parse_hex_color`（[`native_fx.py:16`](../aseprite_mcp/tools/native_fx.py#L16)），而 `fx` 的那份是 `parse_hex_color` 的 `rgba[:3]` 包装 —— 所以原生特效**不支持 alpha 颜色** |
+| `tilemap.py` 有本地 `_parse_hex_color` | 只支持 6 位、无 alpha，**未**统一到 `core/colors.py`（[`tilemap.py:9-16`](../aseprite_mcp/tools/tilemap.py)） |
+| `native_fx` 从 `fx` 借用解析器 | `from .fx import _parse_hex_color`（[`native_fx.py:16`](../aseprite_mcp/tools/native_fx.py)），而 `fx` 的那份是 `parse_hex_color` 的 `rgba[:3]` 包装 —— 所以原生特效**不支持 alpha 颜色** |
 | 三个功能重复对 | 见第一节的表格，属刻意的 "deprecate, don't break" |
 | 抖动渐变方向默认值相反 | `apply_dither_gradient(horizontal=False)` vs `drawing.apply_gradient_rect(horizontal=True)` |
 | 卷积矩阵名单硬编码 | 上游新增不会自动出现 |
@@ -230,7 +230,7 @@ print("TRANSPARENT:" .. transparent_index)
 
 ### 瓦片尺寸是 sprite 级全局的
 
-这是 tilemap 最容易搞错的一点：**瓦片尺寸不存在图层上，存在 sprite 的 `gridBounds` 上**（[`tilemap.py:62`](../aseprite_mcp/tools/tilemap.py#L62)）：
+这是 tilemap 最容易搞错的一点：**瓦片尺寸不存在图层上，存在 sprite 的 `gridBounds` 上**（[`tilemap.py:62`](../aseprite_mcp/tools/tilemap.py)）：
 
 ```lua
 spr.gridBounds = Rectangle(0, 0, {tile_width}, {tile_height})
@@ -248,14 +248,14 @@ app.activeLayer.name = "{safe_layer}"
 
 瓦片索引 **0 恒为空**，真实瓦片从 1 开始。所以：
 
-- `draw_on_tile` 拒绝 `tile_index < 1`（[`tilemap.py:98-99`](../aseprite_mcp/tools/tilemap.py#L98)）。
-- tileset 的"真实瓦片数"是 `#ts - 1`（[`tilemap.py:136`](../aseprite_mcp/tools/tilemap.py#L136)）。
+- `draw_on_tile` 拒绝 `tile_index < 1`（[`tilemap.py:98-99`](../aseprite_mcp/tools/tilemap.py)）。
+- tileset 的"真实瓦片数"是 `#ts - 1`（[`tilemap.py:136`](../aseprite_mcp/tools/tilemap.py)）。
 - `get_tilemap_info` 返回的 `tile_count` 是 `#ts - 1`。
 - `set_tiles` 里 `tile_index = 0` 表示**清除该格**。
 
 ### 顶层判重
 
-`create_tilemap_layer` 刻意**不用** `find_layer` 做判重（[`tilemap.py:52-59`](../aseprite_mcp/tools/tilemap.py#L52)）：
+`create_tilemap_layer` 刻意**不用** `find_layer` 做判重（[`tilemap.py:52-59`](../aseprite_mcp/tools/tilemap.py)）：
 
 ```lua
 -- Duplicate-name guard is top-level only: the new layer is created at the
@@ -273,7 +273,7 @@ end
 
 作用对象是 **tileset 里的一个瓦片**，不是某帧的某个格子。坐标是 **tile-local**（`(0,0)` = 瓦片左上角）。
 
-追加瓦片的约定：**`tile_index == #ts` 时自动新建一个瓦片**（[`tilemap.py:138-141`](../aseprite_mcp/tools/tilemap.py#L138)）：
+追加瓦片的约定：**`tile_index == #ts` 时自动新建一个瓦片**（[`tilemap.py:138-141`](../aseprite_mcp/tools/tilemap.py)）：
 
 ```lua
 if idx == #ts then
@@ -287,22 +287,22 @@ end
 ERROR:tile_index out of range (tileset has 3 real tiles; pass 4 to append)
 ```
 
-写入方式是**克隆 → 改 → 赋值**（[`tilemap.py:142-150`](../aseprite_mcp/tools/tilemap.py#L142)）：`tile.image:clone()` 后逐点 `putPixel`，最后 `tile.image = img`。局部 `put` 带边界判断。
+写入方式是**克隆 → 改 → 赋值**（[`tilemap.py:142-150`](../aseprite_mcp/tools/tilemap.py)）：`tile.image:clone()` 后逐点 `putPixel`，最后 `tile.image = img`。局部 `put` 带边界判断。
 
 颜色用 `app.pixelColor.rgba(r, g, b, 255)` 打包，**alpha 固定 255** —— 本地解析器也不支持 alpha。
 
 ### `set_tiles`：在帧上摆放瓦片
 
-坐标是 **0-based 网格坐标**（`col` / `row`），映射尺寸由网格与画布推出（[`tilemap.py:208-209`](../aseprite_mcp/tools/tilemap.py#L208)）：
+坐标是 **0-based 网格坐标**（`col` / `row`），映射尺寸由网格与画布推出（[`tilemap.py:208-209`](../aseprite_mcp/tools/tilemap.py)）：
 
 ```lua
 local cols = math.ceil(spr.width / tw)
 local rows = math.ceil(spr.height / th)
 ```
 
-**先全量预校验再动手**（[`tilemap.py:212-221`](../aseprite_mcp/tools/tilemap.py#L212)）：任一格越界或 `tile_index >= #ts` 就报错 `return`，一个格子都不写。这避免了"改了一半才失败"。
+**先全量预校验再动手**（[`tilemap.py:212-221`](../aseprite_mcp/tools/tilemap.py)）：任一格越界或 `tile_index >= #ts` 就报错 `return`，一个格子都不写。这避免了"改了一半才失败"。
 
-cel 的处理有一段迁移逻辑（[`tilemap.py:226-246`](../aseprite_mcp/tools/tilemap.py#L226)）：
+cel 的处理有一段迁移逻辑（[`tilemap.py:226-246`](../aseprite_mcp/tools/tilemap.py)）：
 
 ```lua
 if cel and cel.image.width == cols and cel.image.height == rows
@@ -335,7 +335,7 @@ end
 | `get_tile_at` | `TILE:<n>` → JSON `{col, row, tile_index}` | 0 表示空格。越界或没有 cel 时返回 0 |
 | `get_tilemap_info` | `INFO:tw,th,count,cols,rows` → JSON | `tile_count` 已排除空格 |
 
-`get_tile_at` 也要处理 cel 偏移（[`tilemap.py:303-304`](../aseprite_mcp/tools/tilemap.py#L303)）：
+`get_tile_at` 也要处理 cel 偏移（[`tilemap.py:303-304`](../aseprite_mcp/tools/tilemap.py)）：
 
 ```lua
 local cx = {col} - cel.position.x // grid.width
@@ -358,7 +358,7 @@ local cy = {row} - cel.position.y // grid.height
 
 ## 六、slices
 
-slice 是精灵里的**命名矩形区域**，游戏引擎用它切九宫格素材。与图层不同，**slice 是一个平坦列表**（`spr.slices`），没有嵌套，所以它有自己的查找函数而不是复用 `FIND_LAYER`（[`slices.py:6-13`](../aseprite_mcp/tools/slices.py#L6)）：
+slice 是精灵里的**命名矩形区域**，游戏引擎用它切九宫格素材。与图层不同，**slice 是一个平坦列表**（`spr.slices`），没有嵌套，所以它有自己的查找函数而不是复用 `FIND_LAYER`（[`slices.py:6-13`](../aseprite_mcp/tools/slices.py)）：
 
 ```lua
 local function find_slice(spr, name)
@@ -377,11 +377,11 @@ end
 | `center`（九宫格可拉伸中心） | **相对 slice 原点** |
 | `pivot`（轴心点） | **相对 slice 原点** |
 
-`create_slice` 拒绝空名字与重复名字（[`slices.py:32-35`](../aseprite_mcp/tools/slices.py#L32), [`:43`](../aseprite_mcp/tools/slices.py#L43)）。`set_slice_center` / `set_slice_pivot` 都要求 slice 已存在。
+`create_slice` 拒绝空名字与重复名字（[`slices.py:32-35`](../aseprite_mcp/tools/slices.py), [`:43`](../aseprite_mcp/tools/slices.py)）。`set_slice_center` / `set_slice_pivot` 都要求 slice 已存在。
 
 ### `list_slices` 的输出协议
 
-这里有一个为了**健壮性**而刻意复杂化的设计（[`slices.py:158-160`](../aseprite_mcp/tools/slices.py#L158)）：
+这里有一个为了**健壮性**而刻意复杂化的设计（[`slices.py:158-160`](../aseprite_mcp/tools/slices.py)）：
 
 ```python
 # Emit one JSON object per slice (name via Lua %q) instead of a
@@ -398,7 +398,7 @@ print("DONE")
 
 切片名用 Lua 的 `%q` 输出（`string.format("%q", slice.name)`），它会对引号和控制字符做正确转义。于是名字里含 `|`、`,`、`:` 都不会破坏解析 —— 而早期的"用 `|` 连接一行"方案在遇到这些字符时会整批解析失败。回归测试：[`tests/test_slices_pipe.py`](../tests/test_slices_pipe.py)。
 
-Python 侧只 `json.loads` 每个 `SLICE:` 行并收进列表（[`slices.py:186-191`](../aseprite_mcp/tools/slices.py#L186)），最后整体 `json.dumps`。所以工具返回的是一个**JSON 数组**，而传输层用的是**逐行协议** —— 两层是分开的。
+Python 侧只 `json.loads` 每个 `SLICE:` 行并收进列表（[`slices.py:186-191`](../aseprite_mcp/tools/slices.py)），最后整体 `json.dumps`。所以工具返回的是一个**JSON 数组**，而传输层用的是**逐行协议** —— 两层是分开的。
 
 ### 全量工具
 
@@ -443,7 +443,7 @@ Python 侧只 `json.loads` 每个 `SLICE:` 行并收进列表（[`slices.py:186-
 
 ## 相关文档
 
-- [01 · Lua 桥](01-lua-bridge.md#六corenativepy原生命令为什么要包装) —— `build_native_command_script` 的目标激活机制
+- [01 · Lua 桥](01-lua-bridge.md) —— `build_native_command_script` 的目标激活机制
 - [03 · 绘图与像素编辑](03-painting.md#七调色板) —— `quantize_to_palette`（吸附到已有调色板）与 `extract_palette`（推导调色板）的分工
 - [08 · 读取、分析与质量校验](08-inspection-and-quality.md#四tilemap-图层为什么不能逐像素读取) —— 为什么 tilemap 不能逐像素读
 - [reference/tools.md](reference/tools.md#fxpy) —— 四个模块的完整签名

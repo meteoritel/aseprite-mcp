@@ -4,6 +4,7 @@ import asyncio
 import os
 
 import pytest
+from mcp.server.mcpserver.exceptions import ToolError
 
 from aseprite_mcp.core.state import (
     FILE_NOT_FOUND_HINT,
@@ -61,20 +62,18 @@ class TestResolvePath:
 
 class TestPrepareFilename:
     def test_no_filename_no_active_file(self):
-        path, err = prepare_filename("")
-        assert path is None
-        assert err == NO_ACTIVE_FILE_ERROR
+        with pytest.raises(ToolError, match="no active file"):
+            prepare_filename("")
 
     def test_missing_file_returns_hint(self, tmp_path):
-        path, err = prepare_filename(str(tmp_path / "nope.aseprite"))
-        assert path is None
-        assert FILE_NOT_FOUND_HINT in err
+        with pytest.raises(ToolError) as error:
+            prepare_filename(str(tmp_path / "nope.aseprite"))
+        assert FILE_NOT_FOUND_HINT in str(error.value)
 
     def test_existing_file_anchors(self, tmp_path):
         target = tmp_path / "real.aseprite"
         target.write_bytes(b"x")
-        path, err = prepare_filename(str(target))
-        assert err is None
+        path = prepare_filename(str(target))
         assert path == str(target)
         assert get_active_file() == str(target)
 
@@ -83,19 +82,16 @@ class TestPrepareFilename:
         target.write_bytes(b"x")
         prepare_filename(str(target))
         # Omit filename: falls back to the anchored absolute path.
-        path, err = prepare_filename("")
-        assert err is None
+        path = prepare_filename("")
         assert path == str(target)
 
     def test_traversal_rejected(self, tmp_path):
-        path, err = prepare_filename(str(tmp_path / ".." / "evil.aseprite"))
-        assert path is None
-        assert "traversal" in err
+        with pytest.raises(ToolError, match="traversal"):
+            prepare_filename(str(tmp_path / ".." / "evil.aseprite"))
 
     def test_output_path_must_exist_false_no_anchor(self, tmp_path):
         out = tmp_path / "new.png"
-        path, err = prepare_filename(str(out), must_exist=False, anchor=False)
-        assert err is None
+        path = prepare_filename(str(out), must_exist=False, anchor=False)
         assert path == str(out)
         assert get_active_file() is None
 
@@ -122,32 +118,23 @@ class TestCreateCanvasAnchoring:
     def test_relative_filename_rejected(self):
         from aseprite_mcp.tools import canvas as canvas_mod
 
-        result = _run(canvas_mod.create_canvas(8, 8, filename="sprites/c.aseprite"))
-        assert "ABSOLUTE" in result
+        with pytest.raises(ToolError, match="ABSOLUTE"):
+            _run(canvas_mod.create_canvas(8, 8, filename="sprites/c.aseprite"))
         assert get_active_file() is None
 
     def test_failure_does_not_anchor(self, monkeypatch, tmp_path):
         from aseprite_mcp.tools import canvas as canvas_mod
 
-        monkeypatch.setattr(
-            canvas_mod.AsepriteCommand,
-            "execute_lua_script_checked",
-            staticmethod(lambda script: (False, "boom")),
-        )
-        result = _run(
-            canvas_mod.create_canvas(8, 8, filename=str(tmp_path / "c.aseprite"))
-        )
-        assert "Failed" in result
+        async def fail(*args, **kwargs):
+            raise ToolError("boom")
+        monkeypatch.setattr(canvas_mod, "execute_edit_script", fail)
+        with pytest.raises(ToolError, match="boom"):
+            _run(canvas_mod.create_canvas(8, 8, filename=str(tmp_path / "c.aseprite")))
         assert get_active_file() is None
 
     def test_success_anchors(self, monkeypatch, tmp_path):
         from aseprite_mcp.tools import canvas as canvas_mod
 
-        monkeypatch.setattr(
-            canvas_mod.AsepriteCommand,
-            "execute_lua_script_checked",
-            staticmethod(lambda script: (True, "OK")),
-        )
         target = tmp_path / "c.aseprite"
         result = _run(canvas_mod.create_canvas(8, 8, filename=str(target)))
         assert "anchored" in result
@@ -175,9 +162,9 @@ class TestRunLuaScriptFallback:
 
         seen = {}
 
-        def fake_execute(script, filename=None):
+        async def fake_execute(script, filename=None):
             seen["filename"] = filename
-            return True, "OK"
+            return "OK"
 
         monkeypatch.setattr(script_mod.AsepriteCommand, "execute_lua_script", fake_execute)
         result = _run(script_mod.run_lua_script("print(1)"))
@@ -189,9 +176,9 @@ class TestRunLuaScriptFallback:
 
         seen = {}
 
-        def fake_execute(script, filename=None):
+        async def fake_execute(script, filename=None):
             seen["filename"] = filename
-            return True, "OK"
+            return "OK"
 
         monkeypatch.setattr(script_mod.AsepriteCommand, "execute_lua_script", fake_execute)
         result = _run(script_mod.run_lua_script("print(1)"))

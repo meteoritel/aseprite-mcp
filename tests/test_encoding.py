@@ -1,58 +1,47 @@
-"""Unit tests for encoding safety of the Aseprite command bridge.
-
-Aseprite reads Lua files as UTF-8 and writes UTF-8 to stdout. On a
-Chinese Windows system the ANSI code page is GBK, so any implicit
-encoding would corrupt non-ASCII paths (e.g. Chinese filenames) and the
-sprite would be saved to a mojibake location.
-"""
+"""UTF-8 survives Python, temporary Lua files and process diagnostics."""
 
 import os
 import sys
 
+import pytest
+from mcp.server.mcpserver.exceptions import ToolError
+
+from conftest import run
 from aseprite_mcp.core.commands import AsepriteCommand, lua_escape
 
 
-class TestLuaScriptFileEncoding:
-    def test_script_file_is_utf8_with_chinese_path(self, monkeypatch, tmp_path):
-        target = str(tmp_path / "精灵" / "角色.aseprite")
-        os.makedirs(os.path.dirname(target))
-        with open(target, "wb") as f:
-            f.write(b"x")
+def test_script_file_is_utf8_and_removed_after_execution(monkeypatch, tmp_path):
+    target = str(tmp_path / "精灵" / "角色.aseprite")
+    captured = {}
 
-        captured = {}
+    async def fake_run(args):
+        script_path = args[args.index("--script") + 1]
+        captured["path"] = script_path
+        with open(script_path, "rb") as script:
+            captured["bytes"] = script.read()
+        return "OK"
 
-        def fake_run(args):
-            script_path = args[args.index("--script") + 1]
-            with open(script_path, "rb") as f:
-                captured["script_bytes"] = f.read()
-            return True, "OK"
-
-        monkeypatch.setattr(
-            AsepriteCommand, "run_command", staticmethod(fake_run)
-        )
-        success, _ = AsepriteCommand.execute_lua_script(
-            f'spr:saveAs("{lua_escape(target)}")', target
-        )
-        assert success
-        # The file must be valid UTF-8 and contain the original path.
-        script = captured["script_bytes"].decode("utf-8")
-        assert lua_escape(target) in script
+    monkeypatch.setattr(AsepriteCommand, "run_command", staticmethod(fake_run))
+    assert run(AsepriteCommand.execute_lua_script(
+        f'spr:saveAs("{lua_escape(target)}")', target,
+    )) == "OK"
+    assert lua_escape(target) in captured["bytes"].decode("utf-8")
+    assert not os.path.exists(captured["path"])
 
 
-class TestRunCommandDecoding:
-    def test_stdout_decoded_as_utf8(self, monkeypatch):
-        """run_command must decode Aseprite's UTF-8 output, not the ANSI page."""
-        monkeypatch.setenv("ASEPRITE_PATH", sys.executable)
-        success, output = AsepriteCommand.run_command(
-            ["-X", "utf8", "-c", "print('中文路径/精灵')"]
-        )
-        assert success
-        assert "中文路径/精灵" in output
+def test_stdout_decoded_as_utf8(monkeypatch):
+    monkeypatch.setenv("ASEPRITE_PATH", sys.executable)
+    output = run(AsepriteCommand.run_command(["-X", "utf8", "-c", "print('中文路径/精灵')"]))
+    assert "中文路径/精灵" in output
 
-    def test_stderr_decoded_as_utf8_on_failure(self, monkeypatch):
-        monkeypatch.setenv("ASEPRITE_PATH", sys.executable)
-        success, output = AsepriteCommand.run_command(
-            ["-X", "utf8", "-c", "import sys; sys.stderr.write('错误：中文'); sys.exit(1)"]
-        )
-        assert not success
-        assert "错误：中文" in output
+
+def test_both_diagnostic_streams_survive_nonzero_exit(monkeypatch):
+    monkeypatch.setenv("ASEPRITE_PATH", sys.executable)
+    with pytest.raises(ToolError) as error:
+        run(AsepriteCommand.run_command([
+            "-X", "utf8", "-c",
+            "import sys; print('脚本失败'); sys.stderr.write('错误：中文'); sys.exit(3)",
+        ]))
+    assert "脚本失败" in str(error.value)
+    assert "错误：中文" in str(error.value)
+    assert "code 3" in str(error.value)

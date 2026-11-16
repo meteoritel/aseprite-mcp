@@ -12,12 +12,15 @@ The two tools are inverses. get_sprite_map returns ``rows``,
 arguments, so a read -> edit -> write loop needs no reformatting.
 """
 
+from mcp.server.mcpserver.exceptions import ToolError
+from ..core.editing import execute_edit_script
+
 import json
 from typing import Any, Dict, List, Optional
 
 from ..core.colors import parse_hex_color
 from ..core.commands import AsepriteCommand, lua_escape
-from ..core.lua import ENSURE_LAYER, FIND_LAYER, LAYER_NAMES, NORMALIZE_CEL, PSET
+from ..core.lua import EDIT_TARGET, FIND_LAYER, LAYER_NAMES, NORMALIZE_CEL, PSET
 from ..core.state import prepare_filename
 from .analysis import _COMPOSE_FRAME
 from .. import mcp
@@ -135,21 +138,7 @@ def _quantise(
 
 
 @mcp.tool()
-async def draw_sprite_map(
-    *,
-    filename: str = "",
-    layer_name: str,
-    frame_index: int,
-    rows: List[str],
-    palette: Dict[str, str],
-    x: int = 0,
-    y: int = 0,
-    transparent: str = ".",
-    mirror_x: bool = False,
-    mirror_y: bool = False,
-    erase_transparent: bool = False,
-    create_if_missing: bool = True,
-) -> str:
+async def draw_sprite_map(*, filename: str='', layer_name: str, frame_index: int, rows: List[str], palette: Dict[str, str], x: int=0, y: int=0, transparent: str='.', mirror_x: bool=False, mirror_y: bool=False, erase_transparent: bool=False, create_if_missing: bool=True) -> str:
     """Draw a whole region from a compact character-grid map.
 
     `rows` is a list of equal-length strings, one per pixel row, top to
@@ -183,35 +172,31 @@ async def draw_sprite_map(
         erase_transparent: Clear transparent cells instead of leaving them
         create_if_missing: Create the layer (top-level names only) and cel if they don't exist
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
 
     parsed, map_err = _parse_sprite_map(rows, palette, transparent)
     if map_err:
-        return f"Invalid sprite map: {map_err}"
+        raise ToolError(f"Invalid sprite map: {map_err}")
     width, height, cells = parsed
 
-    if erase_transparent:
-        # Emit an explicit transparent putPixel for every empty cell so the
-        # region is cleared rather than left as it was.
-        filled = {(col, row) for col, row, _ in cells}
-        for row in range(height):
-            for col in range(width):
-                if (col, row) not in filled:
-                    cells.append((col, row, (0, 0, 0, 0)))
-
-    # Mirroring duplicates each cell onto its reflection, so a symmetric
-    # sprite only has to be authored once.
     pixels: Dict[tuple[int, int], tuple[int, int, int, int]] = {}
     for col, row, rgba in cells:
-        pixels[(col, row)] = rgba
+        positions = {(col, row)}
         if mirror_x:
-            pixels[(width - 1 - col, row)] = rgba
+            positions.add((width - 1 - col, row))
         if mirror_y:
-            pixels[(col, height - 1 - row)] = rgba
+            positions.add((col, height - 1 - row))
         if mirror_x and mirror_y:
-            pixels[(width - 1 - col, height - 1 - row)] = rgba
+            positions.add((width - 1 - col, height - 1 - row))
+        for position in positions:
+            if position in pixels and pixels[position] != rgba:
+                raise ToolError(f"Invalid sprite map: conflicting mirrored colours at column {position[0]}, row {position[1]}")
+            pixels[position] = rgba
+
+    if erase_transparent:
+        for row in range(height):
+            for col in range(width):
+                pixels.setdefault((col, row), (0, 0, 0, 0))
 
     if not pixels:
         return (
@@ -225,22 +210,22 @@ async def draw_sprite_map(
     script = f"""
     {NORMALIZE_CEL}
     {PSET}
-    {ENSURE_LAYER}
-    {LAYER_NAMES}
+    {EDIT_TARGET}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
+    if spr.colorMode ~= ColorMode.RGB then print("ERROR:Sprite maps require RGB mode. Tip: use set_color_mode(mode='rgb') first.") return end
 
     local idx = {frame_index}
     if idx < 1 or idx > #spr.frames then print("ERROR:Frame index {frame_index} out of range (sprite has " .. #spr.frames .. " frame(s), 1-based). Tip: call add_frame first.") return end
 
-    local target = ensure_layer(spr, "{safe_layer_name}", {create_flag})
-    if not target then print("ERROR:Layer '{safe_layer_name}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first; drawing tools auto-create top-level layers when create_if_missing=true.") return end
+    local target = require_layer(spr, "{safe_layer_name}", {create_flag})
+    if target.isTilemap then print("ERROR:Sprite maps require an image layer, not a tilemap") return end
 
     app.transaction(function()
         app.activeLayer = target
         app.activeFrame = spr.frames[idx]
-        local cel = normalize_cel(spr, target, spr.frames[idx], {create_flag})
-        if not cel then return end
+        require_cel(spr, target, idx, {create_flag})
+        local cel = normalize_cel(spr, target, spr.frames[idx], false)
         local img = cel.image
     """
 
@@ -253,17 +238,15 @@ async def draw_sprite_map(
     script += """
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return (
-            f"Sprite map drawn on '{layer_name}' frame {frame_index} "
-            f"({width}x{height} at {x},{y}, {len(pixels)} pixel(s)) in {filename}"
-        )
-    return f"Failed to draw sprite map: {output}"
+    await execute_edit_script(script, filename)
+    return (
+        f"Sprite map drawn on '{layer_name}' frame {frame_index} "
+        f"({width}x{height} at {x},{y}, {len(pixels)} pixel(s)) in {filename}"
+    )
 
 
 @mcp.tool()
@@ -278,7 +261,7 @@ async def get_sprite_map(
     height: int,
     palette: Optional[Dict[str, str]] = None,
     max_colors: int = 0,
-    alpha_threshold: int = 128,
+    alpha_threshold: int = 1,
     transparent: str = ".",
     composite: bool = False,
 ) -> str:
@@ -305,7 +288,7 @@ async def get_sprite_map(
 
     Args:
         filename: Aseprite file to read (optional; defaults to the session's active file)
-        layer_name: Layer to read from (uses active layer when empty)
+        layer_name: Explicit layer name; may be empty only for composite reads
         frame_index: Frame index starting at 1
         x: Left edge of the region (sprite-global)
         y: Top edge of the region (sprite-global)
@@ -313,19 +296,21 @@ async def get_sprite_map(
         height: Region height
         palette: Optional character -> hex colour map to reuse for the output
         max_colors: Quantise to at most this many colours (0 = no limit)
-        alpha_threshold: Alpha below this becomes `transparent` (default 128)
+        alpha_threshold: Alpha below this becomes `transparent` (default 1)
         transparent: Character emitted for empty cells (default ".")
         composite: Read the visible flattened composite instead of a single layer
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
     if width <= 0 or height <= 0:
-        return "Width and height must be > 0"
+        raise ToolError("Width and height must be > 0")
     if max_colors < 0:
-        return "max_colors must be >= 0"
+        raise ToolError("max_colors must be >= 0")
+    if not 0 <= alpha_threshold <= 255:
+        raise ToolError("alpha_threshold must be between 0 and 255")
+    if not composite and not layer_name:
+        raise ToolError("Invalid layer_name: specify an explicit layer, or composite=true")
     if not isinstance(transparent, str) or len(transparent) != 1:
-        return f"Invalid transparent: must be a single character, got {transparent!r}"
+        raise ToolError(f"Invalid transparent: must be a single character, got {transparent!r}")
 
     # Parse the caller's palette up front. It is only an output mapping, so a
     # bad key or colour can be rejected before paying for an Aseprite launch.
@@ -334,15 +319,13 @@ async def get_sprite_map(
     if palette:
         for char, value in palette.items():
             if not isinstance(char, str) or len(char) != 1:
-                return f"Invalid palette key {char!r}: keys must be single characters"
+                raise ToolError(f"Invalid palette key {char!r}: keys must be single characters")
             if char == transparent:
-                return (
-                    f"Invalid palette: must not contain the transparent "
-                    f"character {transparent!r}"
-                )
+                raise ToolError(f"Invalid palette: must not contain the transparent "
+                    f"character {transparent!r}")
             rgba = parse_hex_color(value)
             if rgba is None:
-                return f"Invalid colour for palette[{char!r}]: {value!r}"
+                raise ToolError(f"Invalid colour for palette[{char!r}]: {value!r}")
             # Two characters for one colour would make the inverse
             # ambiguous; the lowest character wins deterministically.
             if rgba in rgba_to_char:
@@ -362,20 +345,15 @@ async def get_sprite_map(
         """
     else:
         reader = f"""
+        if spr.colorMode ~= ColorMode.RGB then print("ERROR:Sprite maps require RGB mode. Tip: use set_color_mode(mode='rgb') first.") return end
         local cel = nil
-        if "{safe_layer}" ~= "" then
-            {FIND_LAYER}
-            {LAYER_NAMES}
-            local target = find_layer(spr, "{safe_layer}")
-            if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
-            if target.isTilemap then print("ERROR:Layer '{safe_layer}' {_TILEMAP_REFUSAL}. Tip: use get_composite_rect for the rendered colour.") return end
-            cel = target:cel(spr.frames[idx])
-            if not cel then print("ERROR:No cel on layer '{safe_layer}' at frame {frame_index} (sprite has " .. #spr.frames .. " frame(s), 1-based). Tip: call add_frame first, or draw on this layer/frame.") return end
-        else
-            app.activeFrame = spr.frames[idx]
-            cel = app.activeCel
-            if not cel then print("ERROR:No active cel") return end
-        end
+        {FIND_LAYER}
+        {LAYER_NAMES}
+        local target = find_layer(spr, "{safe_layer}")
+        if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
+        if target.isTilemap then print("ERROR:Layer '{safe_layer}' {_TILEMAP_REFUSAL}. Tip: use get_composite_rect for the rendered colour.") return end
+        cel = target:cel(spr.frames[idx])
+        if not cel then print("ERROR:No cel on layer '{safe_layer}' at frame {frame_index} (sprite has " .. #spr.frames .. " frame(s), 1-based). Tip: call add_frame first, or draw on this layer/frame.") return end
         local img = cel.image
         local ox = cel.position.x
         local oy = cel.position.y
@@ -407,20 +385,20 @@ async def get_sprite_map(
     end
     """
 
-    success, output = AsepriteCommand.execute_lua_script(script, filename)
-    if not success:
-        return f"Failed to read sprite map: {output}"
+    output = await AsepriteCommand.execute_lua_script(script, filename)
 
     cells: Dict[tuple[int, int], tuple[int, int, int, int]] = {}
     for line in output.splitlines():
         if line.startswith("ERROR:"):
-            return f"Failed to read sprite map: {line[6:]}"
+            raise ToolError(f"Failed to read sprite map: {line[6:]}")
         if line.startswith("PIXEL:"):
             px, py, r, g, b, a = (int(value) for value in line[6:].split(","))
             cells[(px - x, py - y)] = (r, g, b, a)
 
-    if not cells:
-        return "Failed to read sprite map: no pixel data returned"
+    if len(cells) != width * height:
+        raise ToolError("Failed to read sprite map: incomplete pixel data returned")
+
+    is_lossy = any(0 < rgba[3] < alpha_threshold for rgba in cells.values())
 
     counts: Dict[tuple[int, int, int, int], int] = {}
     for rgba in cells.values():
@@ -429,6 +407,7 @@ async def get_sprite_map(
 
     if max_colors > 0 and len(counts) > max_colors:
         remap = _quantise(list(counts), counts, max_colors)
+        is_lossy = is_lossy or any(colour != mapped for colour, mapped in remap.items())
         cells = {
             pos: remap.get(rgba, rgba) for pos, rgba in cells.items()
         }
@@ -439,15 +418,13 @@ async def get_sprite_map(
 
     # Anything the caller's palette did not cover is auto-assigned from the
     # alphabet that is still free.
-    free = [c for c in _AUTO_ALPHABET if c not in char_to_rgba]
+    free = [c for c in _AUTO_ALPHABET if c != transparent and c not in char_to_rgba]
     extra = sorted(colour for colour in counts if colour not in rgba_to_char)
     if len(extra) > len(free):
-        return (
-            f"Invalid colour count: the region uses {len(counts)} distinct "
+        raise ToolError(f"Invalid colour count: the region uses {len(counts)} distinct "
             f"colour(s) but only {len(char_to_rgba) + len(free)} "
             f"single-character slot(s) are available — pass max_colors to "
-            f"quantise, or a palette covering the colours you care about"
-        )
+            f"quantise, or a palette covering the colours you care about")
     for rgba, char in zip(extra, free):
         rgba_to_char[rgba] = char
         char_to_rgba[char] = rgba
@@ -473,6 +450,7 @@ async def get_sprite_map(
         "transparent": transparent,
         "palette": {char: _hex_of(char_to_rgba[char]) for char in sorted(char_to_rgba)},
         "rows": rows_out,
+        "lossy": is_lossy,
     }
     # A single-character-per-column ruler only exists while the alphabet
     # lasts; past that the region is wide enough that rows are self-describing.

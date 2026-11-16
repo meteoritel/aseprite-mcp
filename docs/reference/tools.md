@@ -2,51 +2,47 @@
 
 > ⚠️ 本文件由 `scripts/gen_tool_reference.py` 解析源码 AST 生成，**请勿手改**。
 > 新增或修改工具后重新生成：`uv run python scripts/gen_tool_reference.py`
-> 生成基线：`c1ada8a`
-
-共 **118** 个 `@mcp.tool()` 工具，分布在 **21** 个模块。
+> 生成基线：`cc00c82`
 
 参数列中 `*` 之后的是 keyword-only 参数；`filename` 通常可省略（回退到会话的活跃文件）。
 
 ## 模块索引
 
-| 模块 | 工具数 | 说明 | 开发者文档 |
-|---|---:|---|---|
-| [`canvas.py`](#canvaspy) | 7 | 画布创建、图层/帧的增删与活跃状态设置 | [04-layers-and-canvas.md](../04-layers-and-canvas.md) |
-| [`drawing.py`](#drawingpy) | 14 | 像素、线、矩形、圆、椭圆、多边形、路径、填充、渐变 | [03-painting.md](../03-painting.md) |
-| [`export.py`](#exportpy) | 7 | PNG/GIF/精灵表/分层/按 tag 导出与图片导入 | [07-output.md](../07-output.md) |
-| [`animation.py`](#animationpy) | 24 | 帧、cel、tag、带缓动的补间与传播 | [05-animation.md](../05-animation.md) |
-| [`preview.py`](#previewpy) | 2 | 本地 HTTP 预览服务器 | [07-output.md](../07-output.md) |
-| [`palette.py`](#palettepy) | 8 | 调色板读写、复古预设、色阶生成、量化、色彩模式 | [03-painting.md](../03-painting.md) |
-| [`scene.py`](#scenepy) | 1 | 在两个精灵文件之间复制图层 | [04-layers-and-canvas.md](../04-layers-and-canvas.md) |
-| [`guide.py`](#guidepy) | 1 | 返回面向 LLM 的动画工作流指南文本 | [05-animation.md](../05-animation.md) |
-| [`quality.py`](#qualitypy) | 4 | 动画一致性校验与归一化（结构校验器，非评分器） | [08-inspection-and-quality.md](../08-inspection-and-quality.md) |
-| [`pixel_read.py`](#pixel_readpy) | 4 | 单 cel 与合成后的像素读取 | [08-inspection-and-quality.md](../08-inspection-and-quality.md) |
-| [`sprite_map.py`](#sprite_mappy) | 2 | 字符网格（sprite map）的紧凑批量绘制与回读 | [03-painting.md](../03-painting.md) |
-| [`transform.py`](#transformpy) | 4 | 翻转、旋转、缩放、裁剪 | [03-painting.md](../03-painting.md) |
-| [`layers.py`](#layerspy) | 7 | 图层删除、重命名、复制、排序、混合模式、合并、展平 | [04-layers-and-canvas.md](../04-layers-and-canvas.md) |
-| [`selection.py`](#selectionpy) | 4 | 矩形区域的移动/复制/擦除，以及按颜色擦除 | [03-painting.md](../03-painting.md) |
-| [`fx.py`](#fxpy) | 5 | 手写逐像素特效：描边、换色、HSL 调整、有序抖动 | [06-effects-and-tilemap.md](../06-effects-and-tilemap.md) |
-| [`analysis.py`](#analysispy) | 3 | 洋葱皮渲染、帧差异、颜色统计 | [08-inspection-and-quality.md](../08-inspection-and-quality.md) |
-| [`slices.py`](#slicespy) | 5 | 命名区域、九宫格中心、轴心点 | [06-effects-and-tilemap.md](../06-effects-and-tilemap.md) |
-| [`tilemap.py`](#tilemappy) | 5 | tilemap 图层、tileset 编辑、瓦片摆放与读取 | [06-effects-and-tilemap.md](../06-effects-and-tilemap.md) |
-| [`script.py`](#scriptpy) | 1 | 任意 Aseprite Lua 的逃生舱 | [01-lua-bridge.md](../01-lua-bridge.md) |
-| [`text.py`](#textpy) | 3 | 用 bitmap 或 TrueType 字体绘制与测量文本 | [03-painting.md](../03-painting.md) |
-| [`native_fx.py`](#native_fxpy) | 7 | Aseprite 原生滤镜包装（app.command.*） | [06-effects-and-tilemap.md](../06-effects-and-tilemap.md) |
+| 模块 | 说明 | 开发者文档 |
+|---|---|---|
+| [`canvas.py`](#canvaspy) | 画布创建、图层/帧的增删与活跃状态设置 | [04-layers-and-canvas.md](../04-layers-and-canvas.md) |
+| [`drawing.py`](#drawingpy) | 像素、线、矩形、圆、椭圆、多边形、路径、填充、渐变 | [03-painting.md](../03-painting.md) |
+| [`export.py`](#exportpy) | PNG/GIF/精灵表/分层/按 tag 导出与图片导入 | [07-output.md](../07-output.md) |
+| [`animation.py`](#animationpy) | 帧、cel、tag、带缓动的补间与传播 | [05-animation.md](../05-animation.md) |
+| [`preview.py`](#previewpy) | 本地 HTTP 预览服务器 | [07-output.md](../07-output.md) |
+| [`palette.py`](#palettepy) | 调色板读写、复古预设、色阶生成、量化、色彩模式 | [03-painting.md](../03-painting.md) |
+| [`scene.py`](#scenepy) | 在两个精灵文件之间复制图层 | [04-layers-and-canvas.md](../04-layers-and-canvas.md) |
+| [`guide.py`](#guidepy) | 返回面向 LLM 的动画工作流指南文本 | [05-animation.md](../05-animation.md) |
+| [`quality.py`](#qualitypy) | 动画一致性校验与归一化（结构校验器，非评分器） | [08-inspection-and-quality.md](../08-inspection-and-quality.md) |
+| [`pixel_read.py`](#pixel_readpy) | 单 cel 与合成后的像素读取 | [08-inspection-and-quality.md](../08-inspection-and-quality.md) |
+| [`sprite_map.py`](#sprite_mappy) | 字符网格（sprite map）的紧凑批量绘制与回读 | [03-painting.md](../03-painting.md) |
+| [`transform.py`](#transformpy) | 翻转、旋转、缩放、裁剪 | [03-painting.md](../03-painting.md) |
+| [`layers.py`](#layerspy) | 图层删除、重命名、复制、排序、混合模式、合并、展平 | [04-layers-and-canvas.md](../04-layers-and-canvas.md) |
+| [`selection.py`](#selectionpy) | 矩形区域的移动/复制/擦除，以及按颜色擦除 | [03-painting.md](../03-painting.md) |
+| [`fx.py`](#fxpy) | 手写逐像素特效：描边、换色、HSL 调整、有序抖动 | [06-effects-and-tilemap.md](../06-effects-and-tilemap.md) |
+| [`analysis.py`](#analysispy) | 洋葱皮渲染、帧差异、颜色统计 | [08-inspection-and-quality.md](../08-inspection-and-quality.md) |
+| [`slices.py`](#slicespy) | 命名区域、九宫格中心、轴心点 | [06-effects-and-tilemap.md](../06-effects-and-tilemap.md) |
+| [`tilemap.py`](#tilemappy) | tilemap 图层、tileset 编辑、瓦片摆放与读取 | [06-effects-and-tilemap.md](../06-effects-and-tilemap.md) |
+| [`script.py`](#scriptpy) | 任意 Aseprite Lua 的逃生舱 | [01-lua-bridge.md](../01-lua-bridge.md) |
+| [`text.py`](#textpy) | 用 bitmap 或 TrueType 字体绘制与测量文本 | [03-painting.md](../03-painting.md) |
+| [`native_fx.py`](#native_fxpy) | Aseprite 原生滤镜包装（app.command.*） | [06-effects-and-tilemap.md](../06-effects-and-tilemap.md) |
 
 ## `canvas.py`
 
 画布创建、图层/帧的增删与活跃状态设置
 
-**7 个工具**
-
 ### `create_canvas`
 
 ```text
-create_canvas(width: int, height: int, *, filename: str) -> str
+create_canvas(width: int, height: int, *, filename: str, overwrite: bool = False) -> str
 ```
 
-源码：[`aseprite_mcp/tools/canvas.py:9`](../../aseprite_mcp/tools/canvas.py#L9)
+源码：[`aseprite_mcp/tools/canvas.py:12`](../../aseprite_mcp/tools/canvas.py#L12)
 
 Create a new Aseprite canvas with specified dimensions.
 
@@ -55,6 +51,7 @@ Create a new Aseprite canvas with specified dimensions.
 | `width` | `int` | **必填** | Width of the canvas in pixels |
 | `height` | `int` | **必填** | Height of the canvas in pixels |
 | `filename` | `str` | **必填** | REQUIRED. Absolute path for the output file, e.g. "D:/art/sprites/coin.aseprite". Relative paths are rejected, so the canvas can never silently land in the server's own folder. |
+| `overwrite` | `bool` | `False` | Replace an existing native project (default False) |
 
 ### `add_layer`
 
@@ -78,7 +75,7 @@ Add a new layer to the Aseprite file.
 add_group(filename: str = '', *, group_name: str, parent_group: str = '') -> str
 ```
 
-源码：[`aseprite_mcp/tools/canvas.py:98`](../../aseprite_mcp/tools/canvas.py#L98)
+源码：[`aseprite_mcp/tools/canvas.py:93`](../../aseprite_mcp/tools/canvas.py#L93)
 
 Add a new, empty group layer. Combine with add_layer(group=...) / duplicate_layer(group=...) to build a grouped layer structure.
 
@@ -94,7 +91,7 @@ Add a new, empty group layer. Combine with add_layer(group=...) / duplicate_laye
 add_frame(filename: str = '') -> str
 ```
 
-源码：[`aseprite_mcp/tools/canvas.py:147`](../../aseprite_mcp/tools/canvas.py#L147)
+源码：[`aseprite_mcp/tools/canvas.py:138`](../../aseprite_mcp/tools/canvas.py#L138)
 
 Add a new frame to the Aseprite file.
 
@@ -102,28 +99,13 @@ Add a new frame to the Aseprite file.
 |---|---|---|---|
 | `filename` | `str` | `''` | Aseprite file to modify (optional; defaults to the session's active file) |
 
-### `set_frame`
-
-```text
-set_frame(filename: str = '', *, frame_index: int) -> str
-```
-
-源码：[`aseprite_mcp/tools/canvas.py:177`](../../aseprite_mcp/tools/canvas.py#L177)
-
-Set the active frame by index (1-based).
-
-| 参数 | 类型 | 默认值 | 说明 |
-|---|---|---|---|
-| `filename` | `str` | `''` | Aseprite file to modify (optional; defaults to the session's active file) |
-| `frame_index` | `int` | **必填** | Frame index starting at 1 |
-
 ### `set_frame_duration`
 
 ```text
 set_frame_duration(filename: str = '', *, frame_index: int, duration_ms: int) -> str
 ```
 
-源码：[`aseprite_mcp/tools/canvas.py:213`](../../aseprite_mcp/tools/canvas.py#L213)
+源码：[`aseprite_mcp/tools/canvas.py:164`](../../aseprite_mcp/tools/canvas.py#L164)
 
 Set the duration of a frame in milliseconds.
 
@@ -133,118 +115,9 @@ Set the duration of a frame in milliseconds.
 | `frame_index` | `int` | **必填** | Frame index starting at 1 |
 | `duration_ms` | `int` | **必填** | Duration in milliseconds |
 
-### `set_layer`
-
-```text
-set_layer(filename: str = '', *, layer_name: str, create_if_missing: bool = False) -> str
-```
-
-源码：[`aseprite_mcp/tools/canvas.py:252`](../../aseprite_mcp/tools/canvas.py#L252)
-
-Set the active layer by name.
-
-| 参数 | 类型 | 默认值 | 说明 |
-|---|---|---|---|
-| `filename` | `str` | `''` | Aseprite file to modify (optional; defaults to the session's active file) |
-| `layer_name` | `str` | **必填** | Layer name to activate |
-| `create_if_missing` | `bool` | `False` | Create layer if it does not exist |
-
 ## `drawing.py`
 
 像素、线、矩形、圆、椭圆、多边形、路径、填充、渐变
-
-**14 个工具**
-
-### `draw_pixels`
-
-```text
-draw_pixels(*, filename: str = '', pixels: List[Dict[str, Any]]) -> str
-```
-
-源码：[`aseprite_mcp/tools/drawing.py:16`](../../aseprite_mcp/tools/drawing.py#L16)
-
-Draw pixels on the canvas with specified colors.
-
-| 参数 | 类型 | 默认值 | 说明 |
-|---|---|---|---|
-| `filename` | `str` | `''` | Name of the Aseprite file to modify (optional; defaults to the session's active file) |
-| `pixels` | `List[Dict[str, Any]]` | **必填** | List of pixel data, each containing: {"x": int, "y": int, "color": str} where color is a hex code like "#FF0000" |
-
-### `draw_line`
-
-```text
-draw_line(x1: int, y1: int, x2: int, y2: int, color: str = '#000000', thickness: int = 1, filename: str = '') -> str
-```
-
-源码：[`aseprite_mcp/tools/drawing.py:85`](../../aseprite_mcp/tools/drawing.py#L85)
-
-Draw a line on the canvas.
-
-| 参数 | 类型 | 默认值 | 说明 |
-|---|---|---|---|
-| `x1` | `int` | **必填** | Starting x coordinate |
-| `y1` | `int` | **必填** | Starting y coordinate |
-| `x2` | `int` | **必填** | Ending x coordinate |
-| `y2` | `int` | **必填** | Ending y coordinate |
-| `color` | `str` | `'#000000'` | Hex color code (default: "#000000") |
-| `thickness` | `int` | `1` | Line thickness in pixels (default: 1) |
-| `filename` | `str` | `''` | Name of the Aseprite file to modify (optional; defaults to the session's active file) |
-
-### `draw_rectangle`
-
-```text
-draw_rectangle(x: int, y: int, width: int, height: int, color: str = '#000000', fill: bool = False, filename: str = '') -> str
-```
-
-源码：[`aseprite_mcp/tools/drawing.py:170`](../../aseprite_mcp/tools/drawing.py#L170)
-
-Draw a rectangle on the canvas.
-
-| 参数 | 类型 | 默认值 | 说明 |
-|---|---|---|---|
-| `x` | `int` | **必填** | Top-left x coordinate |
-| `y` | `int` | **必填** | Top-left y coordinate |
-| `width` | `int` | **必填** | Width of the rectangle in pixels (must be > 0) |
-| `height` | `int` | **必填** | Height of the rectangle in pixels (must be > 0) |
-| `color` | `str` | `'#000000'` | Hex color code (default: "#000000") |
-| `fill` | `bool` | `False` | Whether to fill the rectangle (default: False) |
-| `filename` | `str` | `''` | Name of the Aseprite file to modify (optional; defaults to the session's active file) |
-
-### `fill_area`
-
-```text
-fill_area(x: int, y: int, color: str = '#000000', filename: str = '') -> str
-```
-
-源码：[`aseprite_mcp/tools/drawing.py:234`](../../aseprite_mcp/tools/drawing.py#L234)
-
-Fill an area with color using the paint bucket tool.
-
-| 参数 | 类型 | 默认值 | 说明 |
-|---|---|---|---|
-| `x` | `int` | **必填** | X coordinate to fill from |
-| `y` | `int` | **必填** | Y coordinate to fill from |
-| `color` | `str` | `'#000000'` | Hex color code (default: "#000000") |
-| `filename` | `str` | `''` | Name of the Aseprite file to modify (optional; defaults to the session's active file) |
-
-### `draw_circle`
-
-```text
-draw_circle(center_x: int, center_y: int, radius: int, color: str = '#000000', fill: bool = False, filename: str = '') -> str
-```
-
-源码：[`aseprite_mcp/tools/drawing.py:287`](../../aseprite_mcp/tools/drawing.py#L287)
-
-Draw a circle on the canvas.
-
-| 参数 | 类型 | 默认值 | 说明 |
-|---|---|---|---|
-| `center_x` | `int` | **必填** | X coordinate of circle center |
-| `center_y` | `int` | **必填** | Y coordinate of circle center |
-| `radius` | `int` | **必填** | Radius of the circle in pixels |
-| `color` | `str` | `'#000000'` | Hex color code (default: "#000000") |
-| `fill` | `bool` | `False` | Whether to fill the circle (default: False) |
-| `filename` | `str` | `''` | Name of the Aseprite file to modify (optional; defaults to the session's active file) |
 
 ### `draw_pixels_at`
 
@@ -252,7 +125,7 @@ Draw a circle on the canvas.
 draw_pixels_at(*, filename: str = '', layer_name: str, frame_index: int, pixels: List[Dict[str, Any]], create_if_missing: bool = True) -> str
 ```
 
-源码：[`aseprite_mcp/tools/drawing.py:346`](../../aseprite_mcp/tools/drawing.py#L346)
+源码：[`aseprite_mcp/tools/drawing.py:13`](../../aseprite_mcp/tools/drawing.py#L13)
 
 Draw pixels on a specific layer/frame.
 
@@ -270,7 +143,7 @@ Draw pixels on a specific layer/frame.
 draw_line_at(*, filename: str = '', layer_name: str, frame_index: int, x1: int, y1: int, x2: int, y2: int, color: str = '#000000', thickness: int = 1, create_if_missing: bool = True) -> str
 ```
 
-源码：[`aseprite_mcp/tools/drawing.py:423`](../../aseprite_mcp/tools/drawing.py#L423)
+源码：[`aseprite_mcp/tools/drawing.py:72`](../../aseprite_mcp/tools/drawing.py#L72)
 
 Draw a line on a specific layer/frame.
 
@@ -293,7 +166,7 @@ Draw a line on a specific layer/frame.
 draw_rectangle_at(*, filename: str = '', layer_name: str, frame_index: int, x: int, y: int, width: int, height: int, color: str = '#000000', fill: bool = False, create_if_missing: bool = True) -> str
 ```
 
-源码：[`aseprite_mcp/tools/drawing.py:527`](../../aseprite_mcp/tools/drawing.py#L527)
+源码：[`aseprite_mcp/tools/drawing.py:155`](../../aseprite_mcp/tools/drawing.py#L155)
 
 Draw a rectangle on a specific layer/frame.
 
@@ -316,7 +189,7 @@ Draw a rectangle on a specific layer/frame.
 draw_circle_at(*, filename: str = '', layer_name: str, frame_index: int, center_x: int, center_y: int, radius: int, color: str = '#000000', fill: bool = False, create_if_missing: bool = True) -> str
 ```
 
-源码：[`aseprite_mcp/tools/drawing.py:609`](../../aseprite_mcp/tools/drawing.py#L609)
+源码：[`aseprite_mcp/tools/drawing.py:216`](../../aseprite_mcp/tools/drawing.py#L216)
 
 Draw a circle on a specific layer/frame.
 
@@ -338,7 +211,7 @@ Draw a circle on a specific layer/frame.
 fill_area_at(*, filename: str = '', layer_name: str, frame_index: int, x: int, y: int, color: str = '#000000', create_if_missing: bool = True) -> str
 ```
 
-源码：[`aseprite_mcp/tools/drawing.py:688`](../../aseprite_mcp/tools/drawing.py#L688)
+源码：[`aseprite_mcp/tools/drawing.py:275`](../../aseprite_mcp/tools/drawing.py#L275)
 
 Fill an area on a specific layer/frame.
 
@@ -358,7 +231,7 @@ Fill an area on a specific layer/frame.
 draw_polygon(*, filename: str = '', layer_name: str, frame_index: int, points: List[Dict[str, int]], color: str = '#000000', fill: bool = False, create_if_missing: bool = True) -> str
 ```
 
-源码：[`aseprite_mcp/tools/drawing.py:759`](../../aseprite_mcp/tools/drawing.py#L759)
+源码：[`aseprite_mcp/tools/drawing.py:328`](../../aseprite_mcp/tools/drawing.py#L328)
 
 Draw a polygon on a specific layer/frame.
 
@@ -378,7 +251,7 @@ Draw a polygon on a specific layer/frame.
 draw_path(*, filename: str = '', layer_name: str, frame_index: int, points: List[Dict[str, int]], color: str = '#000000', thickness: int = 1, create_if_missing: bool = True) -> str
 ```
 
-源码：[`aseprite_mcp/tools/drawing.py:886`](../../aseprite_mcp/tools/drawing.py#L886)
+源码：[`aseprite_mcp/tools/drawing.py:441`](../../aseprite_mcp/tools/drawing.py#L441)
 
 Draw a path using a polyline on a specific layer/frame.
 
@@ -398,7 +271,7 @@ Draw a path using a polyline on a specific layer/frame.
 apply_gradient_rect(*, filename: str = '', layer_name: str, frame_index: int, x: int, y: int, width: int, height: int, color_start: str, color_end: str, horizontal: bool = True, create_if_missing: bool = True) -> str
 ```
 
-源码：[`aseprite_mcp/tools/drawing.py:986`](../../aseprite_mcp/tools/drawing.py#L986)
+源码：[`aseprite_mcp/tools/drawing.py:527`](../../aseprite_mcp/tools/drawing.py#L527)
 
 Apply a linear gradient fill to a rectangle.
 
@@ -422,7 +295,7 @@ Apply a linear gradient fill to a rectangle.
 draw_ellipse_at(*, filename: str = '', layer_name: str, frame_index: int, center_x: int, center_y: int, radius_x: int, radius_y: int, color: str = '#000000', fill: bool = False, create_if_missing: bool = True) -> str
 ```
 
-源码：[`aseprite_mcp/tools/drawing.py:1084`](../../aseprite_mcp/tools/drawing.py#L1084)
+源码：[`aseprite_mcp/tools/drawing.py:607`](../../aseprite_mcp/tools/drawing.py#L607)
 
 Draw an ellipse on a specific layer/frame.
 
@@ -443,23 +316,21 @@ Draw an ellipse on a specific layer/frame.
 
 PNG/GIF/精灵表/分层/按 tag 导出与图片导入
 
-**7 个工具**
-
 ### `export_sprite`
 
 ```text
 export_sprite(*, filename: str = '', output_filename: str, format: str = 'png') -> str
 ```
 
-源码：[`aseprite_mcp/tools/export.py:9`](../../aseprite_mcp/tools/export.py#L9)
+源码：[`aseprite_mcp/tools/export.py:134`](../../aseprite_mcp/tools/export.py#L134)
 
-Export the Aseprite file to another format.
+Export to an image or image sequence; report the exact published files.
 
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
-| `filename` | `str` | `''` | Name of the Aseprite file to export (optional; defaults to the session's active file) |
-| `output_filename` | `str` | **必填** | Name of the output file |
-| `format` | `str` | `'png'` | Output format (default: "png", can be "png", "gif", "jpg", etc.) |
+| `filename` | `str` | `''` | Native project (defaults to the active file) |
+| `output_filename` | `str` | **必填** | Output path; numbered siblings are used for still sequences |
+| `format` | `str` | `'png'` | Aseprite-writable image format, such as png or gif |
 
 ### `copy_sprite`
 
@@ -467,15 +338,15 @@ Export the Aseprite file to another format.
 copy_sprite(*, filename: str = '', output_filename: str, overwrite: bool = False) -> str
 ```
 
-源码：[`aseprite_mcp/tools/export.py:58`](../../aseprite_mcp/tools/export.py#L58)
+源码：[`aseprite_mcp/tools/export.py:154`](../../aseprite_mcp/tools/export.py#L154)
 
-Copy a sprite to a new Aseprite file.
+Copy a native project, preserving layers, frames and tags.
 
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
-| `filename` | `str` | `''` | Name of the Aseprite file to copy (optional; defaults to the session's active file) |
-| `output_filename` | `str` | **必填** | Name of the output .aseprite file |
-| `overwrite` | `bool` | `False` | Whether to overwrite if output exists |
+| `filename` | `str` | `''` | Source project (defaults to the active file) |
+| `output_filename` | `str` | **必填** | New native project path |
+| `overwrite` | `bool` | `False` | Replace an existing destination (default False) |
 
 ### `export_frame`
 
@@ -483,16 +354,16 @@ Copy a sprite to a new Aseprite file.
 export_frame(*, filename: str = '', frame_index: int, output_filename: str, scale: int = 1) -> str
 ```
 
-源码：[`aseprite_mcp/tools/export.py:99`](../../aseprite_mcp/tools/export.py#L99)
+源码：[`aseprite_mcp/tools/export.py:173`](../../aseprite_mcp/tools/export.py#L173)
 
-Export a single frame as a PNG, optionally scaled up. Use this for visual feedback while drawing: export at scale 8-10 and open the PNG to inspect the result, then keep iterating.
+Export one validated frame to an exact PNG path.
 
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
-| `filename` | `str` | `''` | Aseprite file to export (optional; defaults to the session's active file) |
-| `frame_index` | `int` | **必填** | Frame index starting at 1 |
+| `filename` | `str` | `''` | Source project (defaults to the active file) |
+| `frame_index` | `int` | **必填** | Explicit source frame, 1-based |
 | `output_filename` | `str` | **必填** | Output PNG path |
-| `scale` | `int` | `1` | Integer nearest-neighbor scale factor (default 1) |
+| `scale` | `int` | `1` | Nearest-neighbor scale factor, 1..64 (default 1) |
 
 ### `export_spritesheet`
 
@@ -500,21 +371,21 @@ Export a single frame as a PNG, optionally scaled up. Use this for visual feedba
 export_spritesheet(*, filename: str = '', output_filename: str, sheet_type: str = 'horizontal', data_filename: str = '', scale: int = 1, padding: int = 0, tag_name: str = '', data_format: str = 'json-array', list_tags: bool = False) -> str
 ```
 
-源码：[`aseprite_mcp/tools/export.py:152`](../../aseprite_mcp/tools/export.py#L152)
+源码：[`aseprite_mcp/tools/export.py:200`](../../aseprite_mcp/tools/export.py#L200)
 
-Export frames as a sprite sheet, optionally with a JSON data file.
+Export a sheet and optional Aseprite JSON from this invocation's artifacts.
 
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
-| `filename` | `str` | `''` | Aseprite file to export (optional; defaults to the session's active file) |
-| `output_filename` | `str` | **必填** | Output sheet image path (PNG) |
-| `sheet_type` | `str` | `'horizontal'` | Layout: "horizontal", "vertical", "rows", "columns", or "packed" |
-| `data_filename` | `str` | `''` | Optional path for a JSON metadata file |
-| `scale` | `int` | `1` | Integer scale factor applied before packing (default 1) |
-| `padding` | `int` | `0` | Padding in pixels between frames (default 0) |
-| `tag_name` | `str` | `''` | Only include frames of this animation tag (default: all frames) |
-| `data_format` | `str` | `'json-array'` | JSON format for the data file: "json-array" (default) or "json-hash" |
-| `list_tags` | `bool` | `False` | Include animation tag metadata in the JSON data file (default: False) |
+| `filename` | `str` | `''` | Source project (defaults to the active file) |
+| `output_filename` | `str` | **必填** | Output PNG path |
+| `sheet_type` | `str` | `'horizontal'` | horizontal, vertical, rows, columns or packed |
+| `data_filename` | `str` | `''` | Optional Aseprite JSON output path |
+| `scale` | `int` | `1` | Nearest-neighbor scale factor, 1..64 |
+| `padding` | `int` | `0` | Spacing between frames (default 0) |
+| `tag_name` | `str` | `''` | Restrict the export to an existing tag |
+| `data_format` | `str` | `'json-array'` | json-array or json-hash |
+| `list_tags` | `bool` | `False` | Include tag metadata in the JSON (default False) |
 
 ### `export_layers`
 
@@ -522,15 +393,15 @@ Export frames as a sprite sheet, optionally with a JSON data file.
 export_layers(*, filename: str = '', output_directory: str, include_hidden: bool = False) -> str
 ```
 
-源码：[`aseprite_mcp/tools/export.py:252`](../../aseprite_mcp/tools/export.py#L252)
+源码：[`aseprite_mcp/tools/export.py:248`](../../aseprite_mcp/tools/export.py#L248)
 
-Export each layer as its own PNG file named <layer>.png.
+Export layers into an exact set of newly generated PNG files.
 
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
-| `filename` | `str` | `''` | Aseprite file to export (optional; defaults to the session's active file) |
-| `output_directory` | `str` | **必填** | Directory for the per-layer PNGs (created if missing) |
-| `include_hidden` | `bool` | `False` | Also export hidden layers (default False) |
+| `filename` | `str` | `''` | Source project (defaults to the active file) |
+| `output_directory` | `str` | **必填** | Destination directory |
+| `include_hidden` | `bool` | `False` | Include hidden layers (default False) |
 
 ### `export_tag`
 
@@ -538,41 +409,56 @@ Export each layer as its own PNG file named <layer>.png.
 export_tag(*, filename: str = '', tag_name: str, output_filename: str, scale: int = 1) -> str
 ```
 
-源码：[`aseprite_mcp/tools/export.py:292`](../../aseprite_mcp/tools/export.py#L292)
+源码：[`aseprite_mcp/tools/export.py:273`](../../aseprite_mcp/tools/export.py#L273)
 
-Export the frames of an animation tag as a GIF or PNG sequence.
+Export an existing tag as GIF or PNG sequence.
 
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
-| `filename` | `str` | `''` | Aseprite file to export (optional; defaults to the session's active file) |
-| `tag_name` | `str` | **必填** | Animation tag to export |
-| `output_filename` | `str` | **必填** | Output path; .gif gives an animation, .png a sequence |
-| `scale` | `int` | `1` | Integer scale factor (default 1) |
+| `filename` | `str` | `''` | Source project (defaults to the active file) |
+| `tag_name` | `str` | **必填** | Existing animation tag |
+| `output_filename` | `str` | **必填** | Output GIF or PNG path |
+| `scale` | `int` | `1` | Nearest-neighbor scale factor, 1..64 |
+
+### `export_minecraft_texture`
+
+```text
+export_minecraft_texture(*, filename: str = '', output_filename: str, frame_index: int | None = None, tag_name: str = '') -> str
+```
+
+源码：[`aseprite_mcp/tools/export.py:308`](../../aseprite_mcp/tools/export.py#L308)
+
+Deliver Java Edition PNG and mcmeta, plus a temporary 8x review PNG.
+
+| 参数 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `filename` | `str` | `''` | Source native project (defaults to the active file) |
+| `output_filename` | `str` | **必填** | Original-resolution game PNG path |
+| `frame_index` | `int \| None` | `None` | Optional single frame, 1-based; mutually exclusive with tag_name |
+| `tag_name` | `str` | `''` | Optional animation tag; otherwise exports the complete timeline |
 
 ### `import_image_as_layer`
 
 ```text
-import_image_as_layer(*, filename: str = '', image_path: str, layer_name: str, frame_index: int = 1, x: int = 0, y: int = 0) -> str
+import_image_as_layer(*, filename: str = '', image_path: str, layer_name: str, frame_index: int, x: int = 0, y: int = 0) -> str
 ```
 
-源码：[`aseprite_mcp/tools/export.py:351`](../../aseprite_mcp/tools/export.py#L351)
+源码：[`aseprite_mcp/tools/export.py:383`](../../aseprite_mcp/tools/export.py#L383)
 
-Import an image file (PNG, etc.) into a layer of the sprite. Useful for bringing in reference images or composing pre-made parts. The layer is created if it does not exist. Works best when the sprite is in RGB color mode.
+Import an image into an explicit layer/frame of a native project.
 
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
-| `filename` | `str` | `''` | Aseprite file to modify (optional; defaults to the session's active file) |
-| `image_path` | `str` | **必填** | Image file to import |
-| `layer_name` | `str` | **必填** | Layer to place the image on |
-| `frame_index` | `int` | `1` | Frame index starting at 1 (default 1) |
-| `x` | `int` | `0` | X position for the image's top-left corner (default 0) |
-| `y` | `int` | `0` | Y position for the image's top-left corner (default 0) |
+| `filename` | `str` | `''` | Target project (defaults to the active file) |
+| `image_path` | `str` | **必填** | Existing source image |
+| `layer_name` | `str` | **必填** | Explicit layer name or group path |
+| `frame_index` | `int` | **必填** | Target frame, 1-based |
+| `x` | `int` | `0` | Image left edge, sprite-global |
+| `y` | `int` | `0` | Image top edge, sprite-global |
 
 ## `animation.py`
 
 帧、cel、tag、带缓动的补间与传播
-
-**24 个工具**
 
 ### `add_frames`
 
@@ -580,7 +466,7 @@ Import an image file (PNG, etc.) into a layer of the sprite. Useful for bringing
 add_frames(filename: str = '', *, count: int, duration_ms: int | None = None) -> str
 ```
 
-源码：[`aseprite_mcp/tools/animation.py:8`](../../aseprite_mcp/tools/animation.py#L8)
+源码：[`aseprite_mcp/tools/animation.py:12`](../../aseprite_mcp/tools/animation.py#L12)
 
 Add multiple frames to a sprite and optionally set their duration.
 
@@ -611,7 +497,7 @@ Set the duration of all frames in milliseconds.
 set_layer_visibility(filename: str = '', *, layer_name: str, visible: bool = True) -> str
 ```
 
-源码：[`aseprite_mcp/tools/animation.py:81`](../../aseprite_mcp/tools/animation.py#L81)
+源码：[`aseprite_mcp/tools/animation.py:77`](../../aseprite_mcp/tools/animation.py#L77)
 
 Set layer visibility by name.
 
@@ -627,7 +513,7 @@ Set layer visibility by name.
 set_layer_opacity(filename: str = '', *, layer_name: str, opacity: int) -> str
 ```
 
-源码：[`aseprite_mcp/tools/animation.py:118`](../../aseprite_mcp/tools/animation.py#L118)
+源码：[`aseprite_mcp/tools/animation.py:110`](../../aseprite_mcp/tools/animation.py#L110)
 
 Set layer opacity by name (0-255).
 
@@ -643,13 +529,13 @@ Set layer opacity by name (0-255).
 get_sprite_info(filename: str = '') -> str
 ```
 
-源码：[`aseprite_mcp/tools/animation.py:156`](../../aseprite_mcp/tools/animation.py#L156)
+源码：[`aseprite_mcp/tools/animation.py:144`](../../aseprite_mcp/tools/animation.py#L144)
 
-Return sprite info as JSON string (size, color mode, frame durations, layers, tags).
+Read canvas, layer tree, frame durations and tag metadata as JSON.
 
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
-| `filename` | `str` | `''` | Aseprite file to inspect (optional; defaults to the session's active file) |
+| `filename` | `str` | `''` |  |
 
 ### `duplicate_frame_range`
 
@@ -657,7 +543,7 @@ Return sprite info as JSON string (size, color mode, frame durations, layers, ta
 duplicate_frame_range(filename: str = '', *, start_frame: int, end_frame: int, times: int = 1) -> str
 ```
 
-源码：[`aseprite_mcp/tools/animation.py:222`](../../aseprite_mcp/tools/animation.py#L222)
+源码：[`aseprite_mcp/tools/animation.py:151`](../../aseprite_mcp/tools/animation.py#L151)
 
 Duplicate a frame range and append copies to the end.
 
@@ -674,7 +560,7 @@ Duplicate a frame range and append copies to the end.
 set_cel_position(filename: str = '', *, layer_name: str, frame_index: int, x: int, y: int, create_if_missing: bool = False, source_frame_index: int | None = None) -> str
 ```
 
-源码：[`aseprite_mcp/tools/animation.py:277`](../../aseprite_mcp/tools/animation.py#L277)
+源码：[`aseprite_mcp/tools/animation.py:190`](../../aseprite_mcp/tools/animation.py#L190)
 
 Set a cel's position in a specific layer and frame.
 
@@ -694,7 +580,7 @@ Set a cel's position in a specific layer and frame.
 tween_cel_positions(filename: str = '', *, layer_name: str, start_frame: int, end_frame: int, start_x: int, start_y: int, end_x: int, end_y: int, create_missing_cels: bool = False, source_frame_index: int | None = None) -> str
 ```
 
-源码：[`aseprite_mcp/tools/animation.py:345`](../../aseprite_mcp/tools/animation.py#L345)
+源码：[`aseprite_mcp/tools/animation.py:255`](../../aseprite_mcp/tools/animation.py#L255)
 
 Tween cel positions linearly across a frame range.
 
@@ -717,7 +603,7 @@ Tween cel positions linearly across a frame range.
 offset_cel_positions(filename: str = '', *, layer_name: str, start_frame: int, end_frame: int, dx: int, dy: int) -> str
 ```
 
-源码：[`aseprite_mcp/tools/animation.py:424`](../../aseprite_mcp/tools/animation.py#L424)
+源码：[`aseprite_mcp/tools/animation.py:334`](../../aseprite_mcp/tools/animation.py#L334)
 
 Offset cel positions by a delta across a frame range.
 
@@ -736,7 +622,7 @@ Offset cel positions by a delta across a frame range.
 create_cel(filename: str = '', *, layer_name: str, frame_index: int, x: int = 0, y: int = 0) -> str
 ```
 
-源码：[`aseprite_mcp/tools/animation.py:476`](../../aseprite_mcp/tools/animation.py#L476)
+源码：[`aseprite_mcp/tools/animation.py:382`](../../aseprite_mcp/tools/animation.py#L382)
 
 Create an empty cel on a layer/frame.
 
@@ -754,7 +640,7 @@ Create an empty cel on a layer/frame.
 clear_cel(filename: str = '', *, layer_name: str, frame_index: int) -> str
 ```
 
-源码：[`aseprite_mcp/tools/animation.py:521`](../../aseprite_mcp/tools/animation.py#L521)
+源码：[`aseprite_mcp/tools/animation.py:423`](../../aseprite_mcp/tools/animation.py#L423)
 
 Delete a cel on a layer/frame.
 
@@ -770,18 +656,18 @@ Delete a cel on a layer/frame.
 copy_cel(filename: str = '', *, layer_name: str, source_frame: int, target_frame: int, replace: bool = True, create_target_frame: bool = True) -> str
 ```
 
-源码：[`aseprite_mcp/tools/animation.py:558`](../../aseprite_mcp/tools/animation.py#L558)
+源码：[`aseprite_mcp/tools/animation.py:456`](../../aseprite_mcp/tools/animation.py#L456)
 
-Copy a cel from one frame to another.
+Copy a cel snapshot, optionally extending the timeline for its target.
 
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
-| `filename` | `str` | `''` | Aseprite file to modify (optional; defaults to the session's active file) |
-| `layer_name` | `str` | **必填** | Layer name to target |
-| `source_frame` | `int` | **必填** | Frame index to copy from (1-based) |
-| `target_frame` | `int` | **必填** | Frame index to copy to (1-based) |
-| `replace` | `bool` | `True` | Overwrite the existing cel at the target frame (default True) |
-| `create_target_frame` | `bool` | `True` | Extend the sprite with new frames when target_frame is beyond the current frame count (default True) |
+| `filename` | `str` | `''` | Source project (defaults to the active file) |
+| `layer_name` | `str` | **必填** | Explicit layer name or group path |
+| `source_frame` | `int` | **必填** | Source frame, 1-based; must contain a cel |
+| `target_frame` | `int` | **必填** | Target frame, 1-based |
+| `replace` | `bool` | `True` | Replace an existing target cel (default True) |
+| `create_target_frame` | `bool` | `True` | Extend the timeline when required (default True) |
 
 ### `copy_frame`
 
@@ -789,9 +675,9 @@ Copy a cel from one frame to another.
 copy_frame(filename: str = '', *, source_frame: int, target_frame: int | None = None, overwrite: bool = True) -> str
 ```
 
-源码：[`aseprite_mcp/tools/animation.py:625`](../../aseprite_mcp/tools/animation.py#L625)
+源码：[`aseprite_mcp/tools/animation.py:497`](../../aseprite_mcp/tools/animation.py#L497)
 
-Copy all cels from a source frame to a target frame (or append).
+Copy all grouped and hidden cels; append when target_frame is omitted. Existing target durations and tags are preserved. An appended frame uses the source duration. overwrite=false fills only missing target cels.
 
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
@@ -806,17 +692,17 @@ Copy all cels from a source frame to a target frame (or append).
 propagate_frame_to_range(filename: str = '', *, source_frame: int, start_frame: int, end_frame: int, overwrite: bool = True) -> str
 ```
 
-源码：[`aseprite_mcp/tools/animation.py:682`](../../aseprite_mcp/tools/animation.py#L682)
+源码：[`aseprite_mcp/tools/animation.py:531`](../../aseprite_mcp/tools/animation.py#L531)
 
-Copy all layers from a source frame to a range of frames.
+Copy source cels throughout an inclusive frame range, preserving durations.
 
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
-| `filename` | `str` | `''` | Aseprite file to modify (optional; defaults to the session's active file) |
-| `source_frame` | `int` | **必填** | Frame index to copy from (1-based) |
-| `start_frame` | `int` | **必填** | Start frame index (1-based) |
-| `end_frame` | `int` | **必填** | End frame index (1-based, inclusive) |
-| `overwrite` | `bool` | `True` | Whether to overwrite existing cels (default: True) |
+| `filename` | `str` | `''` |  |
+| `source_frame` | `int` | **必填** |  |
+| `start_frame` | `int` | **必填** |  |
+| `end_frame` | `int` | **必填** |  |
+| `overwrite` | `bool` | `True` |  |
 
 ### `set_tag`
 
@@ -824,7 +710,7 @@ Copy all layers from a source frame to a range of frames.
 set_tag(filename: str = '', *, name: str, from_frame: int, to_frame: int, direction: str = 'forward') -> str
 ```
 
-源码：[`aseprite_mcp/tools/animation.py:748`](../../aseprite_mcp/tools/animation.py#L748)
+源码：[`aseprite_mcp/tools/animation.py:554`](../../aseprite_mcp/tools/animation.py#L554)
 
 Create or update an animation tag on the sprite. direction: forward | reverse | pingpong | pingpong_reverse
 
@@ -842,7 +728,7 @@ Create or update an animation tag on the sprite. direction: forward | reverse | 
 set_onion_skin(filename: str = '', enabled: bool = True, before: int = 2, after: int = 2, opacity: int = 128) -> str
 ```
 
-源码：[`aseprite_mcp/tools/animation.py:800`](../../aseprite_mcp/tools/animation.py#L800)
+源码：[`aseprite_mcp/tools/animation.py:602`](../../aseprite_mcp/tools/animation.py#L602)
 
 Configure onion skin settings for Aseprite.
 
@@ -860,7 +746,7 @@ Configure onion skin settings for Aseprite.
 propagate_cels(filename: str = '', *, layer_names: list[str], source_frame: int, start_frame: int, end_frame: int, replace: bool = True) -> str
 ```
 
-源码：[`aseprite_mcp/tools/animation.py:822`](../../aseprite_mcp/tools/animation.py#L822)
+源码：[`aseprite_mcp/tools/animation.py:622`](../../aseprite_mcp/tools/animation.py#L622)
 
 Copy cels from a source frame to a range of frames for specific layers.
 
@@ -879,7 +765,7 @@ Copy cels from a source frame to a range of frames for specific layers.
 tween_cel_positions_eased(filename: str = '', *, layer_name: str, start_frame: int, end_frame: int, start_x: int, start_y: int, end_x: int, end_y: int, easing: str = 'smoothstep', create_missing_cels: bool = False, source_frame_index: int | None = None) -> str
 ```
 
-源码：[`aseprite_mcp/tools/animation.py:898`](../../aseprite_mcp/tools/animation.py#L898)
+源码：[`aseprite_mcp/tools/animation.py:674`](../../aseprite_mcp/tools/animation.py#L674)
 
 Tween cel positions with easing across a frame range.
 
@@ -903,7 +789,7 @@ Tween cel positions with easing across a frame range.
 oscillate_cel_positions(filename: str = '', *, layer_name: str, start_frame: int, end_frame: int, amplitude_x: int = 0, amplitude_y: int = 0, cycles: float = 1.0, phase_deg: float = 0.0, create_missing_cels: bool = False, source_frame_index: int | None = None) -> str
 ```
 
-源码：[`aseprite_mcp/tools/animation.py:985`](../../aseprite_mcp/tools/animation.py#L985)
+源码：[`aseprite_mcp/tools/animation.py:757`](../../aseprite_mcp/tools/animation.py#L757)
 
 Oscillate cel positions across a frame range using a sine wave.
 
@@ -926,7 +812,7 @@ Oscillate cel positions across a frame range using a sine wave.
 tween_cel_opacity_eased(filename: str = '', *, layer_name: str, start_frame: int, end_frame: int, start_opacity: int, end_opacity: int, easing: str = 'smoothstep', create_missing_cels: bool = False, source_frame_index: int | None = None) -> str
 ```
 
-源码：[`aseprite_mcp/tools/animation.py:1062`](../../aseprite_mcp/tools/animation.py#L1062)
+源码：[`aseprite_mcp/tools/animation.py:830`](../../aseprite_mcp/tools/animation.py#L830)
 
 Tween cel opacity with easing across a frame range.
 
@@ -948,7 +834,7 @@ Tween cel opacity with easing across a frame range.
 tween_cel_scale_eased(filename: str = '', *, layer_name: str, start_frame: int, end_frame: int, start_scale: float, end_scale: float, easing: str = 'smoothstep', anchor: str = 'center', replace: bool = True, create_missing_cels: bool = True, source_frame_index: int | None = None) -> str
 ```
 
-源码：[`aseprite_mcp/tools/animation.py:1152`](../../aseprite_mcp/tools/animation.py#L1152)
+源码：[`aseprite_mcp/tools/animation.py:916`](../../aseprite_mcp/tools/animation.py#L916)
 
 Tween cel scale with easing across a frame range.
 
@@ -972,7 +858,7 @@ Tween cel scale with easing across a frame range.
 delete_frame(filename: str = '', *, frame_index: int) -> str
 ```
 
-源码：[`aseprite_mcp/tools/animation.py:1267`](../../aseprite_mcp/tools/animation.py#L1267)
+源码：[`aseprite_mcp/tools/animation.py:1027`](../../aseprite_mcp/tools/animation.py#L1027)
 
 Delete a frame by index.
 
@@ -987,7 +873,7 @@ Delete a frame by index.
 delete_tag(filename: str = '', *, name: str) -> str
 ```
 
-源码：[`aseprite_mcp/tools/animation.py:1301`](../../aseprite_mcp/tools/animation.py#L1301)
+源码：[`aseprite_mcp/tools/animation.py:1057`](../../aseprite_mcp/tools/animation.py#L1057)
 
 Delete an animation tag by name.
 
@@ -1002,7 +888,7 @@ Delete an animation tag by name.
 set_cel_opacity(filename: str = '', *, layer_name: str, frame_index: int, opacity: int) -> str
 ```
 
-源码：[`aseprite_mcp/tools/animation.py:1338`](../../aseprite_mcp/tools/animation.py#L1338)
+源码：[`aseprite_mcp/tools/animation.py:1090`](../../aseprite_mcp/tools/animation.py#L1090)
 
 Set the opacity of a single cel (0-255).
 
@@ -1017,15 +903,13 @@ Set the opacity of a single cel (0-255).
 
 本地 HTTP 预览服务器
 
-**2 个工具**
-
 ### `start_preview_server`
 
 ```text
 start_preview_server(directory: str = '', port: int = 8000) -> str
 ```
 
-源码：[`aseprite_mcp/tools/preview.py:28`](../../aseprite_mcp/tools/preview.py#L28)
+源码：[`aseprite_mcp/tools/preview.py:29`](../../aseprite_mcp/tools/preview.py#L29)
 
 Start a simple HTTP server to preview exported sprites.
 
@@ -1040,7 +924,7 @@ Start a simple HTTP server to preview exported sprites.
 stop_preview_server(port: int = 8000) -> str
 ```
 
-源码：[`aseprite_mcp/tools/preview.py:63`](../../aseprite_mcp/tools/preview.py#L63)
+源码：[`aseprite_mcp/tools/preview.py:64`](../../aseprite_mcp/tools/preview.py#L64)
 
 Stop the preview HTTP server for a given port.
 
@@ -1052,15 +936,13 @@ Stop the preview HTTP server for a given port.
 
 调色板读写、复古预设、色阶生成、量化、色彩模式
 
-**8 个工具**
-
 ### `get_palette`
 
 ```text
 get_palette(filename: str = '') -> str
 ```
 
-源码：[`aseprite_mcp/tools/palette.py:52`](../../aseprite_mcp/tools/palette.py#L52)
+源码：[`aseprite_mcp/tools/palette.py:54`](../../aseprite_mcp/tools/palette.py#L54)
 
 Get the active sprite palette as a JSON array of hex colors.
 
@@ -1074,7 +956,7 @@ Get the active sprite palette as a JSON array of hex colors.
 set_palette(filename: str = '', *, colors: List[str]) -> str
 ```
 
-源码：[`aseprite_mcp/tools/palette.py:91`](../../aseprite_mcp/tools/palette.py#L91)
+源码：[`aseprite_mcp/tools/palette.py:89`](../../aseprite_mcp/tools/palette.py#L89)
 
 Set the active sprite palette using a list of hex colors.
 
@@ -1089,7 +971,7 @@ Set the active sprite palette using a list of hex colors.
 remap_colors_in_cel_range(filename: str = '', *, layer_name: str, start_frame: int, end_frame: int, mappings: List[dict], create_missing_cels: bool = False, source_frame_index: int | None = None) -> str
 ```
 
-源码：[`aseprite_mcp/tools/palette.py:133`](../../aseprite_mcp/tools/palette.py#L133)
+源码：[`aseprite_mcp/tools/palette.py:127`](../../aseprite_mcp/tools/palette.py#L127)
 
 Remap colors in a layer across a frame range using explicit mappings.
 
@@ -1109,7 +991,7 @@ Remap colors in a layer across a frame range using explicit mappings.
 list_palette_presets() -> str
 ```
 
-源码：[`aseprite_mcp/tools/palette.py:245`](../../aseprite_mcp/tools/palette.py#L245)
+源码：[`aseprite_mcp/tools/palette.py:235`](../../aseprite_mcp/tools/palette.py#L235)
 
 List the built-in retro palette presets with their colors. Returns: JSON object mapping preset name to its list of hex colors.
 
@@ -1119,7 +1001,7 @@ List the built-in retro palette presets with their colors. Returns: JSON object 
 apply_palette_preset(filename: str = '', *, preset: str) -> str
 ```
 
-源码：[`aseprite_mcp/tools/palette.py:255`](../../aseprite_mcp/tools/palette.py#L255)
+源码：[`aseprite_mcp/tools/palette.py:245`](../../aseprite_mcp/tools/palette.py#L245)
 
 Set the sprite palette to a built-in retro preset. This only sets the palette; existing pixels keep their colors. Use quantize_to_palette afterwards to snap pixels to the new palette.
 
@@ -1134,7 +1016,7 @@ Set the sprite palette to a built-in retro preset. This only sets the palette; e
 generate_color_ramp(base_color: str, steps: int = 5, hue_shift_degrees: float = 20, lightness_range: float = 0.5) -> str
 ```
 
-源码：[`aseprite_mcp/tools/palette.py:281`](../../aseprite_mcp/tools/palette.py#L281)
+源码：[`aseprite_mcp/tools/palette.py:267`](../../aseprite_mcp/tools/palette.py#L267)
 
 Generate a shading ramp (dark to light) from a base color. Produces the standard pixel-art shading technique of hue-shifting: shadows lean cooler (hue shifted one way), highlights lean warmer. Use the returned colors for shading instead of plain darker/lighter versions of the same hue.
 
@@ -1151,7 +1033,7 @@ Generate a shading ramp (dark to light) from a base color. Produces the standard
 quantize_to_palette(filename: str = '', layer_name: str = '', start_frame: int = 1, end_frame: int = 0) -> str
 ```
 
-源码：[`aseprite_mcp/tools/palette.py:330`](../../aseprite_mcp/tools/palette.py#L330)
+源码：[`aseprite_mcp/tools/palette.py:316`](../../aseprite_mcp/tools/palette.py#L316)
 
 Snap every pixel to the nearest color in the sprite's palette. Walks the chosen cels and replaces each opaque pixel with the closest palette color (RGB distance). Run after apply_palette_preset or set_palette to make existing art conform to the palette.
 
@@ -1168,7 +1050,7 @@ Snap every pixel to the nearest color in the sprite's palette. Walks the chosen 
 set_color_mode(filename: str = '', *, mode: str) -> str
 ```
 
-源码：[`aseprite_mcp/tools/palette.py:446`](../../aseprite_mcp/tools/palette.py#L446)
+源码：[`aseprite_mcp/tools/palette.py:428`](../../aseprite_mcp/tools/palette.py#L428)
 
 Convert the sprite's color mode.
 
@@ -1181,15 +1063,13 @@ Convert the sprite's color mode.
 
 在两个精灵文件之间复制图层
 
-**1 个工具**
-
 ### `copy_layers_between_sprites`
 
 ```text
 copy_layers_between_sprites(*, source_filename: str = '', target_filename: str, layer_names: List[str], replace: bool = True, create_missing_frames: bool = True) -> str
 ```
 
-源码：[`aseprite_mcp/tools/scene.py:8`](../../aseprite_mcp/tools/scene.py#L8)
+源码：[`aseprite_mcp/tools/scene.py:10`](../../aseprite_mcp/tools/scene.py#L10)
 
 Copy layers by name from a source sprite to a target sprite.
 
@@ -1204,8 +1084,6 @@ Copy layers by name from a source sprite to a target sprite.
 ## `guide.py`
 
 返回面向 LLM 的动画工作流指南文本
-
-**1 个工具**
 
 ### `animation_workflow_guide`
 
@@ -1225,15 +1103,13 @@ Return a concise English guide for optimized animation workflows.
 
 动画一致性校验与归一化（结构校验器，非评分器）
 
-**4 个工具**
-
 ### `ensure_layers_present`
 
 ```text
 ensure_layers_present(filename: str = '', *, layer_names: List[str], start_frame: int = 1, end_frame: int | None = None) -> str
 ```
 
-源码：[`aseprite_mcp/tools/quality.py:57`](../../aseprite_mcp/tools/quality.py#L57)
+源码：[`aseprite_mcp/tools/quality.py:59`](../../aseprite_mcp/tools/quality.py#L59)
 
 Ensure cels exist for layers across a frame range.
 
@@ -1250,7 +1126,7 @@ Ensure cels exist for layers across a frame range.
 validate_scene(filename: str = '', *, required_layers: List[str], start_frame: int = 1, end_frame: int | None = None) -> str
 ```
 
-源码：[`aseprite_mcp/tools/quality.py:124`](../../aseprite_mcp/tools/quality.py#L124)
+源码：[`aseprite_mcp/tools/quality.py:122`](../../aseprite_mcp/tools/quality.py#L122)
 
 Validate presence of layers and cels across a frame range. Returns JSON with missing layers and missing cels.
 
@@ -1267,7 +1143,7 @@ Validate presence of layers and cels across a frame range. Returns JSON with mis
 audit_animation(filename: str = '', start_frame: int = 1, end_frame: int | None = None, layer_names: List[str] | None = None, overlap_pairs: List[str] | None = None, layer_frame_ranges: List[str] | None = None, report_cels: bool = False, report_bounds: bool = False, max_overlaps: int = 200, max_out_of_range: int = 200) -> str
 ```
 
-源码：[`aseprite_mcp/tools/quality.py:206`](../../aseprite_mcp/tools/quality.py#L206)
+源码：[`aseprite_mcp/tools/quality.py:200`](../../aseprite_mcp/tools/quality.py#L200)
 
 Audit animation frames for overlaps and out-of-range layer activity. overlap_pairs format: ["layerA,layerB", "layerC:layerD"] layer_frame_ranges format: ["layer:1-8,17-24", "clouds:1-12"] Returns JSON for AI consumption (summary, overlaps, out_of_range, optional cels).
 
@@ -1290,7 +1166,7 @@ Audit animation frames for overlaps and out-of-range layer activity. overlap_pai
 animation_sanitize(filename: str = '', start_frame: int = 1, end_frame: int | None = None, layer_names: List[str] | None = None, layer_order: List[str] | None = None, layer_frame_ranges: List[str] | None = None, ensure_layers: List[str] | None = None, overlap_pairs: List[str] | None = None, report_bounds: bool = False, max_overlaps: int = 200, ignore_full_canvas_overlaps: bool = True, out_of_range_action: str = 'set_opacity_zero', out_of_range_opacity: int = 0, report_only: bool = False, include_stats: bool = True) -> str
 ```
 
-源码：[`aseprite_mcp/tools/quality.py:443`](../../aseprite_mcp/tools/quality.py#L443)
+源码：[`aseprite_mcp/tools/quality.py:433`](../../aseprite_mcp/tools/quality.py#L433)
 
 Normalize animation consistency and optionally apply fixes. layer_frame_ranges format: ["layer:1-8,17-24", "clouds:1-12"] out_of_range_action: "set_opacity_zero", "delete_cels", "none" ignore_full_canvas_overlaps: skip overlap checks when a cel is full canvas Returns JSON for AI consumption (summary, layer_stats, alerts, overlaps).
 
@@ -1316,15 +1192,13 @@ Normalize animation consistency and optionally apply fixes. layer_frame_ranges f
 
 单 cel 与合成后的像素读取
 
-**4 个工具**
-
 ### `get_pixel_color`
 
 ```text
-get_pixel_color(filename: str = '', *, x: int, y: int, layer_name: str = '', frame_index: int = 1) -> str
+get_pixel_color(filename: str = '', *, x: int, y: int, layer_name: str, frame_index: int) -> str
 ```
 
-源码：[`aseprite_mcp/tools/pixel_read.py:10`](../../aseprite_mcp/tools/pixel_read.py#L10)
+源码：[`aseprite_mcp/tools/pixel_read.py:11`](../../aseprite_mcp/tools/pixel_read.py#L11)
 
 Read the RGBA color of a single pixel from one layer's cel. This is a single-cel read: it ignores layer visibility and everything drawn above or below. For "what the player sees", use get_composite_pixel instead. Tilemap layers cannot be read this way — their cel stores tile indexes, so the call is refused with a hint.
 
@@ -1333,16 +1207,16 @@ Read the RGBA color of a single pixel from one layer's cel. This is a single-cel
 | `filename` | `str` | `''` | Aseprite file to read (optional; defaults to the session's active file) |
 | `x` | `int` | **必填** | X coordinate (sprite-global) |
 | `y` | `int` | **必填** | Y coordinate (sprite-global) |
-| `layer_name` | `str` | `''` | Layer to read from (uses active layer when empty) |
-| `frame_index` | `int` | `1` | Frame index starting at 1 |
+| `layer_name` | `str` | **必填** | Explicit layer name or group path |
+| `frame_index` | `int` | **必填** | Frame index starting at 1 |
 
 ### `get_pixels_rect`
 
 ```text
-get_pixels_rect(filename: str = '', *, x: int, y: int, width: int, height: int, layer_name: str = '', frame_index: int = 1) -> str
+get_pixels_rect(filename: str = '', *, x: int, y: int, width: int, height: int, layer_name: str, frame_index: int) -> str
 ```
 
-源码：[`aseprite_mcp/tools/pixel_read.py:83`](../../aseprite_mcp/tools/pixel_read.py#L83)
+源码：[`aseprite_mcp/tools/pixel_read.py:76`](../../aseprite_mcp/tools/pixel_read.py#L76)
 
 Read all pixel colors in a rectangular region from one layer's cel. Single-cel read: layer visibility is ignored and nothing above or below is composited in. For "what the player sees", use get_composite_rect. Tilemap layers are refused — their cel stores tile indexes, not pixels.
 
@@ -1353,8 +1227,8 @@ Read all pixel colors in a rectangular region from one layer's cel. Single-cel r
 | `y` | `int` | **必填** | Top-left y coordinate (sprite-global) |
 | `width` | `int` | **必填** | Width of the region |
 | `height` | `int` | **必填** | Height of the region |
-| `layer_name` | `str` | `''` | Layer to read from (uses active layer when empty) |
-| `frame_index` | `int` | `1` | Frame index starting at 1 |
+| `layer_name` | `str` | **必填** | Explicit layer name or group path |
+| `frame_index` | `int` | **必填** | Frame index starting at 1 |
 
 ### `get_composite_pixel`
 
@@ -1362,7 +1236,7 @@ Read all pixel colors in a rectangular region from one layer's cel. Single-cel r
 get_composite_pixel(filename: str = '', *, x: int, y: int, frame_index: int = 1) -> str
 ```
 
-源码：[`aseprite_mcp/tools/pixel_read.py:180`](../../aseprite_mcp/tools/pixel_read.py#L180)
+源码：[`aseprite_mcp/tools/pixel_read.py:165`](../../aseprite_mcp/tools/pixel_read.py#L165)
 
 Read the RGBA colour VISIBLE at a pixel (flattened composite of all layers). Unlike get_pixel_color (which reads a single cel), this composites every visible layer — "what the player actually sees" — by flattening a throwaway clone. Essential for value/CVD QA on grouped/multi-layer scenes.
 
@@ -1379,7 +1253,7 @@ Read the RGBA colour VISIBLE at a pixel (flattened composite of all layers). Unl
 get_composite_rect(filename: str = '', *, x: int, y: int, width: int, height: int, frame_index: int = 1) -> str
 ```
 
-源码：[`aseprite_mcp/tools/pixel_read.py:228`](../../aseprite_mcp/tools/pixel_read.py#L228)
+源码：[`aseprite_mcp/tools/pixel_read.py:209`](../../aseprite_mcp/tools/pixel_read.py#L209)
 
 Read VISIBLE RGBA over a rectangle (flattened composite of all layers). The rectangular counterpart of get_composite_pixel — reads the composited pixels every visible layer produces, not a single cel.
 
@@ -1396,15 +1270,13 @@ Read VISIBLE RGBA over a rectangle (flattened composite of all layers). The rect
 
 字符网格（sprite map）的紧凑批量绘制与回读
 
-**2 个工具**
-
 ### `draw_sprite_map`
 
 ```text
 draw_sprite_map(*, filename: str = '', layer_name: str, frame_index: int, rows: List[str], palette: Dict[str, str], x: int = 0, y: int = 0, transparent: str = '.', mirror_x: bool = False, mirror_y: bool = False, erase_transparent: bool = False, create_if_missing: bool = True) -> str
 ```
 
-源码：[`aseprite_mcp/tools/sprite_map.py:138`](../../aseprite_mcp/tools/sprite_map.py#L138)
+源码：[`aseprite_mcp/tools/sprite_map.py:141`](../../aseprite_mcp/tools/sprite_map.py#L141)
 
 Draw a whole region from a compact character-grid map. `rows` is a list of equal-length strings, one per pixel row, top to bottom; `palette` maps each character to a colour. This is the compact alternative to draw_pixels_at's {x, y, color} lists: draw_sprite_map( layer_name="hero", frame_index=1, rows=["..1111..", ".122221.", "12233221"], palette={"1": "#3b2a1e", "2": "#8b5a2b", "3": "#f2c48d"}, ) Characters equal to `transparent` ("." by default) are skipped, so whatever is already on the layer shows through. Pass erase_transparent=true to clear them instead — that is what makes a map round-trip exactly after pixels are deleted in an edit.
 
@@ -1426,17 +1298,17 @@ Draw a whole region from a compact character-grid map. `rows` is a list of equal
 ### `get_sprite_map`
 
 ```text
-get_sprite_map(*, filename: str = '', layer_name: str = '', frame_index: int = 1, x: int, y: int, width: int, height: int, palette: Optional[Dict[str, str]] = None, max_colors: int = 0, alpha_threshold: int = 128, transparent: str = '.', composite: bool = False) -> str
+get_sprite_map(*, filename: str = '', layer_name: str = '', frame_index: int = 1, x: int, y: int, width: int, height: int, palette: Optional[Dict[str, str]] = None, max_colors: int = 0, alpha_threshold: int = 1, transparent: str = '.', composite: bool = False) -> str
 ```
 
-源码：[`aseprite_mcp/tools/sprite_map.py:270`](../../aseprite_mcp/tools/sprite_map.py#L270)
+源码：[`aseprite_mcp/tools/sprite_map.py:253`](../../aseprite_mcp/tools/sprite_map.py#L253)
 
 Read a rectangular region back as a compact character-grid map. Returns JSON whose `rows`, `palette` and `transparent` are shaped exactly like draw_sprite_map's arguments, so a read/edit/write loop needs no reformatting: {"layer": "hero", "frame": 1, "x": 0, "y": 0, "width": 16, "height": 16, "transparent": ".", "columns": "0123456789abcdef", "palette": {"0": "#3b2a1e", "1": "#8b5a2b"}, "rows": ["....0011........", ...]} `columns` labels each column's x offset, so a character's position can be read off without counting. Against get_pixels_rect's per-pixel JSON a 16x16 region goes from ~256 objects to 16 short strings — and unlike judging an exported PNG by eye, the hex values are exact. Auto-assigned characters follow ascending colour order. Pass `palette` (e.g. a previous result's) to pin the assignment: characters then stay stable across edits, so two maps can be diffed character by character.
 
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `filename` | `str` | `''` | Aseprite file to read (optional; defaults to the session's active file) |
-| `layer_name` | `str` | `''` | Layer to read from (uses active layer when empty) |
+| `layer_name` | `str` | `''` | Explicit layer name; may be empty only for composite reads |
 | `frame_index` | `int` | `1` | Frame index starting at 1 |
 | `x` | `int` | **必填** | Left edge of the region (sprite-global) |
 | `y` | `int` | **必填** | Top edge of the region (sprite-global) |
@@ -1444,7 +1316,7 @@ Read a rectangular region back as a compact character-grid map. Returns JSON who
 | `height` | `int` | **必填** | Region height |
 | `palette` | `Optional[Dict[str, str]]` | `None` | Optional character -> hex colour map to reuse for the output |
 | `max_colors` | `int` | `0` | Quantise to at most this many colours (0 = no limit) |
-| `alpha_threshold` | `int` | `128` | Alpha below this becomes `transparent` (default 128) |
+| `alpha_threshold` | `int` | `1` | Alpha below this becomes `transparent` (default 1) |
 | `transparent` | `str` | `'.'` | Character emitted for empty cells (default ".") |
 | `composite` | `bool` | `False` | Read the visible flattened composite instead of a single layer |
 
@@ -1452,15 +1324,13 @@ Read a rectangular region back as a compact character-grid map. Returns JSON who
 
 翻转、旋转、缩放、裁剪
 
-**4 个工具**
-
 ### `flip_layer`
 
 ```text
 flip_layer(filename: str = '', *, layer_name: str, frame_index: int, direction: str = 'horizontal') -> str
 ```
 
-源码：[`aseprite_mcp/tools/transform.py:8`](../../aseprite_mcp/tools/transform.py#L8)
+源码：[`aseprite_mcp/tools/transform.py:10`](../../aseprite_mcp/tools/transform.py#L10)
 
 Flip a layer's image horizontally or vertically.
 
@@ -1477,7 +1347,7 @@ Flip a layer's image horizontally or vertically.
 rotate_layer(filename: str = '', *, layer_name: str, frame_index: int, angle: int = 90) -> str
 ```
 
-源码：[`aseprite_mcp/tools/transform.py:77`](../../aseprite_mcp/tools/transform.py#L77)
+源码：[`aseprite_mcp/tools/transform.py:75`](../../aseprite_mcp/tools/transform.py#L75)
 
 Rotate a layer's image 90, 180, or 270 degrees clockwise.
 
@@ -1494,7 +1364,7 @@ Rotate a layer's image 90, 180, or 270 degrees clockwise.
 resize_canvas(filename: str = '', *, width: int, height: int) -> str
 ```
 
-源码：[`aseprite_mcp/tools/transform.py:169`](../../aseprite_mcp/tools/transform.py#L169)
+源码：[`aseprite_mcp/tools/transform.py:163`](../../aseprite_mcp/tools/transform.py#L163)
 
 Scale the canvas and all its content to new dimensions.
 
@@ -1510,7 +1380,7 @@ Scale the canvas and all its content to new dimensions.
 crop_canvas(filename: str = '', *, x: int, y: int, width: int, height: int) -> str
 ```
 
-源码：[`aseprite_mcp/tools/transform.py:202`](../../aseprite_mcp/tools/transform.py#L202)
+源码：[`aseprite_mcp/tools/transform.py:192`](../../aseprite_mcp/tools/transform.py#L192)
 
 Crop the canvas to the given rectangle, discarding content outside it.
 
@@ -1526,15 +1396,13 @@ Crop the canvas to the given rectangle, discarding content outside it.
 
 图层删除、重命名、复制、排序、混合模式、合并、展平
 
-**7 个工具**
-
 ### `delete_layer`
 
 ```text
 delete_layer(filename: str = '', *, layer_name: str) -> str
 ```
 
-源码：[`aseprite_mcp/tools/layers.py:30`](../../aseprite_mcp/tools/layers.py#L30)
+源码：[`aseprite_mcp/tools/layers.py:32`](../../aseprite_mcp/tools/layers.py#L32)
 
 Delete a layer by name.
 
@@ -1549,7 +1417,7 @@ Delete a layer by name.
 rename_layer(filename: str = '', *, layer_name: str, new_name: str) -> str
 ```
 
-源码：[`aseprite_mcp/tools/layers.py:68`](../../aseprite_mcp/tools/layers.py#L68)
+源码：[`aseprite_mcp/tools/layers.py:66`](../../aseprite_mcp/tools/layers.py#L66)
 
 Rename a layer.
 
@@ -1565,7 +1433,7 @@ Rename a layer.
 duplicate_layer(filename: str = '', *, layer_name: str, new_name: str = '', group: str = '') -> str
 ```
 
-源码：[`aseprite_mcp/tools/layers.py:109`](../../aseprite_mcp/tools/layers.py#L109)
+源码：[`aseprite_mcp/tools/layers.py:103`](../../aseprite_mcp/tools/layers.py#L103)
 
 Duplicate a layer with all its cels across every frame. The copy inherits the source's opacity and blend mode. By default it is placed directly above the source layer; pass `group` to place it inside a group instead.
 
@@ -1582,7 +1450,7 @@ Duplicate a layer with all its cels across every frame. The copy inherits the so
 reorder_layer(filename: str = '', *, layer_name: str, position: int) -> str
 ```
 
-源码：[`aseprite_mcp/tools/layers.py:179`](../../aseprite_mcp/tools/layers.py#L179)
+源码：[`aseprite_mcp/tools/layers.py:169`](../../aseprite_mcp/tools/layers.py#L169)
 
 Move a layer to a new position in the layer stack.
 
@@ -1598,7 +1466,7 @@ Move a layer to a new position in the layer stack.
 set_layer_blend_mode(filename: str = '', *, layer_name: str, mode: str) -> str
 ```
 
-源码：[`aseprite_mcp/tools/layers.py:220`](../../aseprite_mcp/tools/layers.py#L220)
+源码：[`aseprite_mcp/tools/layers.py:206`](../../aseprite_mcp/tools/layers.py#L206)
 
 Set a layer's blend mode.
 
@@ -1614,7 +1482,7 @@ Set a layer's blend mode.
 merge_layer_down(filename: str = '', *, layer_name: str) -> str
 ```
 
-源码：[`aseprite_mcp/tools/layers.py:265`](../../aseprite_mcp/tools/layers.py#L265)
+源码：[`aseprite_mcp/tools/layers.py:247`](../../aseprite_mcp/tools/layers.py#L247)
 
 Merge a layer into the layer directly below it.
 
@@ -1629,7 +1497,7 @@ Merge a layer into the layer directly below it.
 flatten_sprite(filename: str = '') -> str
 ```
 
-源码：[`aseprite_mcp/tools/layers.py:302`](../../aseprite_mcp/tools/layers.py#L302)
+源码：[`aseprite_mcp/tools/layers.py:280`](../../aseprite_mcp/tools/layers.py#L280)
 
 Flatten all layers into a single layer.
 
@@ -1641,15 +1509,13 @@ Flatten all layers into a single layer.
 
 矩形区域的移动/复制/擦除，以及按颜色擦除
 
-**4 个工具**
-
 ### `move_region`
 
 ```text
 move_region(filename: str = '', *, layer_name: str, frame_index: int, x: int, y: int, width: int, height: int, dest_x: int, dest_y: int) -> str
 ```
 
-源码：[`aseprite_mcp/tools/selection.py:15`](../../aseprite_mcp/tools/selection.py#L15)
+源码：[`aseprite_mcp/tools/selection.py:17`](../../aseprite_mcp/tools/selection.py#L17)
 
 Cut a rectangular region of pixels and paste it at a new position. Coordinates are sprite-global. The source area is left transparent. Pixels moved outside the canvas are discarded. Fully transparent source pixels do not overwrite destination pixels.
 
@@ -1671,7 +1537,7 @@ Cut a rectangular region of pixels and paste it at a new position. Coordinates a
 copy_region(filename: str = '', *, layer_name: str, frame_index: int, x: int, y: int, width: int, height: int, dest_x: int, dest_y: int, target_layer_name: str = '', target_frame_index: int = 0) -> str
 ```
 
-源码：[`aseprite_mcp/tools/selection.py:98`](../../aseprite_mcp/tools/selection.py#L98)
+源码：[`aseprite_mcp/tools/selection.py:96`](../../aseprite_mcp/tools/selection.py#L96)
 
 Copy a rectangular region of pixels to another position, layer, or frame. Coordinates are sprite-global. Fully transparent source pixels do not overwrite destination pixels. The destination cel is created when missing.
 
@@ -1695,7 +1561,7 @@ Copy a rectangular region of pixels to another position, layer, or frame. Coordi
 erase_region(filename: str = '', *, layer_name: str, frame_index: int, x: int, y: int, width: int, height: int) -> str
 ```
 
-源码：[`aseprite_mcp/tools/selection.py:190`](../../aseprite_mcp/tools/selection.py#L190)
+源码：[`aseprite_mcp/tools/selection.py:184`](../../aseprite_mcp/tools/selection.py#L184)
 
 Erase (make transparent) a rectangular region of pixels. Coordinates are sprite-global.
 
@@ -1715,7 +1581,7 @@ Erase (make transparent) a rectangular region of pixels. Coordinates are sprite-
 erase_color(filename: str = '', *, layer_name: str, frame_index: int, color: str, tolerance: int = 0) -> str
 ```
 
-源码：[`aseprite_mcp/tools/selection.py:249`](../../aseprite_mcp/tools/selection.py#L249)
+源码：[`aseprite_mcp/tools/selection.py:239`](../../aseprite_mcp/tools/selection.py#L239)
 
 Make all pixels of a given color transparent (like a magic eraser).
 
@@ -1731,15 +1597,13 @@ Make all pixels of a given color transparent (like a magic eraser).
 
 手写逐像素特效：描边、换色、HSL 调整、有序抖动
 
-**5 个工具**
-
 ### `outline_cel`
 
 ```text
 outline_cel(filename: str = '', *, layer_name: str, frame_index: int, color: str = '#000000', include_diagonals: bool = False) -> str
 ```
 
-源码：[`aseprite_mcp/tools/fx.py:15`](../../aseprite_mcp/tools/fx.py#L15)
+源码：[`aseprite_mcp/tools/fx.py:17`](../../aseprite_mcp/tools/fx.py#L17)
 
 Add a 1px outline around all opaque pixels of a cel. Transparent pixels adjacent to opaque pixels are filled with the outline color. Great for making sprites read clearly against any background.
 
@@ -1757,7 +1621,7 @@ Add a 1px outline around all opaque pixels of a cel. Transparent pixels adjacent
 replace_color(filename: str = '', *, layer_name: str, frame_index: int, from_color: str, to_color: str, tolerance: int = 0) -> str
 ```
 
-源码：[`aseprite_mcp/tools/fx.py:95`](../../aseprite_mcp/tools/fx.py#L95)
+源码：[`aseprite_mcp/tools/fx.py:93`](../../aseprite_mcp/tools/fx.py#L93)
 
 Replace one color with another in a cel, preserving alpha.
 
@@ -1776,7 +1640,7 @@ Replace one color with another in a cel, preserving alpha.
 adjust_hsl(filename: str = '', *, layer_name: str, frame_index: int, hue_shift: float = 0, saturation_shift: float = 0, lightness_shift: float = 0) -> str
 ```
 
-源码：[`aseprite_mcp/tools/fx.py:175`](../../aseprite_mcp/tools/fx.py#L175)
+源码：[`aseprite_mcp/tools/fx.py:169`](../../aseprite_mcp/tools/fx.py#L169)
 
 Shift hue, saturation, and lightness of all opaque pixels in a cel. Useful for creating palette-swapped variants and shading: e.g. darken a duplicated layer for shadows or hue-shift toward blue for night scenes.
 
@@ -1795,7 +1659,7 @@ Shift hue, saturation, and lightness of all opaque pixels in a cel. Useful for c
 apply_dither_gradient(filename: str = '', *, layer_name: str, frame_index: int, x: int, y: int, width: int, height: int, color_start: str, color_end: str, horizontal: bool = False, create_if_missing: bool = True) -> str
 ```
 
-源码：[`aseprite_mcp/tools/fx.py:253`](../../aseprite_mcp/tools/fx.py#L253)
+源码：[`aseprite_mcp/tools/fx.py:243`](../../aseprite_mcp/tools/fx.py#L243)
 
 Fill a rectangle with a two-color gradient using Bayer 4x4 ordered dithering. This is the classic pixel-art way to blend two colors without introducing new intermediate colors. The gradient runs from color_start (top/left) to color_end (bottom/right).
 
@@ -1819,7 +1683,7 @@ Fill a rectangle with a two-color gradient using Bayer 4x4 ordered dithering. Th
 apply_dither_pattern(filename: str = '', *, layer_name: str, frame_index: int, x: int, y: int, width: int, height: int, color_a: str, color_b: str, density: float = 0.5, create_if_missing: bool = True) -> str
 ```
 
-源码：[`aseprite_mcp/tools/fx.py:347`](../../aseprite_mcp/tools/fx.py#L347)
+源码：[`aseprite_mcp/tools/fx.py:333`](../../aseprite_mcp/tools/fx.py#L333)
 
 Fill a rectangle with a uniform Bayer-dithered mix of two colors. density controls the ratio: 0.0 = all color_a, 0.5 = checkerboard, 1.0 = all color_b. Useful for textures (stone, grass) and flat mid-tones between two palette colors.
 
@@ -1841,15 +1705,13 @@ Fill a rectangle with a uniform Bayer-dithered mix of two colors. density contro
 
 洋葱皮渲染、帧差异、颜色统计
 
-**3 个工具**
-
 ### `render_onion_skin`
 
 ```text
 render_onion_skin(filename: str = '', *, frame_index: int, output_filename: str, before: int = 1, after: int = 1, scale: int = 4, ghost_opacity: int = 100) -> str
 ```
 
-源码：[`aseprite_mcp/tools/analysis.py:67`](../../aseprite_mcp/tools/analysis.py#L67)
+源码：[`aseprite_mcp/tools/analysis.py:68`](../../aseprite_mcp/tools/analysis.py#L68)
 
 Render a frame with neighboring frames as translucent onion-skin ghosts. Produces a PNG of the given frame composited over ghosted copies of the surrounding frames — the batch-mode equivalent of Aseprite's onion skinning. Essential for checking motion continuity while animating: export it, open the PNG, and verify the in-between positions line up.
 
@@ -1869,7 +1731,7 @@ Render a frame with neighboring frames as translucent onion-skin ghosts. Produce
 compare_frames(filename: str = '', *, frame_a: int, frame_b: int) -> str
 ```
 
-源码：[`aseprite_mcp/tools/analysis.py:161`](../../aseprite_mcp/tools/analysis.py#L161)
+源码：[`aseprite_mcp/tools/analysis.py:156`](../../aseprite_mcp/tools/analysis.py#L156)
 
 Compare two frames and report how much they differ. Composites the *visible* layers (non-destructively) and diffs the two frames pixel by pixel. Use while animating to confirm a frame actually changed, or that it did not change too much. Hidden layers do not count as a change.
 
@@ -1885,7 +1747,7 @@ Compare two frames and report how much they differ. Composites the *visible* lay
 get_color_stats(filename: str = '', frame_index: int = 1, top: int = 16) -> str
 ```
 
-源码：[`aseprite_mcp/tools/analysis.py:257`](../../aseprite_mcp/tools/analysis.py#L257)
+源码：[`aseprite_mcp/tools/analysis.py:248`](../../aseprite_mcp/tools/analysis.py#L248)
 
 Report the colors used in a frame and how often each appears. Composites the *visible* layers (non-destructively) and histograms the frame — hidden layers are excluded, so the counts match what a player sees. Use to check palette discipline: too many near-duplicate colors is a common pixel-art mistake.
 
@@ -1899,15 +1761,13 @@ Report the colors used in a frame and how often each appears. Composites the *vi
 
 命名区域、九宫格中心、轴心点
 
-**5 个工具**
-
 ### `create_slice`
 
 ```text
 create_slice(filename: str = '', *, name: str, x: int, y: int, width: int, height: int) -> str
 ```
 
-源码：[`aseprite_mcp/tools/slices.py:17`](../../aseprite_mcp/tools/slices.py#L17)
+源码：[`aseprite_mcp/tools/slices.py:19`](../../aseprite_mcp/tools/slices.py#L19)
 
 Create a named slice (a rectangular region usable by game engines).
 
@@ -1926,7 +1786,7 @@ Create a named slice (a rectangular region usable by game engines).
 set_slice_center(filename: str = '', *, name: str, x: int, y: int, width: int, height: int) -> str
 ```
 
-源码：[`aseprite_mcp/tools/slices.py:61`](../../aseprite_mcp/tools/slices.py#L61)
+源码：[`aseprite_mcp/tools/slices.py:59`](../../aseprite_mcp/tools/slices.py#L59)
 
 Set a slice's 9-patch center rectangle (relative to the slice origin). The center defines the stretchable region for 9-patch scaling in game engines.
 
@@ -1945,7 +1805,7 @@ Set a slice's 9-patch center rectangle (relative to the slice origin). The cente
 set_slice_pivot(filename: str = '', *, name: str, x: int, y: int) -> str
 ```
 
-源码：[`aseprite_mcp/tools/slices.py:106`](../../aseprite_mcp/tools/slices.py#L106)
+源码：[`aseprite_mcp/tools/slices.py:100`](../../aseprite_mcp/tools/slices.py#L100)
 
 Set a slice's pivot point (relative to the slice origin).
 
@@ -1962,7 +1822,7 @@ Set a slice's pivot point (relative to the slice origin).
 list_slices(filename: str = '') -> str
 ```
 
-源码：[`aseprite_mcp/tools/slices.py:144`](../../aseprite_mcp/tools/slices.py#L144)
+源码：[`aseprite_mcp/tools/slices.py:134`](../../aseprite_mcp/tools/slices.py#L134)
 
 List all slices with their bounds, 9-patch centers, and pivots.
 
@@ -1976,7 +1836,7 @@ List all slices with their bounds, 9-patch centers, and pivots.
 delete_slice(filename: str = '', *, name: str) -> str
 ```
 
-源码：[`aseprite_mcp/tools/slices.py:195`](../../aseprite_mcp/tools/slices.py#L195)
+源码：[`aseprite_mcp/tools/slices.py:181`](../../aseprite_mcp/tools/slices.py#L181)
 
 Delete a slice by name.
 
@@ -1989,15 +1849,13 @@ Delete a slice by name.
 
 tilemap 图层、tileset 编辑、瓦片摆放与读取
 
-**5 个工具**
-
 ### `create_tilemap_layer`
 
 ```text
 create_tilemap_layer(filename: str = '', *, layer_name: str, tile_width: int, tile_height: int) -> str
 ```
 
-源码：[`aseprite_mcp/tools/tilemap.py:25`](../../aseprite_mcp/tools/tilemap.py#L25)
+源码：[`aseprite_mcp/tools/tilemap.py:27`](../../aseprite_mcp/tools/tilemap.py#L27)
 
 Create a tilemap layer with its own tileset. Sets the sprite grid to the tile size and adds a tilemap layer. Tile index 0 is always the empty tile; add real tiles with draw_on_tile (which creates tiles on demand).
 
@@ -2014,7 +1872,7 @@ Create a tilemap layer with its own tileset. Sets the sprite grid to the tile si
 draw_on_tile(filename: str = '', *, layer_name: str, tile_index: int, pixels: List[Dict[str, Any]]) -> str
 ```
 
-源码：[`aseprite_mcp/tools/tilemap.py:81`](../../aseprite_mcp/tools/tilemap.py#L81)
+源码：[`aseprite_mcp/tools/tilemap.py:79`](../../aseprite_mcp/tools/tilemap.py#L79)
 
 Draw pixels onto a tile in a tilemap layer's tileset. Coordinates are tile-local (0,0 = tile top-left). When tile_index equals the current tile count, a new tile is appended automatically.
 
@@ -2031,7 +1889,7 @@ Draw pixels onto a tile in a tilemap layer's tileset. Coordinates are tile-local
 set_tiles(filename: str = '', *, layer_name: str, frame_index: int, tiles: List[Dict[str, Any]]) -> str
 ```
 
-源码：[`aseprite_mcp/tools/tilemap.py:167`](../../aseprite_mcp/tools/tilemap.py#L167)
+源码：[`aseprite_mcp/tools/tilemap.py:159`](../../aseprite_mcp/tools/tilemap.py#L159)
 
 Place tiles on a tilemap layer by grid position.
 
@@ -2048,7 +1906,7 @@ Place tiles on a tilemap layer by grid position.
 get_tile_at(filename: str = '', *, layer_name: str, frame_index: int, col: int, row: int) -> str
 ```
 
-源码：[`aseprite_mcp/tools/tilemap.py:267`](../../aseprite_mcp/tools/tilemap.py#L267)
+源码：[`aseprite_mcp/tools/tilemap.py:255`](../../aseprite_mcp/tools/tilemap.py#L255)
 
 Read which tile is placed at a grid position.
 
@@ -2066,7 +1924,7 @@ Read which tile is placed at a grid position.
 get_tilemap_info(filename: str = '', *, layer_name: str) -> str
 ```
 
-源码：[`aseprite_mcp/tools/tilemap.py:325`](../../aseprite_mcp/tools/tilemap.py#L325)
+源码：[`aseprite_mcp/tools/tilemap.py:309`](../../aseprite_mcp/tools/tilemap.py#L309)
 
 Get tilemap layer info: tile size, tile count, and map dimensions.
 
@@ -2079,15 +1937,13 @@ Get tilemap layer info: tile size, tile count, and map dimensions.
 
 任意 Aseprite Lua 的逃生舱
 
-**1 个工具**
-
 ### `run_lua_script`
 
 ```text
 run_lua_script(script: str, filename: str = '') -> str
 ```
 
-源码：[`aseprite_mcp/tools/script.py:7`](../../aseprite_mcp/tools/script.py#L7)
+源码：[`aseprite_mcp/tools/script.py:8`](../../aseprite_mcp/tools/script.py#L8)
 
 Execute arbitrary Aseprite Lua code in batch mode (escape hatch). Use this when no dedicated tool covers what you need. The full API is documented at https://www.aseprite.org/api/. Anything the curated tools do can also be done here — they are Lua underneath. Essentials for batch-mode scripts: - When filename is given, it is opened first and available as app.activeSprite. - Changes are NOT saved automatically; call spr:saveAs(spr.filename) at the end if you modified the sprite. - print() is the only way to return data; a clean exit does not mean your logic succeeded, so print what you need to verify. - Coordinates on cel images are cel-local: offset sprite-global coordinates by cel.position before getPixel/putPixel. WARNING: this executes unrestricted code (including io/os access) on the host running Aseprite. Only pass scripts you trust.
 
@@ -2100,15 +1956,13 @@ Execute arbitrary Aseprite Lua code in batch mode (escape hatch). Use this when 
 
 用 bitmap 或 TrueType 字体绘制与测量文本
 
-**3 个工具**
-
 ### `list_text_fonts`
 
 ```text
 list_text_fonts() -> str
 ```
 
-源码：[`aseprite_mcp/tools/text.py:53`](../../aseprite_mcp/tools/text.py#L53)
+源码：[`aseprite_mcp/tools/text.py:56`](../../aseprite_mcp/tools/text.py#L56)
 
 List fonts that draw_text can use. Covers bitmap sprite-sheet fonts and .ttf/.otf files installed under ~/.aseprite-mcp/fonts, plus TrueType fonts found in the system font directories. Bitmap fonts are the right choice for pixel art: their glyphs are already pixels and `size` scales them by whole numbers.
 
@@ -2118,7 +1972,7 @@ List fonts that draw_text can use. Covers bitmap sprite-sheet fonts and .ttf/.ot
 measure_text(text: str, font: str, size: int = 1, letter_spacing: int = 0, bold: int = 0, antialias: bool = False) -> str
 ```
 
-源码：[`aseprite_mcp/tools/text.py:81`](../../aseprite_mcp/tools/text.py#L81)
+源码：[`aseprite_mcp/tools/text.py:84`](../../aseprite_mcp/tools/text.py#L84)
 
 Measure text without drawing it. Use this to size a panel or centre a label in one shot instead of guessing and re-rendering.
 
@@ -2134,10 +1988,10 @@ Measure text without drawing it. Use this to size a panel or centre a label in o
 ### `draw_text`
 
 ```text
-draw_text(filename: str = '', *, text: str, x: int, y: int, font: str, size: int = 1, color: str = '#FFFFFF', layer_name: Optional[str] = None, frame_index: int = 1, anchor: str = 'topleft', letter_spacing: int = 0, bold: int = 0, outline_color: Optional[str] = None, outline_width: int = 1, outline_diagonal: bool = True, shadow_color: Optional[str] = None, shadow_dx: int = 1, shadow_dy: int = 1, antialias: bool = False, create_if_missing: bool = True) -> str
+draw_text(filename: str = '', *, text: str, x: int, y: int, font: str, size: int = 1, color: str = '#FFFFFF', layer_name: str, frame_index: int, anchor: str = 'topleft', letter_spacing: int = 0, bold: int = 0, outline_color: Optional[str] = None, outline_width: int = 1, outline_diagonal: bool = True, shadow_color: Optional[str] = None, shadow_dx: int = 1, shadow_dy: int = 1, antialias: bool = False, create_if_missing: bool = True) -> str
 ```
 
-源码：[`aseprite_mcp/tools/text.py:121`](../../aseprite_mcp/tools/text.py#L121)
+源码：[`aseprite_mcp/tools/text.py:124`](../../aseprite_mcp/tools/text.py#L124)
 
 Draw text onto a sprite. Glyphs are rasterised outside Aseprite and composited in, because the Lua API has no text drawing of its own.
 
@@ -2150,8 +2004,8 @@ Draw text onto a sprite. Glyphs are rasterised outside Aseprite and composited i
 | `font` | `str` | **必填** | Font name from list_text_fonts, or a path to a .ttf/.otf or a bitmap font directory |
 | `size` | `int` | `1` | Pixel size for TrueType fonts; integer scale factor for bitmap fonts (default 1) |
 | `color` | `str` | `'#FFFFFF'` | Text colour, #RRGGBB or #RRGGBBAA (default white) |
-| `layer_name` | `Optional[str]` | `None` | Layer to draw on; the active/first layer if omitted |
-| `frame_index` | `int` | `1` | Frame index starting at 1 (default 1) |
+| `layer_name` | `str` | **必填** | Explicit layer name or group path |
+| `frame_index` | `int` | **必填** | Explicit frame index starting at 1 |
 | `anchor` | `str` | `'topleft'` | Which point of the text (x, y) refers to - one of topleft, top, topright, left, center, right, bottomleft, bottom, bottomright, baselineleft, baseline, baselineright (default topleft) |
 | `letter_spacing` | `int` | `0` | Extra pixels between glyphs (default 0) |
 | `bold` | `int` | `0` | Faux-bold passes; each grows strokes by 1px (default 0) |
@@ -2168,23 +2022,21 @@ Draw text onto a sprite. Glyphs are rasterised outside Aseprite and composited i
 
 Aseprite 原生滤镜包装（app.command.*）
 
-**7 个工具**
-
 ### `outline_native`
 
 ```text
-outline_native(filename: str = '', layer_name: str = '', frame_index: int = 1, color: str = '#000000', place: str = 'outside', matrix: str = 'circle') -> str
+outline_native(filename: str = '', *, layer_name: str, frame_index: int, color: str = '#000000', place: str = 'outside', matrix: str = 'circle') -> str
 ```
 
-源码：[`aseprite_mcp/tools/native_fx.py:41`](../../aseprite_mcp/tools/native_fx.py#L41)
+源码：[`aseprite_mcp/tools/native_fx.py:35`](../../aseprite_mcp/tools/native_fx.py#L35)
 
 Native Aseprite Outline around opaque pixels (app.command.Outline). Higher quality than the 1px hand-rolled outline_cel: inside/outside placement + a circle/square brush. Works best on a full-canvas cel.
 
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `filename` | `str` | `''` | Aseprite file to modify (optional; defaults to the session's active file) |
-| `layer_name` | `str` | `''` | layer to outline (empty = active layer) |
-| `frame_index` | `int` | `1` | 1-based frame |
+| `layer_name` | `str` | **必填** | layer to outline (empty = active layer) |
+| `frame_index` | `int` | **必填** | 1-based frame |
 | `color` | `str` | `'#000000'` | outline colour as #RRGGBB |
 | `place` | `str` | `'outside'` | "outside" or "inside" |
 | `matrix` | `str` | `'circle'` | "circle" or "square" |
@@ -2192,18 +2044,18 @@ Native Aseprite Outline around opaque pixels (app.command.Outline). Higher quali
 ### `adjust_hsl_native`
 
 ```text
-adjust_hsl_native(filename: str = '', layer_name: str = '', frame_index: int = 1, hue: int = 0, saturation: int = 0, lightness: int = 0, x: int = 0, y: int = 0, width: int = 0, height: int = 0) -> str
+adjust_hsl_native(filename: str = '', *, layer_name: str, frame_index: int, hue: int = 0, saturation: int = 0, lightness: int = 0, x: int = 0, y: int = 0, width: int = 0, height: int = 0) -> str
 ```
 
-源码：[`aseprite_mcp/tools/native_fx.py:84`](../../aseprite_mcp/tools/native_fx.py#L84)
+源码：[`aseprite_mcp/tools/native_fx.py:67`](../../aseprite_mcp/tools/native_fx.py#L67)
 
 Native Hue/Saturation/Lightness filter (engine-quality vs adjust_hsl).
 
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `filename` | `str` | `''` | Aseprite file to modify (optional; defaults to the session's active file) |
-| `layer_name` | `str` | `''` | layer to adjust (empty = active layer) |
-| `frame_index` | `int` | `1` | 1-based frame |
+| `layer_name` | `str` | **必填** | layer to adjust (empty = active layer) |
+| `frame_index` | `int` | **必填** | 1-based frame |
 | `hue` | `int` | `0` | -180..180 (degrees) |
 | `saturation` | `int` | `0` | -100..100 |
 | `lightness` | `int` | `0` | -100..100 x, y, width, height: optional region (width>0 & height>0 to scope) |
@@ -2215,18 +2067,18 @@ Native Hue/Saturation/Lightness filter (engine-quality vs adjust_hsl).
 ### `adjust_brightness_contrast`
 
 ```text
-adjust_brightness_contrast(filename: str = '', layer_name: str = '', frame_index: int = 1, brightness: int = 0, contrast: int = 0, x: int = 0, y: int = 0, width: int = 0, height: int = 0) -> str
+adjust_brightness_contrast(filename: str = '', *, layer_name: str, frame_index: int, brightness: int = 0, contrast: int = 0, x: int = 0, y: int = 0, width: int = 0, height: int = 0) -> str
 ```
 
-源码：[`aseprite_mcp/tools/native_fx.py:126`](../../aseprite_mcp/tools/native_fx.py#L126)
+源码：[`aseprite_mcp/tools/native_fx.py:94`](../../aseprite_mcp/tools/native_fx.py#L94)
 
 Native Brightness/Contrast filter (app.command.BrightnessContrast).
 
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `filename` | `str` | `''` | Aseprite file to modify (optional; defaults to the session's active file) |
-| `layer_name` | `str` | `''` | layer to adjust (empty = active layer) |
-| `frame_index` | `int` | `1` | 1-based frame |
+| `layer_name` | `str` | **必填** | layer to adjust (empty = active layer) |
+| `frame_index` | `int` | **必填** | 1-based frame |
 | `brightness` | `int` | `0` | -100..100 |
 | `contrast` | `int` | `0` | -100..100 x, y, width, height: optional region (width>0 & height>0 to scope) |
 | `x` | `int` | `0` |  |
@@ -2237,18 +2089,18 @@ Native Brightness/Contrast filter (app.command.BrightnessContrast).
 ### `invert_colors`
 
 ```text
-invert_colors(filename: str = '', layer_name: str = '', frame_index: int = 1, x: int = 0, y: int = 0, width: int = 0, height: int = 0) -> str
+invert_colors(filename: str = '', *, layer_name: str, frame_index: int, x: int = 0, y: int = 0, width: int = 0, height: int = 0) -> str
 ```
 
-源码：[`aseprite_mcp/tools/native_fx.py:164`](../../aseprite_mcp/tools/native_fx.py#L164)
+源码：[`aseprite_mcp/tools/native_fx.py:118`](../../aseprite_mcp/tools/native_fx.py#L118)
 
 Native colour inversion (app.command.InvertColor).
 
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `filename` | `str` | `''` | Aseprite file to modify (optional; defaults to the session's active file) |
-| `layer_name` | `str` | `''` | layer to invert (empty = active layer) |
-| `frame_index` | `int` | `1` | 1-based frame x, y, width, height: optional region (width>0 & height>0 to scope) |
+| `layer_name` | `str` | **必填** | layer to invert (empty = active layer) |
+| `frame_index` | `int` | **必填** | 1-based frame x, y, width, height: optional region (width>0 & height>0 to scope) |
 | `x` | `int` | `0` |  |
 | `y` | `int` | `0` |  |
 | `width` | `int` | `0` |  |
@@ -2257,10 +2109,10 @@ Native colour inversion (app.command.InvertColor).
 ### `apply_convolution`
 
 ```text
-apply_convolution(filename: str = '', *, matrix: str, layer_name: str = '', frame_index: int = 1, x: int = 0, y: int = 0, width: int = 0, height: int = 0) -> str
+apply_convolution(filename: str = '', *, matrix: str, layer_name: str, frame_index: int, x: int = 0, y: int = 0, width: int = 0, height: int = 0) -> str
 ```
 
-源码：[`aseprite_mcp/tools/native_fx.py:195`](../../aseprite_mcp/tools/native_fx.py#L195)
+源码：[`aseprite_mcp/tools/native_fx.py:137`](../../aseprite_mcp/tools/native_fx.py#L137)
 
 Native convolution filter (blur / sharpen / edge / emboss …).
 
@@ -2268,8 +2120,8 @@ Native convolution filter (blur / sharpen / edge / emboss …).
 |---|---|---|---|
 | `filename` | `str` | `''` | Aseprite file to modify (optional; defaults to the session's active file) |
 | `matrix` | `str` | **必填** | a built-in matrix name (see list_convolution_matrices), e.g. "blur-3x3", "sharpen-3x3", "edges-find", "misc-emboss" |
-| `layer_name` | `str` | `''` | layer to filter (empty = active layer) |
-| `frame_index` | `int` | `1` | 1-based frame x, y, width, height: optional region (width>0 & height>0 to scope) |
+| `layer_name` | `str` | **必填** | layer to filter (empty = active layer) |
+| `frame_index` | `int` | **必填** | 1-based frame x, y, width, height: optional region (width>0 & height>0 to scope) |
 | `x` | `int` | `0` |  |
 | `y` | `int` | `0` |  |
 | `width` | `int` | `0` |  |
@@ -2281,7 +2133,7 @@ Native convolution filter (blur / sharpen / edge / emboss …).
 list_convolution_matrices() -> str
 ```
 
-源码：[`aseprite_mcp/tools/native_fx.py:223`](../../aseprite_mcp/tools/native_fx.py#L223)
+源码：[`aseprite_mcp/tools/native_fx.py:161`](../../aseprite_mcp/tools/native_fx.py#L161)
 
 List the built-in convolution-matrix names usable with apply_convolution. Returns: JSON array of matrix resource names.
 
@@ -2291,7 +2143,7 @@ List the built-in convolution-matrix names usable with apply_convolution. Return
 extract_palette(filename: str = '', max_colors: int = 16, with_alpha: bool = False) -> str
 ```
 
-源码：[`aseprite_mcp/tools/native_fx.py:233`](../../aseprite_mcp/tools/native_fx.py#L233)
+源码：[`aseprite_mcp/tools/native_fx.py:171`](../../aseprite_mcp/tools/native_fx.py#L171)
 
 Build an OPTIMAL palette from the sprite via native ColorQuantization. True palette extraction (vs the nearest-snap quantize_to_palette): writes the resulting palette to the sprite and returns it. NOTE: mutates the sprite's palette. Sprite must be in RGB mode. `max_colors` is a slot budget, not a promise of that many colours: Aseprite always reserves palette slot 0 for the sprite's transparent colour, and the quantiser's median cut can also come up short. Expect at most max_colors - 1 usable colours, sometimes fewer — and asking for max_colors + 1 does not reliably recover the difference. The returned `palette_size` and `max_colors` make the shortfall visible.
 

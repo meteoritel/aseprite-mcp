@@ -110,11 +110,85 @@ local function normalize_cel(spr, layer, frame, create)
 end
 """
 
+EDIT_TARGET = ENSURE_LAYER + LAYER_NAMES + """
+local function require_frame(spr, index)
+    if index < 1 or index > #spr.frames then
+        error("Frame index " .. index .. " out of range (sprite has " .. #spr.frames .. " frames, 1-based)")
+    end
+    return spr.frames[index]
+end
+
+local function require_layer(spr, name, create)
+    if name == "" then error("Specify an explicit layer_name") end
+    local layer = ensure_layer(spr, name, create)
+    if not layer then
+        error("Layer '" .. name .. "' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first.")
+    end
+    if layer.isGroup then error("Layer '" .. name .. "' is a group; select a leaf layer") end
+    return layer
+end
+
+local function require_cel(spr, layer, index, create)
+    local frame = require_frame(spr, index)
+    local cel = layer:cel(frame)
+    if not cel and create then
+        cel = spr:newCel(layer, frame, Image(spr.width, spr.height, spr.colorMode), Point(0, 0))
+    end
+    if not cel then error("No cel on layer '" .. layer.name .. "' at frame " .. index) end
+    return cel
+end
+"""
+
 # Bounds-guarded putPixel.
 PSET = """
 local function pset(img, x, y, color)
     if x >= 0 and y >= 0 and x < img.width and y < img.height then
         img:putPixel(x, y, color)
+    end
+end
+"""
+
+CEL_COPIES = """
+local function leaf_layers(spr)
+    local result = {}
+    local function walk(layers)
+        for _, layer in ipairs(layers) do
+            if layer.isGroup then walk(layer.layers)
+            else result[#result + 1] = layer end
+        end
+    end
+    walk(spr.layers)
+    return result
+end
+
+local function snapshot_cel(cel)
+    if not cel then return nil end
+    return {image=cel.image:clone(), position=Point(cel.position),
+            opacity=cel.opacity, zIndex=cel.zIndex}
+end
+
+local function write_cel(spr, layer, frame, snapshot, replace)
+    local existing = layer:cel(frame)
+    if existing and not replace then return end
+    if existing then spr:deleteCel(existing) end
+    if snapshot then
+        local cel = spr:newCel(layer, frame, snapshot.image:clone(), snapshot.position)
+        cel.opacity = snapshot.opacity
+        if snapshot.zIndex ~= nil then cel.zIndex = snapshot.zIndex end
+    end
+end
+
+local function snapshot_frame(spr, frame)
+    local result = {}
+    for _, layer in ipairs(leaf_layers(spr)) do
+        result[#result + 1] = {layer=layer, cel=snapshot_cel(layer:cel(frame))}
+    end
+    return result
+end
+
+local function write_frame(spr, frame, snapshot, replace)
+    for _, entry in ipairs(snapshot) do
+        write_cel(spr, entry.layer, frame, entry.cel, replace)
     end
 end
 """

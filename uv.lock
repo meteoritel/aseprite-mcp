@@ -42,6 +42,7 @@ name = "aseprite-mcp"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "anyio" },
     { name = "httpx" },
     { name = "mcp", extra = ["cli"] },
     { name = "pillow" },
@@ -54,6 +55,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "anyio", specifier = ">=4.5" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "mcp", extras = ["cli"], specifier = ">=2.0,<3" },
     { name = "pillow", specifier = ">=10.0.0" },

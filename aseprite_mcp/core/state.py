@@ -10,10 +10,14 @@ never silently land in the wrong directory.
 """
 
 import os
+import tempfile
+
+from mcp.server.mcpserver.exceptions import ToolError
 
 from .commands import reject_traversal
 
 _active_file: str | None = None
+_review_directory: tempfile.TemporaryDirectory | None = None
 
 NO_ACTIVE_FILE_ERROR = (
     "No filename given and no active file set yet — "
@@ -74,7 +78,7 @@ def prepare_filename(
     *,
     must_exist: bool = True,
     anchor: bool = True,
-) -> tuple[str | None, str | None]:
+) -> str:
     """Validate a tool's `filename` argument and return an absolute path.
 
     Steps: fall back to the active file when omitted, resolve relative
@@ -84,24 +88,38 @@ def prepare_filename(
     Set `anchor=False` for output paths (exports, copies) so writing a file
     never re-points the session's active file at it.
 
-    Returns (absolute_path, None) on success, or (None, error_message) with
-    a self-correcting hint the AI can act on.
+    Returns the absolute path; raises ToolError with a corrective hint on failure.
     """
     resolved = resolve_filename(filename)
     if resolved is None:
-        return None, NO_ACTIVE_FILE_ERROR
+        raise ToolError(NO_ACTIVE_FILE_ERROR)
 
     # Check traversal on the RAW input: resolving first would let
     # os.path.abspath silently collapse `..` and hide the attack.
     traversal_error = reject_traversal(resolved)
     if traversal_error:
-        return None, traversal_error
+        raise ToolError(traversal_error)
 
     absolute = resolve_path(resolved)
 
     if must_exist and not os.path.exists(absolute):
-        return None, f"File {absolute}{FILE_NOT_FOUND_HINT}"
+        raise ToolError(f"File {absolute}{FILE_NOT_FOUND_HINT}")
 
     if anchor:
         set_active_file(absolute)
-    return absolute, None
+    return absolute
+
+
+def get_review_directory() -> str:
+    """Temporary review images live until the owning stdio session exits."""
+    global _review_directory
+    if _review_directory is None:
+        _review_directory = tempfile.TemporaryDirectory(prefix="aseprite-review-")
+    return _review_directory.name
+
+
+def cleanup_review_directory() -> None:
+    global _review_directory
+    if _review_directory is not None:
+        _review_directory.cleanup()
+        _review_directory = None

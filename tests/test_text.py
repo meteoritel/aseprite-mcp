@@ -3,11 +3,13 @@
 The bitmap tests build their own font on disk so they run anywhere; only the
 TrueType tests need something installed, and they skip when nothing is found.
 """
+
+from conftest import failure
 import json
 import os
 
 import pytest
-from conftest import ok, run
+from conftest import run
 from PIL import Image
 
 from aseprite_mcp.core import fonts as fontlib
@@ -59,7 +61,7 @@ def _system_truetype():
 # ── discovery / errors ────────────────────────────────────────────────
 
 def test_unknown_font_is_reported():
-    out = run(text.measure_text(text="ABC", font="definitely-not-a-font"))
+    out = failure(text.measure_text(text="ABC", font="definitely-not-a-font"))
     assert out.startswith("ERROR")
     assert "not found" in out
 
@@ -70,13 +72,13 @@ def test_list_fonts_never_raises():
 
 
 def test_bitmap_font_rejects_zero_size(bitmap_font):
-    out = run(text.measure_text(text="A", font=bitmap_font, size=0))
+    out = failure(text.measure_text(text="A", font=bitmap_font, size=0))
     assert out.startswith("ERROR")
     assert "scale factor" in out
 
 
 def test_rejects_bad_anchor(sprite, bitmap_font):
-    out = run(text.draw_text(filename=sprite, text="A", x=0, y=0, font=bitmap_font, anchor="middle"))
+    out = failure(text.draw_text(filename=sprite, text="A", x=0, y=0, font=bitmap_font, anchor="middle", frame_index=1, layer_name="body"))
     assert "Invalid anchor" in out
 
 
@@ -145,33 +147,33 @@ def test_overrides_replace_a_sheet_glyph(tmp_path, bitmap_font):
 # ── drawing ───────────────────────────────────────────────────────────
 
 def test_draw_text_puts_ink_on_the_canvas(sprite, bitmap_font):
-    out = ok(run(text.draw_text(filename=sprite, text="O", x=4, y=4, font=bitmap_font, size=1, color="#FF0000", layer_name="body")))
+    out = run(text.draw_text(filename=sprite, text="O", x=4, y=4, font=bitmap_font, size=1, color="#FF0000", layer_name="body", frame_index=1))
     assert "Drew" in out
     # 'O' has ink at (1,0) of its box, which lands at (5,4) on the sprite.
-    px = ok(run(pixel_read.get_pixel_color(filename=sprite, x=5, y=4, layer_name="body", frame_index=1)))
+    px = run(pixel_read.get_pixel_color(filename=sprite, x=5, y=4, layer_name="body", frame_index=1))
     assert "#ff0000" in px.lower()
 
 
 def test_topleft_anchor_places_the_box_at_the_point(sprite, bitmap_font):
-    out = ok(run(text.draw_text(filename=sprite, text="B", x=10, y=10, font=bitmap_font, size=1, color="#00FF00", layer_name="body")))
+    out = run(text.draw_text(filename=sprite, text="B", x=10, y=10, font=bitmap_font, size=1, color="#00FF00", layer_name="body", frame_index=1))
     assert "at (10, 10)" in out
 
 
 def test_center_anchor_is_offset_by_half_the_box(sprite, bitmap_font):
-    out = ok(run(text.draw_text(filename=sprite, text="B", x=20, y=20, font=bitmap_font, size=1, color="#0000FF", layer_name="body", anchor="center")))
+    out = run(text.draw_text(filename=sprite, text="B", x=20, y=20, font=bitmap_font, size=1, color="#0000FF", layer_name="body", anchor="center", frame_index=1))
     # box is 4x5, so the top-left lands 2 left and 2 up of the anchor.
     assert "at (18, 18)" in out
 
 
 def test_outline_grows_the_stamp_but_not_the_box(sprite, bitmap_font):
-    plain = ok(run(text.draw_text(filename=sprite, text="O", x=4, y=14, font=bitmap_font, size=1, color="#FFFFFF", layer_name="body")))
-    outlined = ok(run(text.draw_text(filename=sprite, text="O", x=14, y=14, font=bitmap_font, size=1, color="#FFFFFF", layer_name="body", outline_color="#000000")))
+    plain = run(text.draw_text(filename=sprite, text="O", x=4, y=14, font=bitmap_font, size=1, color="#FFFFFF", layer_name="body", frame_index=1))
+    outlined = run(text.draw_text(filename=sprite, text="O", x=14, y=14, font=bitmap_font, size=1, color="#FFFFFF", layer_name="body", outline_color="#000000", frame_index=1))
     assert "text box 4x5" in plain and "text box 4x5" in outlined
     assert "stamp 4x5" in plain and "stamp 6x7" in outlined
 
 
 def test_empty_text_is_a_no_op(sprite, bitmap_font):
-    out = run(text.draw_text(filename=sprite, text="", x=0, y=0, font=bitmap_font))
+    out = run(text.draw_text(filename=sprite, text="", x=0, y=0, font=bitmap_font, frame_index=1, layer_name="body"))
     assert out.startswith("OK")
 
 

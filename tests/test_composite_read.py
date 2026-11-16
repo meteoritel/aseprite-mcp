@@ -5,15 +5,15 @@ unlike get_pixel_color which reads a single named cel.
 """
 import json
 
-from conftest import ok, run
+from conftest import run
 
 from aseprite_mcp.tools import canvas, drawing, pixel_read
 
 
 def test_composite_reads_top_layer(sprite):
     # fixture: 32x32, 'body' layer with a red rect at (8,8,16,16).
-    ok(run(canvas.add_layer(filename=sprite, layer_name="overlay")))
-    ok(run(drawing.draw_rectangle_at(filename=sprite, layer_name="overlay", frame_index=1, x=8, y=8, width=16, height=16, color="#3050D0", fill=True)))
+    run(canvas.add_layer(filename=sprite, layer_name="overlay"))
+    run(drawing.draw_rectangle_at(filename=sprite, layer_name="overlay", frame_index=1, x=8, y=8, width=16, height=16, color="#3050D0", fill=True))
     # single-cel read of the bottom 'body' layer = its own colour (red).
     body = run(pixel_read.get_pixel_color(filename=sprite, x=12, y=12, layer_name="body", frame_index=1))
     assert body.lower().startswith("#d04648"), body

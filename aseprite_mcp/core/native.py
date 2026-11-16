@@ -1,19 +1,12 @@
-"""Shared wrapper for native Aseprite `app.command.*` filters.
-
-Native engine commands act on the ACTIVE sprite / layer / frame (and the
-active selection for region scope), NOT on explicit arguments — so the
-wrapper resolves + activates the target BEFORE the command, error-first,
-or a filter silently hits the wrong layer. Verified headless under
-`--batch` with `{ui=false}` (T0, 2026-06-18).
-"""
-from .lua import FIND_LAYER, LAYER_NAMES
+"""Activate an explicit cel and optional selection for native batch filters."""
+from .lua import EDIT_TARGET
 from .commands import lua_escape
 
 
 def build_native_command_script(
     command_lua: str,
-    layer_name: str = "",
-    frame_index: int = 1,
+    layer_name: str,
+    frame_index: int,
     region: tuple[int, int, int, int] | None = None,
 ) -> str:
     """Wrap an `app.command.X{ui=false,...}` snippet with target activation,
@@ -22,7 +15,7 @@ def build_native_command_script(
 
     Args:
         command_lua: the `app.command.X{ui=false, ...}` Lua line(s)
-        layer_name: layer to activate first (empty = leave active layer)
+        layer_name: explicit layer to activate first
         frame_index: 1-based frame to activate
         region: optional (x, y, w, h) to scope the command via a selection
     """
@@ -34,23 +27,19 @@ def build_native_command_script(
     else:
         sel_set = sel_clear = ""
     return f"""
-    {FIND_LAYER}
-    {LAYER_NAMES}
+    {EDIT_TARGET}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
     local idx = {frame_index}
-    if idx < 1 or idx > #spr.frames then print("ERROR:Frame index out of range") return end
-    app.activeFrame = spr.frames[idx]
-    if "{safe_layer}" ~= "" then
-        local target = find_layer(spr, "{safe_layer}")
-        if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
-        app.activeLayer = target
-    end
+    app.activeFrame = require_frame(spr, idx)
+    local target = require_layer(spr, "{safe_layer}", false)
+    require_cel(spr, target, idx, false)
+    app.activeLayer = target
     {sel_set}
     app.transaction(function()
 {command_lua}
     end)
     {sel_clear}
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """

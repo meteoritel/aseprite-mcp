@@ -1,3 +1,4 @@
+from mcp.server.mcpserver.exceptions import ToolError
 import json
 import os
 from ..core.commands import AsepriteCommand, lua_escape
@@ -82,20 +83,16 @@ async def render_onion_skin(filename: str = "", *, frame_index: int, output_file
         scale: Integer nearest-neighbor scale factor (default 4)
         ghost_opacity: Opacity of ghost frames, 0-255 (default 100)
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
     if not output_filename:
-        return "output_filename is required"
-    output_filename, err = prepare_filename(output_filename, must_exist=False, anchor=False)
-    if err:
-        return err
+        raise ToolError("output_filename is required")
+    output_filename = prepare_filename(output_filename, must_exist=False, anchor=False)
     if scale < 1 or scale > 64:
-        return "scale must be between 1 and 64"
+        raise ToolError("scale must be between 1 and 64")
     if not (0 <= ghost_opacity <= 255):
-        return "ghost_opacity must be between 0 and 255"
+        raise ToolError("ghost_opacity must be between 0 and 255")
     if before < 0 or after < 0:
-        return "before and after must be >= 0"
+        raise ToolError("before and after must be >= 0")
     if not output_filename.lower().endswith(".png"):
         output_filename = f"{output_filename}.png"
 
@@ -148,13 +145,11 @@ async def render_onion_skin(filename: str = "", *, frame_index: int, output_file
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return (
-            f"Onion-skin render of frame {frame_index} "
-            f"(-{before}/+{after} ghosts) saved to {output_filename} at {scale}x"
-        )
-    return f"Failed to render onion skin: {output}"
+    await AsepriteCommand.execute_lua_script_checked(script, filename)
+    return (
+        f"Onion-skin render of frame {frame_index} "
+        f"(-{before}/+{after} ghosts) saved to {output_filename} at {scale}x"
+    )
 
 
 @mcp.tool()
@@ -175,9 +170,7 @@ async def compare_frames(filename: str = "", *, frame_a: int, frame_b: int) -> s
         JSON with changed pixel count, total pixels, percent changed,
         and the bounding box of the changed region.
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
 
     script = f"""
     {_COMPOSE_FRAME}
@@ -227,9 +220,7 @@ async def compare_frames(filename: str = "", *, frame_a: int, frame_b: int) -> s
         (changed > 0) and 1 or 0))
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if not success:
-        return f"Failed to compare frames: {output}"
+    output = await AsepriteCommand.execute_lua_script_checked(script, filename)
 
     for line in output.splitlines():
         if line.startswith("DIFF:"):
@@ -250,7 +241,7 @@ async def compare_frames(filename: str = "", *, frame_a: int, frame_b: int) -> s
                     "height": max_y - min_y + 1,
                 }
             return json.dumps(result)
-    return "No diff data returned"
+    raise ToolError("No diff data returned")
 
 
 @mcp.tool()
@@ -271,11 +262,9 @@ async def get_color_stats(filename: str = "", frame_index: int = 1, top: int = 1
         JSON with unique color count, opaque pixel count, and the top
         colors with usage counts.
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
     if top < 1:
-        return "top must be >= 1"
+        raise ToolError("top must be >= 1")
 
     script = f"""
     {_COMPOSE_FRAME}
@@ -312,9 +301,7 @@ async def get_color_stats(filename: str = "", frame_index: int = 1, top: int = 1
     print("UNIQUE:" .. unique)
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if not success:
-        return f"Failed to get color stats: {output}"
+    output = await AsepriteCommand.execute_lua_script_checked(script, filename)
 
     colors = []
     opaque = 0

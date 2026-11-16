@@ -1,5 +1,9 @@
+from ..core.inspection import read_sprite_info
+from mcp.server.mcpserver.exceptions import ToolError
+from ..core.lua import CEL_COPIES
+from ..core.editing import execute_edit_script
 import json
-from ..core.commands import AsepriteCommand, lua_escape
+from ..core.commands import lua_escape
 from ..core.state import prepare_filename
 from ..core.lua import FIND_LAYER, LAYER_NAMES
 from .. import mcp
@@ -13,12 +17,10 @@ async def add_frames(filename: str = "", *, count: int, duration_ms: int | None 
         count: Number of frames to add
         duration_ms: Optional duration for each new frame in milliseconds
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
 
     if count < 1:
-        return "Count must be >= 1"
+        raise ToolError("Count must be >= 1")
 
     duration_line = ""
     if duration_ms is not None and duration_ms > 0:
@@ -35,14 +37,12 @@ async def add_frames(filename: str = "", *, count: int, duration_ms: int | None 
         end
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return f"Added {count} frames to {filename}"
-    return f"Failed to add frames: {output}"
+    await execute_edit_script(script, filename)
+    return f"Added {count} frames to {filename}"
 
 @mcp.tool()
 async def set_frame_duration_all(filename: str = "", *, duration_ms: int) -> str:
@@ -52,11 +52,9 @@ async def set_frame_duration_all(filename: str = "", *, duration_ms: int) -> str
         filename: Aseprite file to modify (optional; defaults to the session's active file)
         duration_ms: Duration in milliseconds
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
     if duration_ms <= 0:
-        return "Duration must be > 0"
+        raise ToolError("Duration must be > 0")
 
     script = f"""
     local spr = app.activeSprite
@@ -68,14 +66,12 @@ async def set_frame_duration_all(filename: str = "", *, duration_ms: int) -> str
         end
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return f"Set duration of all frames to {duration_ms}ms in {filename}"
-    return f"Failed to set frame durations: {output}"
+    await execute_edit_script(script, filename)
+    return f"Set duration of all frames to {duration_ms}ms in {filename}"
 
 @mcp.tool()
 async def set_layer_visibility(filename: str = "", *, layer_name: str, visible: bool = True) -> str:
@@ -86,9 +82,7 @@ async def set_layer_visibility(filename: str = "", *, layer_name: str, visible: 
         layer_name: Layer name to target
         visible: Whether the layer should be visible
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
 
     safe_layer_name = lua_escape(layer_name)
     visible_flag = "true" if visible else "false"
@@ -105,14 +99,12 @@ async def set_layer_visibility(filename: str = "", *, layer_name: str, visible: 
         target.isVisible = {visible_flag}
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return f"Layer '{layer_name}' visibility set to {visible} in {filename}"
-    return f"Failed to set layer visibility: {output}"
+    await execute_edit_script(script, filename)
+    return f"Layer '{layer_name}' visibility set to {visible} in {filename}"
 
 @mcp.tool()
 async def set_layer_opacity(filename: str = "", *, layer_name: str, opacity: int) -> str:
@@ -123,11 +115,9 @@ async def set_layer_opacity(filename: str = "", *, layer_name: str, opacity: int
         layer_name: Layer name to target
         opacity: Opacity value 0-255
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
     if opacity < 0 or opacity > 255:
-        return "Opacity must be between 0 and 255"
+        raise ToolError("Opacity must be between 0 and 255")
 
     safe_layer_name = lua_escape(layer_name)
     script = f"""
@@ -143,80 +133,19 @@ async def set_layer_opacity(filename: str = "", *, layer_name: str, opacity: int
         target.opacity = {opacity}
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return f"Layer '{layer_name}' opacity set to {opacity} in {filename}"
-    return f"Failed to set layer opacity: {output}"
+    await execute_edit_script(script, filename)
+    return f"Layer '{layer_name}' opacity set to {opacity} in {filename}"
 
 @mcp.tool()
 async def get_sprite_info(filename: str = "") -> str:
-    """Return sprite info as JSON string (size, color mode, frame durations, layers, tags).
+    """Read canvas, layer tree, frame durations and tag metadata as JSON."""
+    filename = prepare_filename(filename)
+    return json.dumps(await read_sprite_info(filename), ensure_ascii=False)
 
-    Args:
-        filename: Aseprite file to inspect (optional; defaults to the session's active file)
-    """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
-
-    # NOTE: batch mode discards Lua `return` values — output MUST go through print().
-    script = """
-    local spr = app.activeSprite
-    if not spr then print("ERROR:No active sprite") return end
-
-    local cm = "unknown"
-    if spr.colorMode == ColorMode.RGB then cm = "rgb"
-    elseif spr.colorMode == ColorMode.INDEXED then cm = "indexed"
-    elseif spr.colorMode == ColorMode.GRAY then cm = "gray" end
-
-    local parts = {}
-    table.insert(parts, "{")
-    table.insert(parts, "\\"width\\":" .. spr.width .. ",")
-    table.insert(parts, "\\"height\\":" .. spr.height .. ",")
-    table.insert(parts, "\\"color_mode\\":\\"" .. cm .. "\\",")
-    table.insert(parts, "\\"frames\\":" .. #spr.frames .. ",")
-    table.insert(parts, "\\"durations_ms\\":[")
-    for i, frame in ipairs(spr.frames) do
-        table.insert(parts, tostring(math.floor(frame.duration * 1000 + 0.5)))
-        if i < #spr.frames then table.insert(parts, ",") end
-    end
-    table.insert(parts, "],")
-    table.insert(parts, "\\"layers\\":[")
-    -- Recurse into groups so nested layers are enumerated too; each entry
-    -- carries its immediate parent group name (null at top level).
-    local first_layer = true
-    local function walk_layers(layers, parent)
-        for _, layer in ipairs(layers) do
-            if not first_layer then table.insert(parts, ",") end
-            first_layer = false
-            local pj = "null"
-            if parent then pj = string.format("%q", parent) end
-            local entry = "{\\"name\\":" .. string.format("%q", layer.name) .. ",\\"visible\\":" .. tostring(layer.isVisible) .. ",\\"opacity\\":" .. (layer.opacity or 255) .. ",\\"is_group\\":" .. tostring(layer.isGroup) .. ",\\"parent\\":" .. pj .. "}"
-            table.insert(parts, entry)
-            if layer.isGroup then walk_layers(layer.layers, layer.name) end
-        end
-    end
-    walk_layers(spr.layers, nil)
-    table.insert(parts, "],")
-    local dirs = {[0]="forward", "reverse", "pingpong", "pingpong_reverse"}
-    table.insert(parts, "\\"tags\\":[")
-    for i, t in ipairs(spr.tags) do
-        local entry = "{\\"name\\":" .. string.format("%q", t.name) .. ",\\"from\\":" .. t.fromFrame.frameNumber .. ",\\"to\\":" .. t.toFrame.frameNumber .. ",\\"direction\\":\\"" .. (dirs[tonumber(t.aniDir)] or tostring(t.aniDir)) .. "\\"}"
-        table.insert(parts, entry)
-        if i < #spr.tags then table.insert(parts, ",") end
-    end
-    table.insert(parts, "]}")
-    print(table.concat(parts))
-    """
-
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return output
-    return f"Failed to get sprite info: {output}"
 
 @mcp.tool()
 async def duplicate_frame_range(filename: str = "", *, start_frame: int, end_frame: int, times: int = 1) -> str:
@@ -228,53 +157,37 @@ async def duplicate_frame_range(filename: str = "", *, start_frame: int, end_fra
         end_frame: Ending frame index (1-based, inclusive)
         times: Number of times to append the range (default: 1)
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
     if times < 1:
-        return "Times must be >= 1"
+        raise ToolError("Times must be >= 1")
 
     script = f"""
+    {CEL_COPIES}
     local spr = app.activeSprite
-    if not spr then print("ERROR:No active sprite") return end
-
-    local start_idx = {start_frame}
-    local end_idx = {end_frame}
-    local times = {times}
-    if start_idx < 1 or end_idx > #spr.frames or start_idx > end_idx then
-        print("ERROR:Frame range out of bounds") return
+    local first, last = {start_frame}, {end_frame}
+    if first < 1 or last > #spr.frames or first > last then print("ERROR:Frame range out of bounds") return end
+    local snapshots = {{}}
+    for fi = first, last do
+        snapshots[#snapshots + 1] = {{cels=snapshot_frame(spr, spr.frames[fi]), duration=spr.frames[fi].duration}}
     end
-    if times < 1 then print("ERROR:Times must be >= 1") return end
-
     app.transaction(function()
-        for t = 1, times do
-            for fi = start_idx, end_idx do
-                app.activeFrame = spr.frames[#spr.frames]
-                local new_frame = spr:newFrame()
-                for _, layer in ipairs(spr.layers) do
-                    if not layer.isGroup then
-                        local cel = layer:cel(spr.frames[fi])
-                        if cel then
-                            local img = cel.image:clone()
-                            spr:newCel(layer, new_frame, img, cel.position)
-                        end
-                    end
-                end
+        for repetition = 1, {times} do
+            for _, snapshot in ipairs(snapshots) do
+                local frame = spr:newFrame()
+                frame.duration = snapshot.duration
+                write_frame(spr, frame, snapshot.cels, true)
             end
         end
     end)
-
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return f"Duplicated frames {start_frame}-{end_frame} (x{times}) in {filename}"
-    return f"Failed to duplicate frame range: {output}"
+    await execute_edit_script(script, filename)
+    return f"Duplicated frames {start_frame}-{end_frame} (x{times}) in {filename}"
 
 @mcp.tool()
-async def set_cel_position(filename: str = "", *, layer_name: str, frame_index: int, x: int, y: int, create_if_missing: bool = False, source_frame_index: int | None = None) -> str:
+async def set_cel_position(filename: str='', *, layer_name: str, frame_index: int, x: int, y: int, create_if_missing: bool=False, source_frame_index: int | None=None) -> str:
     """Set a cel's position in a specific layer and frame.
 
     Args:
@@ -286,9 +199,7 @@ async def set_cel_position(filename: str = "", *, layer_name: str, frame_index: 
         create_if_missing: Create the cel if it does not exist
         source_frame_index: Optional frame to copy the cel image from
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
 
     safe_layer_name = lua_escape(layer_name)
     source_idx = "nil" if source_frame_index is None else str(source_frame_index)
@@ -298,6 +209,10 @@ async def set_cel_position(filename: str = "", *, layer_name: str, frame_index: 
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
+    local source_index = {source_idx}
+    if source_index ~= nil and (source_index < 1 or source_index > #spr.frames) then
+        print("ERROR:Source frame index out of range") return
+    end
     {FIND_LAYER}
     {LAYER_NAMES}
     local target_layer = find_layer(spr, "{safe_layer_name}")
@@ -316,9 +231,6 @@ async def set_cel_position(filename: str = "", *, layer_name: str, frame_index: 
             if source_frame == nil then
                 source_frame = idx
             end
-            if source_frame < 1 or source_frame > #spr.frames then
-                return
-            end
             local source_cel = target_layer:cel(spr.frames[source_frame])
             if source_cel then
                 local img = source_cel.image:clone()
@@ -328,18 +240,16 @@ async def set_cel_position(filename: str = "", *, layer_name: str, frame_index: 
                 cel = spr:newCel(target_layer, frame, img, Point(0, 0))
             end
         end
-        if not cel then return end
+        if not cel then print("ERROR:No cel on the selected layer/frame") return end
         cel.position = Point({x}, {y})
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return f"Cel position set to ({x}, {y}) on '{layer_name}' frame {frame_index} in {filename}"
-    return f"Failed to set cel position: {output}"
+    await execute_edit_script(script, filename)
+    return f"Cel position set to ({x}, {y}) on '{layer_name}' frame {frame_index} in {filename}"
 
 @mcp.tool()
 async def tween_cel_positions(filename: str = "", *, layer_name: str, start_frame: int, end_frame: int, start_x: int, start_y: int, end_x: int, end_y: int, create_missing_cels: bool = False, source_frame_index: int | None = None) -> str:
@@ -357,9 +267,7 @@ async def tween_cel_positions(filename: str = "", *, layer_name: str, start_fram
         create_missing_cels: Create missing cels during tween
         source_frame_index: Optional frame to copy the cel image from
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
 
     safe_layer_name = lua_escape(layer_name)
     create_flag = "true" if create_missing_cels else "false"
@@ -369,6 +277,10 @@ async def tween_cel_positions(filename: str = "", *, layer_name: str, start_fram
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
 
+    local source_index = {source_idx}
+    if source_index ~= nil and (source_index < 1 or source_index > #spr.frames) then
+        print("ERROR:Source frame index out of range") return
+    end
     {FIND_LAYER}
     {LAYER_NAMES}
     local target_layer = find_layer(spr, "{safe_layer_name}")
@@ -411,14 +323,12 @@ async def tween_cel_positions(filename: str = "", *, layer_name: str, start_fram
         end
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return f"Tweened cel positions on '{layer_name}' frames {start_frame}-{end_frame} in {filename}"
-    return f"Failed to tween cel positions: {output}"
+    await execute_edit_script(script, filename)
+    return f"Tweened cel positions on '{layer_name}' frames {start_frame}-{end_frame} in {filename}"
 
 @mcp.tool()
 async def offset_cel_positions(filename: str = "", *, layer_name: str, start_frame: int, end_frame: int, dx: int, dy: int) -> str:
@@ -432,9 +342,7 @@ async def offset_cel_positions(filename: str = "", *, layer_name: str, start_fra
         dx: X delta in pixels
         dy: Y delta in pixels
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
 
     safe_layer_name = lua_escape(layer_name)
     script = f"""
@@ -463,17 +371,15 @@ async def offset_cel_positions(filename: str = "", *, layer_name: str, start_fra
         end
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return f"Offset cel positions by ({dx}, {dy}) on '{layer_name}' frames {start_frame}-{end_frame} in {filename}"
-    return f"Failed to offset cel positions: {output}"
+    await execute_edit_script(script, filename)
+    return f"Offset cel positions by ({dx}, {dy}) on '{layer_name}' frames {start_frame}-{end_frame} in {filename}"
 
 @mcp.tool()
-async def create_cel(filename: str = "", *, layer_name: str, frame_index: int, x: int = 0, y: int = 0) -> str:
+async def create_cel(filename: str='', *, layer_name: str, frame_index: int, x: int=0, y: int=0) -> str:
     """Create an empty cel on a layer/frame.
 
     Args:
@@ -483,9 +389,7 @@ async def create_cel(filename: str = "", *, layer_name: str, frame_index: int, x
         x: X position in pixels
         y: Y position in pixels
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
 
     safe_layer_name = lua_escape(layer_name)
     script = f"""
@@ -508,21 +412,17 @@ async def create_cel(filename: str = "", *, layer_name: str, frame_index: int, x
         spr:newCel(target, frame, img, Point({x}, {y}))
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return f"Cel created on '{layer_name}' frame {frame_index} in {filename}"
-    return f"Failed to create cel: {output}"
+    await execute_edit_script(script, filename)
+    return f"Cel created on '{layer_name}' frame {frame_index} in {filename}"
 
 @mcp.tool()
-async def clear_cel(filename: str = "", *, layer_name: str, frame_index: int) -> str:
+async def clear_cel(filename: str='', *, layer_name: str, frame_index: int) -> str:
     """Delete a cel on a layer/frame."""
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
 
     safe_layer_name = lua_escape(layer_name)
     script = f"""
@@ -545,204 +445,110 @@ async def clear_cel(filename: str = "", *, layer_name: str, frame_index: int) ->
         end
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return f"Cel cleared on '{layer_name}' frame {frame_index} in {filename}"
-    return f"Failed to clear cel: {output}"
+    await execute_edit_script(script, filename)
+    return f"Cel cleared on '{layer_name}' frame {frame_index} in {filename}"
 
 @mcp.tool()
 async def copy_cel(filename: str = "", *, layer_name: str, source_frame: int, target_frame: int, replace: bool = True, create_target_frame: bool = True) -> str:
-    """Copy a cel from one frame to another.
+    """Copy a cel snapshot, optionally extending the timeline for its target.
 
     Args:
-        filename: Aseprite file to modify (optional; defaults to the session's active file)
-        layer_name: Layer name to target
-        source_frame: Frame index to copy from (1-based)
-        target_frame: Frame index to copy to (1-based)
-        replace: Overwrite the existing cel at the target frame (default True)
-        create_target_frame: Extend the sprite with new frames when target_frame is beyond the current frame count (default True)
+        filename: Source project (defaults to the active file)
+        layer_name: Explicit layer name or group path
+        source_frame: Source frame, 1-based; must contain a cel
+        target_frame: Target frame, 1-based
+        replace: Replace an existing target cel (default True)
+        create_target_frame: Extend the timeline when required (default True)
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
-
-    safe_layer_name = lua_escape(layer_name)
-    replace_flag = "true" if replace else "false"
-    create_frame_flag = "true" if create_target_frame else "false"
+    filename = prepare_filename(filename)
+    name = lua_escape(layer_name)
     script = f"""
-    local spr = app.activeSprite
-    if not spr then print("ERROR:No active sprite") return end
-
-    local src_idx = {source_frame}
-    local dst_idx = {target_frame}
-    if src_idx < 1 or src_idx > #spr.frames then print("ERROR:Source frame {source_frame} out of range (sprite has " .. #spr.frames .. " frame(s), 1-based)") return end
-    if dst_idx < 1 then print("ERROR:Target frame {target_frame} out of range (must be >= 1)") return end
-    if dst_idx > #spr.frames and not {create_frame_flag} then print("ERROR:Target frame {target_frame} out of range (sprite has " .. #spr.frames .. " frame(s), 1-based). Tip: call add_frame first or pass create_target_frame=true.") return end
-
+    {CEL_COPIES}
     {FIND_LAYER}
     {LAYER_NAMES}
-    local target = find_layer(spr, "{safe_layer_name}")
-    if not target then print("ERROR:Layer '{safe_layer_name}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first.") return end
-
-    local frames_added = math.max(0, dst_idx - #spr.frames)
+    local spr = app.activeSprite
+    local src, dst = {source_frame}, {target_frame}
+    if src < 1 or src > #spr.frames then print("ERROR:Source frame out of range") return end
+    if dst < 1 or (dst > #spr.frames and not {str(create_target_frame).lower()}) then print("ERROR:Target frame out of range. Tip: call add_frame first or enable create_target_frame.") return end
+    local layer = find_layer(spr, "{name}")
+    if not layer then print("ERROR:Layer '{name}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first.") return end
+    if layer.isGroup then print("ERROR:Select a leaf layer for cel copying") return end
+    local snapshot = snapshot_cel(layer:cel(spr.frames[src]))
+    if not snapshot then print("ERROR:No source cel on layer '{name}' at frame {source_frame}") return end
+    if src == dst then print("PROJECT_UNCHANGED") return end
+    local added = math.max(0, dst - #spr.frames)
     app.transaction(function()
-        while #spr.frames < dst_idx do spr:newFrame() end
-        local src = target:cel(spr.frames[src_idx])
-        if not src then return end
-        local dst = target:cel(spr.frames[dst_idx])
-        if dst and {replace_flag} then
-            spr:deleteCel(dst)
-            dst = nil
-        end
-        if not dst then
-            local img = src.image:clone()
-            spr:newCel(target, spr.frames[dst_idx], img, src.position)
-        end
+        while #spr.frames < dst do spr:newFrame() end
+        write_cel(spr, layer, spr.frames[dst], snapshot, {str(replace).lower()})
     end)
-
-    spr:saveAs(spr.filename)
-    print("OK|frames_added=" .. frames_added)
+    save_project(spr)
+    print("OK|frames_added=" .. added)
     """
-
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        frames_added = 0
-        for line in output.splitlines():
-            if line.startswith("OK|frames_added="):
-                try:
-                    frames_added = int(line.split("=", 1)[1])
-                except ValueError:
-                    pass
-        note = f" ({frames_added} frame(s) auto-created)" if frames_added else ""
-        return f"Cel copied on '{layer_name}' from frame {source_frame} to frame {target_frame}{note} in {filename}"
-    return f"Failed to copy cel: {output}"
+    output = await execute_edit_script(script, filename)
+    added = next((int(line.split("=", 1)[1]) for line in output.splitlines() if line.startswith("OK|frames_added=")), 0)
+    note = f" ({added} frame(s) auto-created)" if added else ""
+    return f"Cel copied on '{layer_name}' from frame {source_frame} to frame {target_frame}{note} in {filename}"
 
 @mcp.tool()
 async def copy_frame(filename: str = "", *, source_frame: int, target_frame: int | None = None, overwrite: bool = True) -> str:
-    """Copy all cels from a source frame to a target frame (or append)."""
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    """Copy all grouped and hidden cels; append when target_frame is omitted.
 
-    overwrite_flag = "true" if overwrite else "false"
-    target_idx = "nil" if target_frame is None else str(target_frame)
-
+    Existing target durations and tags are preserved. An appended frame uses
+    the source duration. overwrite=false fills only missing target cels.
+    """
+    filename = prepare_filename(filename)
+    destination = "nil" if target_frame is None else str(target_frame)
     script = f"""
+    {CEL_COPIES}
     local spr = app.activeSprite
-    if not spr then print("ERROR:No active sprite") return end
-
-    local src_idx = {source_frame}
-    if src_idx < 1 or src_idx > #spr.frames then print("ERROR:Source frame out of range") return end
-
-    local dst_idx = {target_idx}
+    local src = {source_frame}
+    local dst = {destination}
+    if src < 1 or src > #spr.frames then print("ERROR:Source frame out of range") return end
+    if dst ~= nil and (dst < 1 or dst > #spr.frames) then print("ERROR:Target frame out of range") return end
+    if src == dst then print("PROJECT_UNCHANGED") return end
+    local snapshot = snapshot_frame(spr, spr.frames[src])
     app.transaction(function()
-        local dst_frame = nil
-        if dst_idx == nil then
-            dst_frame = spr:newFrame()
+        local frame
+        if dst == nil then
+            frame = spr:newFrame()
+            frame.duration = spr.frames[src].duration
         else
-            if dst_idx < 1 or dst_idx > #spr.frames then return end
-            dst_frame = spr.frames[dst_idx]
-            if {overwrite_flag} then
-                for _, layer in ipairs(spr.layers) do
-                    if not layer.isGroup then
-                        local cel = layer:cel(dst_frame)
-                        if cel then spr:deleteCel(cel) end
-                    end
-                end
-            end
+            frame = spr.frames[dst]
         end
-
-        for _, layer in ipairs(spr.layers) do
-            if not layer.isGroup then
-                local cel = layer:cel(spr.frames[src_idx])
-                if cel then
-                    local img = cel.image:clone()
-                    spr:newCel(layer, dst_frame, img, cel.position)
-                end
-            end
-        end
+        write_frame(spr, frame, snapshot, {str(overwrite).lower()} or dst == nil)
     end)
-
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
-
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        if target_frame is None:
-            return f"Frame {source_frame} copied to new frame in {filename}"
-        return f"Frame {source_frame} copied to frame {target_frame} in {filename}"
-    return f"Failed to copy frame: {output}"
+    await execute_edit_script(script, filename)
+    return f"Frame {source_frame} copied to {target_frame or 'new frame'} in {filename}"
 
 @mcp.tool()
 async def propagate_frame_to_range(filename: str = "", *, source_frame: int, start_frame: int, end_frame: int, overwrite: bool = True) -> str:
-    """Copy all layers from a source frame to a range of frames.
-
-    Args:
-        filename: Aseprite file to modify (optional; defaults to the session's active file)
-        source_frame: Frame index to copy from (1-based)
-        start_frame: Start frame index (1-based)
-        end_frame: End frame index (1-based, inclusive)
-        overwrite: Whether to overwrite existing cels (default: True)
-    """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
-
-    overwrite_flag = "true" if overwrite else "false"
-
+    """Copy source cels throughout an inclusive frame range, preserving durations."""
+    filename = prepare_filename(filename)
     script = f"""
+    {CEL_COPIES}
     local spr = app.activeSprite
-    if not spr then print("ERROR:No active sprite") return end
-
-    local src_idx = {source_frame}
-    local start_idx = {start_frame}
-    local end_idx = {end_frame}
-    if src_idx < 1 or src_idx > #spr.frames then print("ERROR:Source frame out of range") return end
-    if start_idx < 1 or end_idx > #spr.frames or start_idx > end_idx then
-        print("ERROR:Frame range out of bounds") return
-    end
-
+    local src, first, last = {source_frame}, {start_frame}, {end_frame}
+    if src < 1 or src > #spr.frames then print("ERROR:Source frame out of range") return end
+    if first < 1 or last > #spr.frames or first > last then print("ERROR:Frame range out of bounds") return end
+    if first == src and last == src then print("PROJECT_UNCHANGED") return end
+    local snapshot = snapshot_frame(spr, spr.frames[src])
     app.transaction(function()
-        for fi = start_idx, end_idx do
-            if fi ~= src_idx then
-                local dst_frame = spr.frames[fi]
-                if {overwrite_flag} then
-                    for _, layer in ipairs(spr.layers) do
-                        if not layer.isGroup then
-                            local dst_cel = layer:cel(dst_frame)
-                            if dst_cel then spr:deleteCel(dst_cel) end
-                        end
-                    end
-                end
-                for _, layer in ipairs(spr.layers) do
-                    if not layer.isGroup then
-                        local src_cel = layer:cel(spr.frames[src_idx])
-                        if src_cel then
-                            local img = src_cel.image:clone()
-                            spr:newCel(layer, dst_frame, img, src_cel.position)
-                        end
-                    end
-                end
-            end
+        for fi = first, last do
+            if fi ~= src then write_frame(spr, spr.frames[fi], snapshot, {str(overwrite).lower()}) end
         end
     end)
-
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
-
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return (
-            f"Propagated frame {source_frame} to frames {start_frame}-{end_frame} "
-            f"in {filename}"
-        )
-    return f"Failed to propagate frame range: {output}"
+    await execute_edit_script(script, filename)
+    return f"Propagated frame {source_frame} to frames {start_frame}-{end_frame} in {filename}"
 
 @mcp.tool()
 async def set_tag(filename: str = "", *, name: str, from_frame: int, to_frame: int, direction: str = "forward") -> str:
@@ -750,9 +556,7 @@ async def set_tag(filename: str = "", *, name: str, from_frame: int, to_frame: i
 
     direction: forward | reverse | pingpong | pingpong_reverse
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
 
     ani_dirs = {
         "forward": "AniDir.FORWARD",
@@ -761,7 +565,7 @@ async def set_tag(filename: str = "", *, name: str, from_frame: int, to_frame: i
         "pingpong_reverse": "AniDir.PING_PONG_REVERSE",
     }
     if direction not in ani_dirs:
-        return f"Unsupported direction '{direction}' (forward, reverse, pingpong, pingpong_reverse)"
+        raise ToolError(f"Unsupported direction '{direction}' (forward, reverse, pingpong, pingpong_reverse)")
 
     safe_name = lua_escape(name)
     script = f"""
@@ -787,14 +591,12 @@ async def set_tag(filename: str = "", *, name: str, from_frame: int, to_frame: i
     tag.name = "{safe_name}"
     tag.aniDir = {ani_dirs[direction]}
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return f"Tag '{name}' set to frames {from_frame}-{to_frame} (direction={direction}) in {filename}"
-    return f"Failed to set tag: {output}"
+    await execute_edit_script(script, filename)
+    return f"Tag '{name}' set to frames {from_frame}-{to_frame} (direction={direction}) in {filename}"
 
 @mcp.tool()
 async def set_onion_skin(
@@ -805,13 +607,11 @@ async def set_onion_skin(
     opacity: int = 128
 ) -> str:
     """Configure onion skin settings for Aseprite."""
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
     if before < 0 or after < 0:
-        return "Before/after must be >= 0"
+        raise ToolError("Before/after must be >= 0")
     if opacity < 0 or opacity > 255:
-        return "Opacity must be between 0 and 255"
+        raise ToolError("Opacity must be between 0 and 255")
 
     return (
         "Onion skin settings are UI-only in batch mode; no changes applied "
@@ -830,80 +630,54 @@ async def propagate_cels(filename: str = "", *, layer_names: list[str], source_f
         end_frame: End frame index (1-based, inclusive)
         replace: Whether to overwrite existing cels (default: True)
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
     if not layer_names:
-        return "Layer names list cannot be empty"
+        raise ToolError("Layer names list cannot be empty")
 
-    replace_flag = "true" if replace else "false"
-    layers_lua = "{" + ",".join([f"\"{lua_escape(name)}\"" for name in layer_names]) + "}"
-
+    layers_lua = "{" + ",".join(f'"{lua_escape(name)}"' for name in layer_names) + "}"
     script = f"""
-    local spr = app.activeSprite
-    if not spr then print("ERROR:No active sprite") return end
-
-    local src_idx = {source_frame}
-    local start_idx = {start_frame}
-    local end_idx = {end_frame}
-    if src_idx < 1 or src_idx > #spr.frames then print("ERROR:Source frame out of range") return end
-    if start_idx < 1 or end_idx > #spr.frames or start_idx > end_idx then
-        print("ERROR:Frame range out of bounds") return
-    end
-
+    {CEL_COPIES}
     {FIND_LAYER}
-    local name_list = {layers_lua}
-    local targets = {{}}
-    for _, name in ipairs(name_list) do
-        local m = find_layer(spr, name)
-        if m then table.insert(targets, m) end
+    {LAYER_NAMES}
+    local spr = app.activeSprite
+    local src, first, last = {source_frame}, {start_frame}, {end_frame}
+    if src < 1 or src > #spr.frames then print("ERROR:Source frame out of range") return end
+    if first < 1 or last > #spr.frames or first > last then print("ERROR:Frame range out of bounds") return end
+    local snapshot = {{}}
+    for _, name in ipairs({layers_lua}) do
+        local layer = find_layer(spr, name)
+        if not layer then error("Layer '" .. name .. "' not found. Existing layers: [" .. layer_names(spr) .. "]") end
+        if layer.isGroup then error("Select a leaf layer for cel propagation") end
+        snapshot[#snapshot + 1] = {{layer=layer, cel=snapshot_cel(layer:cel(spr.frames[src]))}}
     end
-    if #targets == 0 then print("ERROR:No layers found") return end
-
+    if first == src and last == src then print("PROJECT_UNCHANGED") return end
     app.transaction(function()
-        for fi = start_idx, end_idx do
-            if fi ~= src_idx then
-                local dst_frame = spr.frames[fi]
-                for _, layer in ipairs(targets) do
-                    local src_cel = layer:cel(spr.frames[src_idx])
-                    if src_cel then
-                        local dst_cel = layer:cel(dst_frame)
-                        if dst_cel and {replace_flag} then
-                            spr:deleteCel(dst_cel)
-                            dst_cel = nil
-                        end
-                        if not dst_cel then
-                            local img = src_cel.image:clone()
-                            spr:newCel(layer, dst_frame, img, src_cel.position)
-                        end
-                    end
+        for fi = first, last do
+            if fi ~= src then
+                for _, entry in ipairs(snapshot) do
+                    if entry.cel then write_cel(spr, entry.layer, spr.frames[fi], entry.cel, {str(replace).lower()}) end
                 end
             end
         end
     end)
-
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return (
-            f"Propagated cels from frame {source_frame} to frames {start_frame}-{end_frame} "
-            f"for layers {', '.join(layer_names)} in {filename}"
-        )
-    return f"Failed to propagate cels: {output}"
+    await execute_edit_script(script, filename)
+    return (
+        f"Propagated cels from frame {source_frame} to frames {start_frame}-{end_frame} "
+        f"for layers {', '.join(layer_names)} in {filename}"
+    )
 
 @mcp.tool()
 async def tween_cel_positions_eased(filename: str = "", *, layer_name: str, start_frame: int, end_frame: int, start_x: int, start_y: int, end_x: int, end_y: int, easing: str = "smoothstep", create_missing_cels: bool = False, source_frame_index: int | None = None) -> str:
     """Tween cel positions with easing across a frame range."""
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
 
     easing = (easing or "smoothstep").lower().strip()
     if easing not in {"linear", "ease_in", "ease_out", "ease_in_out", "smoothstep"}:
-        return "Unsupported easing (linear, ease_in, ease_out, ease_in_out, smoothstep)"
+        raise ToolError("Unsupported easing (linear, ease_in, ease_out, ease_in_out, smoothstep)")
 
     safe_layer_name = lua_escape(layer_name)
     create_flag = "true" if create_missing_cels else "false"
@@ -969,24 +743,20 @@ async def tween_cel_positions_eased(filename: str = "", *, layer_name: str, star
         end
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return (
-            f"Tweened cel positions ({easing}) on '{layer_name}' frames {start_frame}-{end_frame} "
-            f"in {filename}"
-        )
-    return f"Failed to tween cel positions with easing: {output}"
+    await execute_edit_script(script, filename)
+    return (
+        f"Tweened cel positions ({easing}) on '{layer_name}' frames {start_frame}-{end_frame} "
+        f"in {filename}"
+    )
 
 @mcp.tool()
 async def oscillate_cel_positions(filename: str = "", *, layer_name: str, start_frame: int, end_frame: int, amplitude_x: int = 0, amplitude_y: int = 0, cycles: float = 1.0, phase_deg: float = 0.0, create_missing_cels: bool = False, source_frame_index: int | None = None) -> str:
     """Oscillate cel positions across a frame range using a sine wave."""
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
 
     safe_layer_name = lua_escape(layer_name)
     create_flag = "true" if create_missing_cels else "false"
@@ -1046,30 +816,26 @@ async def oscillate_cel_positions(filename: str = "", *, layer_name: str, start_
         end
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return (
-            f"Oscillated cel positions on '{layer_name}' frames {start_frame}-{end_frame} "
-            f"in {filename}"
-        )
-    return f"Failed to oscillate cel positions: {output}"
+    await execute_edit_script(script, filename)
+    return (
+        f"Oscillated cel positions on '{layer_name}' frames {start_frame}-{end_frame} "
+        f"in {filename}"
+    )
 
 @mcp.tool()
 async def tween_cel_opacity_eased(filename: str = "", *, layer_name: str, start_frame: int, end_frame: int, start_opacity: int, end_opacity: int, easing: str = "smoothstep", create_missing_cels: bool = False, source_frame_index: int | None = None) -> str:
     """Tween cel opacity with easing across a frame range."""
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
     if start_opacity < 0 or start_opacity > 255 or end_opacity < 0 or end_opacity > 255:
-        return "Opacity must be between 0 and 255"
+        raise ToolError("Opacity must be between 0 and 255")
 
     easing = (easing or "smoothstep").lower().strip()
     if easing not in {"linear", "ease_in", "ease_out", "ease_in_out", "smoothstep"}:
-        return "Unsupported easing (linear, ease_in, ease_out, ease_in_out, smoothstep)"
+        raise ToolError("Unsupported easing (linear, ease_in, ease_out, ease_in_out, smoothstep)")
 
     safe_layer_name = lua_escape(layer_name)
     create_flag = "true" if create_missing_cels else "false"
@@ -1136,34 +902,30 @@ async def tween_cel_opacity_eased(filename: str = "", *, layer_name: str, start_
         end
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return (
-            f"Tweened cel opacity ({easing}) on '{layer_name}' frames {start_frame}-{end_frame} "
-            f"in {filename}"
-        )
-    return f"Failed to tween cel opacity with easing: {output}"
+    await execute_edit_script(script, filename)
+    return (
+        f"Tweened cel opacity ({easing}) on '{layer_name}' frames {start_frame}-{end_frame} "
+        f"in {filename}"
+    )
 
 @mcp.tool()
 async def tween_cel_scale_eased(filename: str = "", *, layer_name: str, start_frame: int, end_frame: int, start_scale: float, end_scale: float, easing: str = "smoothstep", anchor: str = "center", replace: bool = True, create_missing_cels: bool = True, source_frame_index: int | None = None) -> str:
     """Tween cel scale with easing across a frame range."""
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
     if start_scale <= 0 or end_scale <= 0:
-        return "Scale must be > 0"
+        raise ToolError("Scale must be > 0")
 
     easing = (easing or "smoothstep").lower().strip()
     if easing not in {"linear", "ease_in", "ease_out", "ease_in_out", "smoothstep"}:
-        return "Unsupported easing (linear, ease_in, ease_out, ease_in_out, smoothstep)"
+        raise ToolError("Unsupported easing (linear, ease_in, ease_out, ease_in_out, smoothstep)")
 
     anchor = (anchor or "center").lower().strip()
     if anchor not in {"center", "topleft"}:
-        return "Unsupported anchor (center, topleft)"
+        raise ToolError("Unsupported anchor (center, topleft)")
 
     safe_layer_name = lua_escape(layer_name)
     create_flag = "true" if create_missing_cels else "false"
@@ -1250,17 +1012,15 @@ async def tween_cel_scale_eased(filename: str = "", *, layer_name: str, start_fr
         end
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return (
-            f"Tweened cel scale ({easing}) on '{layer_name}' frames {start_frame}-{end_frame} "
-            f"in {filename}"
-        )
-    return f"Failed to tween cel scale with easing: {output}"
+    await execute_edit_script(script, filename)
+    return (
+        f"Tweened cel scale ({easing}) on '{layer_name}' frames {start_frame}-{end_frame} "
+        f"in {filename}"
+    )
 
 
 @mcp.tool()
@@ -1271,9 +1031,7 @@ async def delete_frame(filename: str = "", *, frame_index: int) -> str:
         filename: Aseprite file to modify (optional; defaults to the session's active file)
         frame_index: Frame index starting at 1
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
 
     script = f"""
     local spr = app.activeSprite
@@ -1287,14 +1045,12 @@ async def delete_frame(filename: str = "", *, frame_index: int) -> str:
         spr:deleteFrame(spr.frames[idx])
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return f"Frame {frame_index} deleted from {filename}"
-    return f"Failed to delete frame: {output}"
+    await execute_edit_script(script, filename)
+    return f"Frame {frame_index} deleted from {filename}"
 
 
 @mcp.tool()
@@ -1305,9 +1061,7 @@ async def delete_tag(filename: str = "", *, name: str) -> str:
         filename: Aseprite file to modify (optional; defaults to the session's active file)
         name: Tag name to delete
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
 
     safe_name = lua_escape(name)
     script = f"""
@@ -1324,18 +1078,16 @@ async def delete_tag(filename: str = "", *, name: str) -> str:
         spr:deleteTag(target)
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return f"Tag '{name}' deleted from {filename}"
-    return f"Failed to delete tag: {output}"
+    await execute_edit_script(script, filename)
+    return f"Tag '{name}' deleted from {filename}"
 
 
 @mcp.tool()
-async def set_cel_opacity(filename: str = "", *, layer_name: str, frame_index: int, opacity: int) -> str:
+async def set_cel_opacity(filename: str='', *, layer_name: str, frame_index: int, opacity: int) -> str:
     """Set the opacity of a single cel (0-255).
 
     Args:
@@ -1344,11 +1096,9 @@ async def set_cel_opacity(filename: str = "", *, layer_name: str, frame_index: i
         frame_index: Frame index starting at 1
         opacity: Opacity 0 (transparent) to 255 (opaque)
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
     if not (0 <= opacity <= 255):
-        return "Opacity must be between 0 and 255"
+        raise ToolError("Opacity must be between 0 and 255")
 
     safe_layer = lua_escape(layer_name)
     script = f"""
@@ -1370,11 +1120,9 @@ async def set_cel_opacity(filename: str = "", *, layer_name: str, frame_index: i
         cel.opacity = {opacity}
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
-    success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
-    if success:
-        return f"Cel opacity set to {opacity} on '{layer_name}' frame {frame_index} in {filename}"
-    return f"Failed to set cel opacity: {output}"
+    await execute_edit_script(script, filename)
+    return f"Cel opacity set to {opacity} on '{layer_name}' frame {frame_index} in {filename}"

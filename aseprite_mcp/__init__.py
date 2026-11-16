@@ -1,6 +1,8 @@
 """Aseprite MCP - Model Context Protocol implementation for Aseprite."""
 
 import os
+import asyncio
+from contextlib import asynccontextmanager
 
 from mcp.server import MCPServer
 
@@ -30,7 +32,27 @@ def _load_skill_instructions() -> str:
         return _FALLBACK_INSTRUCTIONS
 
 
-mcp = MCPServer("aseprite", instructions=_load_skill_instructions())
+@asynccontextmanager
+async def _lifespan(server):
+    from .core.state import cleanup_review_directory
+    try:
+        yield None
+    finally:
+        cleanup_review_directory()
+
+
+_tool_lock = asyncio.Lock()
+
+
+async def _serialize_tools(context, call_next):
+    if context.method == "tools/call":
+        async with _tool_lock:
+            return await call_next(context)
+    return await call_next(context)
+
+
+mcp = MCPServer("aseprite", instructions=_load_skill_instructions(),
+                lifespan=_lifespan, middleware=[_serialize_tools])
 
 __version__ = "0.1.0"
 __author__ = "Divyansh Singh"

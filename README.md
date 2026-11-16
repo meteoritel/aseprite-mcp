@@ -2,7 +2,7 @@
 
 A Python MCP server that gives AI assistants full control over [Aseprite](https://www.aseprite.org/) for creating pixel art and animated sprites.
 
-**118 tools across 21 modules** — canvas, drawing, sprite maps, layers, animation, palettes, effects, slices, tilemaps, exports, native filters, visual-feedback/analysis tools, and a raw Lua escape hatch. The tool set is designed so an LLM has everything it needs to produce *good* pixel art, not just primitives: compact character-grid sprite maps, shading ramps with hue shifting, ordered dithering, outlines, retro palette presets with quantization, onion-skin renders, frame diffing for animation work, and composite reads that match what the player actually sees.
+Tools cover canvas, drawing, sprite maps, layers, animation, palettes, effects, slices, tilemaps, exports, native filters, visual-feedback/analysis tools, and a raw Lua escape hatch. The tool set is designed so an LLM has everything it needs to produce *good* pixel art, not just primitives: compact character-grid sprite maps, shading ramps with hue shifting, ordered dithering, outlines, retro palette presets with quantization, onion-skin renders, frame diffing for animation work, and composite reads that match what the player actually sees.
 
 ## Example: a swordsman, drawn and animated by Claude
 
@@ -27,27 +27,27 @@ Both were created end-to-end by Claude Fable 5 through this server's MCP tools �
 
 ## Tool Categories
 
-| Category | Tools | Description |
-|----------|------:|-------------|
-| [Canvas](#canvas) | 6 | Create sprites, manage layers/frames, set the active state |
-| [Drawing](#drawing) | 14 | Pixels, lines, rectangles, circles, ellipses, polygons, paths, fills, gradients |
-| [Sprite Maps](#sprite-maps) | 2 | Author or read back a whole region as a compact character grid |
-| [Text](#text) | 3 | Draw and measure text with bitmap sprite-sheet or TrueType fonts |
-| [Layers](#layers) | 7 | Delete, rename, duplicate, reorder, blend modes, merge, flatten |
-| [Selection & Regions](#selection--regions) | 4 | Move, copy, and erase rectangular regions or colors |
-| [Effects](#effects) | 5 | Outlines, color replacement, HSL adjustment, ordered dithering |
-| [Animation](#animation) | 24 | Frames, cels, tags, tweening with easing, propagation |
-| [Palette](#palette) | 8 | Get/set palettes, retro presets, color ramps, quantization, color modes |
-| [Transform](#transform) | 4 | Flip, rotate, resize, crop |
-| [Slices](#slices) | 5 | Named regions, 9-patch centers, pivot points |
-| [Tilemap](#tilemap) | 5 | Tilemap layers, tileset editing, tile placement |
-| [Export & Import](#export--import) | 7 | PNG, GIF, sprite sheets, per-layer/per-tag export, image import |
-| [Inspection](#inspection) | 3 | Read pixels and sprite metadata |
-| [Analysis & Visual Feedback](#analysis--visual-feedback) | 3 | Onion-skin renders, frame diffing, color statistics |
-| [Quality](#quality) | 4 | Validate and sanitize animation consistency |
-| [Scene](#scene) | 1 | Copy layers between sprite files |
-| [Preview & Guide](#preview--guide) | 3 | Local HTTP preview server, workflow guide |
-| [Scripting](#scripting) | 1 | Raw Lua escape hatch for anything not covered above |
+| Category | Description |
+|----------|-------------|
+| [Canvas](#canvas) | Create native projects and manage layers/frames |
+| [Drawing](#drawing) | Pixels, lines, rectangles, circles, ellipses, polygons, paths, fills, gradients |
+| [Sprite Maps](#sprite-maps) | Author or read back a whole region as a compact character grid |
+| [Text](#text) | Draw and measure text with bitmap sprite-sheet or TrueType fonts |
+| [Layers](#layers) | Delete, rename, duplicate, reorder, blend modes, merge, flatten |
+| [Selection & Regions](#selection--regions) | Move, copy, and erase rectangular regions or colors |
+| [Effects](#effects) | Outlines, color replacement, HSL adjustment, ordered dithering |
+| [Animation](#animation) | Frames, cels, tags, tweening with easing, propagation |
+| [Palette](#palette) | Get/set palettes, retro presets, color ramps, quantization, color modes |
+| [Transform](#transform) | Flip, rotate, resize, crop |
+| [Slices](#slices) | Named regions, 9-patch centers, pivot points |
+| [Tilemap](#tilemap) | Tilemap layers, tileset editing, tile placement |
+| [Export & Import](#export--import) | PNG, GIF, sprite sheets, per-layer/per-tag export, image import |
+| [Inspection](#inspection) | Read pixels and sprite metadata |
+| [Analysis & Visual Feedback](#analysis--visual-feedback) | Onion-skin renders, frame diffing, color statistics |
+| [Quality](#quality) | Validate and sanitize animation consistency |
+| [Scene](#scene) | Copy layers between sprite files |
+| [Preview & Guide](#preview--guide) | Local HTTP preview server, workflow guide |
+| [Scripting](#scripting) | Raw Lua escape hatch for anything not covered above |
 
 ### Canvas
 
@@ -57,25 +57,22 @@ Both were created end-to-end by Claude Fable 5 through this server's MCP tools �
 | `add_layer` | Add a new layer, optionally inside a named group |
 | `add_group` | Add a new (optionally nested) group layer |
 | `add_frame` | Append a new frame |
-| `set_frame` | Set the active frame |
 | `set_frame_duration` | Set one frame's duration in ms |
-| `set_layer` | Set the active layer (optionally creating it) |
 
 ### Drawing
 
-All `_at` variants target a specific layer/frame and can create the cel on demand. Coordinates are sprite-global.
+Every cel edit requires explicit `layer_name` and `frame_index`; drawing tools target that layer/frame and can create the cel on demand. Coordinates are sprite-global.
 
 | Tool | Description |
 |------|-------------|
-| `draw_pixels` | Plot individual pixels with per-pixel colors |
 | `draw_pixels_at` | Plot pixels on a specific layer/frame |
-| `draw_line` / `draw_line_at` | Lines with thickness |
-| `draw_rectangle` / `draw_rectangle_at` | Outlined or filled rectangles |
-| `draw_circle` / `draw_circle_at` | Outlined or filled circles |
+| `draw_line_at` | Lines with thickness |
+| `draw_rectangle_at` | Outlined or filled rectangles |
+| `draw_circle_at` | Outlined or filled circles |
 | `draw_ellipse_at` | Outlined or filled ellipses with separate x/y radii |
 | `draw_polygon` | Outlined or filled polygons from a point list |
 | `draw_path` | Polyline through a point list with thickness |
-| `fill_area` / `fill_area_at` | Paint-bucket flood fill |
+| `fill_area_at` | Paint-bucket flood fill |
 | `apply_gradient_rect` | Smooth linear gradient fill in a rectangle |
 
 ### Sprite Maps
@@ -93,9 +90,9 @@ draw_sprite_map(
 )
 ```
 
-`.` (or whatever `transparent` is set to) means "no pixel here" and is skipped, so existing art shows through; pass `erase_transparent=true` to clear those cells instead. `mirror_x` / `mirror_y` additionally draw each cell at its reflection, so a symmetric sprite is authored once. Like the other `_at` tools it targets a layer and frame, creating both on demand.
+`.` (or whatever `transparent` is set to) means "no pixel here" and is skipped, so existing art shows through; pass `erase_transparent=true` to clear those cells instead. `mirror_x` / `mirror_y` additionally draw each cell at its reflection, so a symmetric sprite is authored once. It creates the target layer and cel on demand; frames must already exist.
 
-`get_sprite_map` is the inverse: it reads a rectangle back as the same `rows` / `palette` / `transparent` triple, so the result can be edited and passed straight back in. Against `get_pixels_rect`'s per-pixel JSON a 16×16 region goes from ~256 objects to 16 strings — and unlike judging an exported PNG by eye, the hex values are exact. Feed a previous result's `palette` back in to keep characters stable between reads, which makes two maps directly comparable.
+`get_sprite_map` defaults to exact RGB cel reading (`max_colors=0`, `alpha_threshold=1`) and reports `lossy` when filtering or quantization changes pixels. It is the inverse: it reads a rectangle back as the same `rows` / `palette` / `transparent` triple, so the result can be edited and passed straight back in. Against `get_pixels_rect`'s per-pixel JSON a 16×16 region goes from ~256 objects to 16 strings — and unlike judging an exported PNG by eye, the hex values are exact. Feed a previous result's `palette` back in to keep characters stable between reads, which makes two maps directly comparable.
 
 | Tool | Description |
 |------|-------------|
@@ -158,7 +155,7 @@ Each sheet carries its own `ascent`, so sheets with different cell sizes still s
 | `rename_layer` | Rename a layer |
 | `duplicate_layer` | Duplicate a layer with all cels, opacity, and blend mode, optionally into a group |
 | `reorder_layer` | Move a layer to a position in the stack |
-| `set_layer_blend_mode` | Set blend mode (multiply, screen, overlay, ... 19 modes) |
+| `set_layer_blend_mode` | Set blend mode (multiply, screen, overlay, ... supported modes) |
 | `merge_layer_down` | Merge a layer into the one below it |
 | `flatten_sprite` | Flatten all layers into one |
 
@@ -253,6 +250,7 @@ The pixel-art toolbox: clean outlines, palette-respecting blends, and shading va
 
 | Tool | Description |
 |------|-------------|
+| `export_minecraft_texture` | Java Edition original-size PNG and mcmeta, plus a session-temporary 8× nearest-neighbor review PNG |
 | `export_sprite` | Export to PNG, GIF, JPG, ... |
 | `export_frame` | Export one frame as PNG with integer upscaling — the core visual-feedback loop: draw, export at 8×, look, iterate |
 | `export_spritesheet` | Sprite sheet (horizontal/vertical/rows/columns/packed) with optional JSON metadata and per-tag filtering |
@@ -306,6 +304,14 @@ Batch-mode equivalents of what a human artist gets from the Aseprite UI.
 | Tool | Description |
 |------|-------------|
 | `run_lua_script` | Execute arbitrary Aseprite Lua ([API docs](https://www.aseprite.org/api/)) in batch mode. The escape hatch when no dedicated tool fits: one script can batch many operations into a single Aseprite launch. Remember to `spr:saveAs(spr.filename)` and `print()` your results. ⚠️ Runs unrestricted code on the host — only pass scripts you trust. |
+
+## Minecraft Java Edition delivery
+
+Create and retain a `.aseprite` or `.ase` source project. `create_canvas` adds `.aseprite` when no extension is supplied and requires `overwrite=true` to replace an existing project. Every cel edit explicitly names a layer and 1-based frame.
+
+`export_minecraft_texture(output_filename="D:/art/texture.png")` delivers original-size PNG and `.png.mcmeta`. Animation frames form a vertical strip without padding; tag direction and per-frame timing become local playback indices and game ticks. Durations must be positive multiples of 50 ms. Choose an optional `frame_index` or `tag_name`, or export the full timeline.
+
+The returned JSON also names an 8× nearest-neighbor `preview_png`. Review it before the stdio session ends; session shutdown deletes it. The game files and native source remain on disk. Resource-pack manifests depend on the selected game version.
 
 ## Workspace & Filenames
 

@@ -4,16 +4,19 @@ Aseprite exposes no text API to Lua, so glyphs are rasterised here and the
 result is blitted into the sprite as an image.
 """
 
+from mcp.server.mcpserver.exceptions import ToolError
+from ..core.editing import execute_edit_script
+
 import os
 import tempfile
 from typing import Optional
 
 from PIL import Image
 
-from ..core.commands import AsepriteCommand, lua_escape
+from ..core.commands import lua_escape
 from ..core.state import prepare_filename
 from ..core.colors import parse_hex_color
-from ..core.lua import FIND_LAYER, LAYER_NAMES, NORMALIZE_CEL
+from ..core.lua import EDIT_TARGET, NORMALIZE_CEL
 from ..core import fonts as fontlib
 from .. import mcp
 
@@ -61,7 +64,7 @@ async def list_text_fonts() -> str:
     try:
         found = fontlib.available_fonts()
     except Exception as exc:                                # pragma: no cover
-        return f"ERROR: {exc}"
+        raise ToolError(f"ERROR: {exc}")
     if not found:
         return "No fonts found. Drop a .ttf into ~/.aseprite-mcp/fonts/."
 
@@ -109,7 +112,7 @@ async def measure_text(
         f = fontlib.load_font(font)
         _, m = fontlib.shape(text, f, size, letter_spacing, bold, antialias)
     except Exception as exc:
-        return f"ERROR: {exc}"
+        raise ToolError(f"ERROR: {exc}")
     return (
         f"width={m['width']} height={m['height']} advance_width={m['advance_width']} "
         f"above_baseline={-m['top']} below_baseline={m['bottom'] + 1} "
@@ -118,7 +121,7 @@ async def measure_text(
 
 
 @mcp.tool()
-async def draw_text(filename: str = "", *, text: str, x: int, y: int, font: str, size: int = 1, color: str = "#FFFFFF", layer_name: Optional[str] = None, frame_index: int = 1, anchor: str = "topleft", letter_spacing: int = 0, bold: int = 0, outline_color: Optional[str] = None, outline_width: int = 1, outline_diagonal: bool = True, shadow_color: Optional[str] = None, shadow_dx: int = 1, shadow_dy: int = 1, antialias: bool = False, create_if_missing: bool = True) -> str:
+async def draw_text(filename: str='', *, text: str, x: int, y: int, font: str, size: int=1, color: str='#FFFFFF', layer_name: str, frame_index: int, anchor: str='topleft', letter_spacing: int=0, bold: int=0, outline_color: Optional[str]=None, outline_width: int=1, outline_diagonal: bool=True, shadow_color: Optional[str]=None, shadow_dx: int=1, shadow_dy: int=1, antialias: bool=False, create_if_missing: bool=True) -> str:
     """Draw text onto a sprite.
 
     Glyphs are rasterised outside Aseprite and composited in, because the
@@ -134,8 +137,8 @@ async def draw_text(filename: str = "", *, text: str, x: int, y: int, font: str,
         size: Pixel size for TrueType fonts; integer scale factor for bitmap
             fonts (default 1)
         color: Text colour, #RRGGBB or #RRGGBBAA (default white)
-        layer_name: Layer to draw on; the active/first layer if omitted
-        frame_index: Frame index starting at 1 (default 1)
+        layer_name: Explicit layer name or group path
+        frame_index: Explicit frame index starting at 1
         anchor: Which point of the text (x, y) refers to - one of topleft,
             top, topright, left, center, right, bottomleft, bottom,
             bottomright, baselineleft, baseline, baselineright
@@ -152,31 +155,29 @@ async def draw_text(filename: str = "", *, text: str, x: int, y: int, font: str,
         antialias: Keep greyscale edges instead of hard pixels (default False)
         create_if_missing: Create the layer/cel if absent (default True)
     """
-    filename, err = prepare_filename(filename)
-    if err:
-        return err
+    filename = prepare_filename(filename)
     if anchor not in _ANCHORS:
-        return f"Invalid anchor '{anchor}'. Expected one of: {', '.join(sorted(_ANCHORS))}"
+        raise ToolError(f"Invalid anchor '{anchor}'. Expected one of: {', '.join(sorted(_ANCHORS))}")
 
     fill = parse_hex_color(color)
     if fill is None:
-        return f"Invalid color value: {color}"
+        raise ToolError(f"Invalid color value: {color}")
     outline_rgba = None
     if outline_color:
         outline_rgba = parse_hex_color(outline_color)
         if outline_rgba is None:
-            return f"Invalid outline_color value: {outline_color}"
+            raise ToolError(f"Invalid outline_color value: {outline_color}")
     shadow_rgba = None
     if shadow_color:
         shadow_rgba = parse_hex_color(shadow_color)
         if shadow_rgba is None:
-            return f"Invalid shadow_color value: {shadow_color}"
+            raise ToolError(f"Invalid shadow_color value: {shadow_color}")
 
     try:
         f = fontlib.load_font(font)
         ink, metrics = fontlib.shape(text, f, size, letter_spacing, bold, antialias)
     except Exception as exc:
-        return f"ERROR: {exc}"
+        raise ToolError(f"ERROR: {exc}")
     if not ink:
         return "OK: nothing to draw (text has no visible glyphs)"
 
@@ -222,25 +223,8 @@ async def draw_text(filename: str = "", *, text: str, x: int, y: int, font: str,
     blit_x = origin_x + min_x
     blit_y = origin_y + min_y
     safe_png = lua_escape(os.path.abspath(tmp.name).replace("\\", "/"))
-    layer_lookup = (
-        f'local target = find_layer(spr, "{lua_escape(layer_name)}")'
-        if layer_name else
-        "local target = app.activeLayer or spr.layers[1]"
-    )
-    create_layer = (
-        f'''
-        if not target then
-            if not {str(create_if_missing).lower()} then print("ERROR:Layer '{lua_escape(layer_name)}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: pass create_if_missing=true (the default) or call add_layer first.") return end
-            target = spr:newLayer()
-            target.name = "{lua_escape(layer_name)}"
-        end''' if layer_name else
-        '''
-        if not target then print("ERROR:No layer to draw on") return end'''
-    )
-
     script = f"""
-    {FIND_LAYER}
-    {LAYER_NAMES}
+    {EDIT_TARGET}
     {NORMALIZE_CEL}
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
@@ -251,26 +235,24 @@ async def draw_text(filename: str = "", *, text: str, x: int, y: int, font: str,
     local stamp = Image{{ fromFile = "{safe_png}" }}
     if not stamp then print("ERROR:Could not load rendered text") return end
 
-    {layer_lookup}
+    local target = require_layer(spr, "{lua_escape(layer_name)}", {str(create_if_missing).lower()})
     app.transaction(function()
-        {create_layer}
-        local cel = normalize_cel(spr, target, spr.frames[idx], true)
+        require_cel(spr, target, idx, {str(create_if_missing).lower()})
+        local cel = normalize_cel(spr, target, spr.frames[idx], false)
         cel.image:drawImage(stamp, Point({blit_x}, {blit_y}), 255, BlendMode.NORMAL)
     end)
 
-    spr:saveAs(spr.filename)
+    save_project(spr)
     print("OK")
     """
 
     try:
-        success, output = AsepriteCommand.execute_lua_script_checked(script, filename)
+        await execute_edit_script(script, filename)
     finally:
         try:
             os.unlink(tmp.name)
         except OSError:
             pass
 
-    if not success:
-        return f"Error drawing text: {output}"
     return (f"Drew '{text}' at ({blit_x}, {blit_y}), "
             f"text box {metrics['width']}x{metrics['height']}, stamp {w}x{h}")

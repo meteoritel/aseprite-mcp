@@ -29,7 +29,7 @@
 | `get_composite_pixel` | 可见合成结果的一个像素 | **是** | 是 |
 | `get_composite_rect` | 可见合成结果的一块矩形 | **是** | 是 |
 
-docstring 对单 cel 族的描述很直白（[`pixel_read.py:13-15`](../aseprite_mcp/tools/pixel_read.py#L13)）：
+docstring 对单 cel 族的描述很直白（[`pixel_read.py:13-15`](../aseprite_mcp/tools/pixel_read.py)）：
 
 > This is a single-cel read: it ignores layer visibility and everything drawn above or below. For "what the player sees", use `get_composite_pixel` instead.
 
@@ -41,7 +41,7 @@ docstring 对单 cel 族的描述很直白（[`pixel_read.py:13-15`](../aseprite
 
 ### 坐标与越界
 
-对外一律 **sprite 全局坐标**，内部减去 cel 偏移转成 cel-local（[`pixel_read.py:53-55`](../aseprite_mcp/tools/pixel_read.py#L53)）：
+对外一律 **sprite 全局坐标**，内部减去 cel 偏移转成 cel-local（[`pixel_read.py:53-55`](../aseprite_mcp/tools/pixel_read.py)）：
 
 ```lua
 local img = cel.image
@@ -70,33 +70,15 @@ end
 
 单点返回文本而矩形返回 JSON 是历史不一致，写调用方代码时要注意。
 
-### 错误处理方式不同
+### 显式目标与错误
 
-`pixel_read.py` 用的是 **`execute_lua_script`（不带 `_checked`）**，自己扫输出（[`pixel_read.py:67-79`](../aseprite_mcp/tools/pixel_read.py#L67)）：
+单 cel 读取要求明确 `layer_name` 和 `frame_index`，直接查找对应 cel。`execute_lua_script` 异步返回 stdout，读取工具将行首 `ERROR:` 转为 `ToolError` 并解析 `PIXEL:`。缺少预期像素记录时失败；矩形结果须覆盖完整请求区域。
 
-```python
-success, output = AsepriteCommand.execute_lua_script(script, filename)
-if not success:
-    return f"Failed to read pixel: {output}"
-
-for line in output.splitlines():
-    if line.startswith("ERROR:"):
-        return f"Failed to read pixel: {line[6:]}"
-    if line.startswith("PIXEL:"):
-        ...
-```
-
-因为要在同一次遍历里既找 `ERROR:` 又找 `PIXEL:`，用 `_checked` 会丢掉数据行。这是 `_checked` 之外的第二套模式，见 [01 §2](01-lua-bridge.md#二asepritecommand-的三个方法)。
-
-### 无 `layer_name` 时的行为
-
-单 cel 族不给 `layer_name` 时用 `app.activeCel`（[`pixel_read.py:47-49`](../aseprite_mcp/tools/pixel_read.py#L47)），也就是**依赖会话里 Aseprite 的当前活跃图层/帧** —— 而每次调用都是一个新进程，`app.activeCel` 由打开文件时的默认状态决定。所以省略 `layer_name` 基本等于"文件里当前选中的那个图层"，语义不稳定。**总是显式传 `layer_name`。**
-
----
+合成工具按选定帧读取可见图层；调用方可用 `get_sprite_map(composite=true)` 获取紧凑审阅网格。精确 RGBA 回灌使用单 cel RGB 网格及其 `lossy` 标志，见 [03](03-painting.md)。
 
 ## 二、`_COMPOSE_FRAME`：为什么不能直接用 `flatten()`
 
-这是整个项目里最重要的一段基础设施，位于 [`analysis.py:17-63`](../aseprite_mcp/tools/analysis.py#L17)，并被 `pixel_read` 复用。
+这是整个项目里最重要的一段基础设施，位于 [`analysis.py:17-63`](../aseprite_mcp/tools/analysis.py)，并被 `pixel_read` 复用。
 
 ### 问题
 
@@ -104,7 +86,7 @@ for line in output.splitlines():
 
 ### 为什么不是自己实现渲染器
 
-模块注释把权衡写清楚了（[`analysis.py:11-16`](../aseprite_mcp/tools/analysis.py#L11)）：
+模块注释把权衡写清楚了（[`analysis.py:11-16`](../aseprite_mcp/tools/analysis.py)）：
 
 > Rather than re-implementing the renderer — blend modes, group opacity and tilemap rasterisation are all easy to get subtly wrong — drop every invisible layer from a throwaway clone and only then flatten. The merge stays Aseprite's own code, so the result agrees with `export_frame` pixel for pixel.
 
@@ -172,7 +154,7 @@ end
 
 ### 一致性保证
 
-**结果与 `export_frame` 写出的 PNG 逐像素一致**，因为合并这一步是 Aseprite 自己的代码。这个不变量被测试直接锁定：[`tests/test_visibility.py:96-105`](../tests/test_visibility.py#L96)。
+**结果与 `export_frame` 写出的 PNG 逐像素一致**，因为合并这一步是 Aseprite 自己的代码。这个不变量被测试直接锁定：[`tests/test_visibility.py:96-105`](../tests/test_visibility.py)。
 
 写新的"合成读取"类工具时**必须**复用 `_COMPOSE_FRAME`，不要自己调 `spr:flatten()`。
 
@@ -186,11 +168,11 @@ end
 | `compare_frames` | JSON（内存内） | `frame_a`、`frame_b` |
 | `get_color_stats` | JSON（内存内） | `frame_index`、`top` |
 
-只有 `render_onion_skin` 写文件，另外两个纯计算。`render_onion_skin` 的输出路径同样遵守[输出路径铁律](02-paths-errors-lifecycle.md#四输出路径铁律)（`must_exist=False, anchor=False`，[`analysis.py:90`](../aseprite_mcp/tools/analysis.py#L90)）。
+只有 `render_onion_skin` 写文件，另外两个纯计算。`render_onion_skin` 的输出路径同样遵守[输出路径铁律](02-paths-errors-lifecycle.md)（`must_exist=False, anchor=False`，[`analysis.py:90`](../aseprite_mcp/tools/analysis.py)）。
 
 ### `render_onion_skin`：批量模式下的"洋葱皮"
 
-它**不是**编辑器里的辅助显示，而是一张可以看的图片 —— 这是 [05 §6](05-animation.md#六onion-skin两个不同含义) 里 `set_onion_skin` 为 no-op 之后的替代方案。
+它**不是**编辑器里的辅助显示，而是一张可以看的图片 —— 这是 [05 §6](05-animation.md) 里 `set_onion_skin` 为 no-op 之后的替代方案。
 
 要点：
 
@@ -209,7 +191,7 @@ end
 
 ### `compare_frames`：帧差异
 
-核心判定（[`analysis.py:203-217`](../aseprite_mcp/tools/analysis.py#L203)）：
+核心判定（[`analysis.py:203-217`](../aseprite_mcp/tools/analysis.py)）：
 
 ```lua
 local aa = app.pixelColor.rgbaA(va)
@@ -224,7 +206,7 @@ end
 
 **两个都完全透明时不算变化。** 这是必要的特例：透明像素的 RGB 分量在 Aseprite 里可能是任意值，逐值比较会把"两处都空着"报成差异。
 
-`min_x/min_y` 初值是 `math.huge`，而没有差异时 `math.huge` 无法用 `%d` 格式化，所以显式重置（[`analysis.py:221-224`](../aseprite_mcp/tools/analysis.py#L221)）：
+`min_x/min_y` 初值是 `math.huge`，而没有差异时 `math.huge` 无法用 `%d` 格式化，所以显式重置（[`analysis.py:221-224`](../aseprite_mcp/tools/analysis.py)）：
 
 ```lua
 if changed == 0 then
@@ -233,7 +215,7 @@ if changed == 0 then
 end
 ```
 
-Python 侧解析 `DIFF:` 行，`percent_changed` 保留两位小数，**`changed_bounds` 只在真的有差异时出现**（[`analysis.py:245-251`](../aseprite_mcp/tools/analysis.py#L245)）—— 所以调用方要用 `"changed_bounds" in result` 判断，不能假定字段恒在。
+Python 侧解析 `DIFF:` 行，`percent_changed` 保留两位小数，**`changed_bounds` 只在真的有差异时出现**（[`analysis.py:245-251`](../aseprite_mcp/tools/analysis.py)）—— 所以调用方要用 `"changed_bounds" in result` 判断，不能假定字段恒在。
 
 输出形状：
 
@@ -248,7 +230,7 @@ Python 侧解析 `DIFF:` 行，`percent_changed` 保留两位小数，**`changed
 
 ### `get_color_stats`：配色纪律检查
 
-合成可见图层后统计**不透明**像素的颜色直方图（[`analysis.py:292-304`](../aseprite_mcp/tools/analysis.py#L292)），三段协议 `COLOR:` / `OPAQUE:` / `UNIQUE:`，Python 侧按 count 降序排后返回：
+合成可见图层后统计**不透明**像素的颜色直方图（[`analysis.py:292-304`](../aseprite_mcp/tools/analysis.py)），三段协议 `COLOR:` / `OPAQUE:` / `UNIQUE:`，Python 侧按 count 降序排后返回：
 
 ```json
 {
@@ -265,7 +247,7 @@ Python 侧解析 `DIFF:` 行，`percent_changed` 保留两位小数，**`changed
 
 ## 四、tilemap 图层为什么不能逐像素读取
 
-`pixel_read` 的两个单 cel 族工具会**显式拒绝** tilemap 图层（[`pixel_read.py:43`](../aseprite_mcp/tools/pixel_read.py#L43)）：
+`pixel_read` 的两个单 cel 族工具会**显式拒绝** tilemap 图层（[`pixel_read.py:43`](../aseprite_mcp/tools/pixel_read.py)）：
 
 ```lua
 if target.isTilemap then print("ERROR:Layer '{safe_layer}' is a tilemap layer: its cel stores tile indexes, not pixels, so a per-pixel read would return an index in the red channel instead of a colour. Existing layers: [" .. layer_names(spr) .. "]. Tip: use get_tile_at for the tile index at a grid cell, or get_composite_pixel / get_composite_rect for the rendered colour.") return end
@@ -308,7 +290,7 @@ if target.isTilemap then print("ERROR:Layer '{safe_layer}' is a tilemap layer: i
 | `layer_frame_ranges` | `"layer:起-止[,起-止...]"` 的列表 | `["body:1-8,17-24", "clouds:1-12"]` |
 | `overlap_pairs` | `"A,B"` 或 `"A:B"` 的列表 | `["body,armor", "glow:effects"]` |
 
-`_parse_layer_frame_ranges`（[`quality.py:7-36`](../aseprite_mcp/tools/quality.py#L7)）跳过没有 `:` 的条目、空的层名、无法解析成整数的区间、以及 `start <= 0` 或 `end < start` 的区间。`_parse_overlap_pairs`（[`quality.py:38-54`](../aseprite_mcp/tools/quality.py#L38)）同理。
+`_parse_layer_frame_ranges`（[`quality.py:7-36`](../aseprite_mcp/tools/quality.py)）跳过没有 `:` 的条目、空的层名、无法解析成整数的区间、以及 `start <= 0` 或 `end < start` 的区间。`_parse_overlap_pairs`（[`quality.py:38-54`](../aseprite_mcp/tools/quality.py)）同理。
 
 **后果**：写错格式不会报错，只是那条约束**没有生效**。比如把 `"body:1-8"` 写成 `"body 1-8"`（漏了冒号），你就得到了一份"没有任何越界 cel"的审计报告 —— 因为约束根本不存在。**用 `animation_sanitize` 的 `include_stats` + `alerts` 交叉确认约束确实生效了**，或者先用 `validate_scene` 确认图层名拼对了。
 
@@ -318,7 +300,7 @@ if target.isTilemap then print("ERROR:Layer '{safe_layer}' is a tilemap layer: i
 
 ### `validate_scene`
 
-只读，报三样东西（[`quality.py:174-190`](../aseprite_mcp/tools/quality.py#L174)）：
+只读，报三样东西（[`quality.py:174-190`](../aseprite_mcp/tools/quality.py)）：
 
 ```json
 {
@@ -329,15 +311,15 @@ if target.isTilemap then print("ERROR:Layer '{safe_layer}' is a tilemap layer: i
 }
 ```
 
-它有一处特殊的实现：脚本用 `__START__` / `__END__` / `__LAYERS__` 三个占位符，再用 `str.replace` 注入（[`quality.py:193-198`](../aseprite_mcp/tools/quality.py#L193)）——因为这段脚本不是 f-string（里面有大括号 JSON 字面量），没法直接插值。同文件的其它工具都用 f-string，所以这是**局部不一致的做法**。
+它有一处特殊的实现：脚本用 `__START__` / `__END__` / `__LAYERS__` 三个占位符，再用 `str.replace` 注入（[`quality.py:193-198`](../aseprite_mcp/tools/quality.py)）——因为这段脚本不是 f-string（里面有大括号 JSON 字面量），没法直接插值。同文件的其它工具都用 f-string，所以这是**局部不一致的做法**。
 
-注意它的 `find_layer` 是**顶层非递归**的（[`quality.py:153-158`](../aseprite_mcp/tools/quality.py#L153)），所以嵌套在组里的图层会被报成 `missing_layers`。
+注意它的 `find_layer` 是**顶层非递归**的（[`quality.py:153-158`](../aseprite_mcp/tools/quality.py)），所以嵌套在组里的图层会被报成 `missing_layers`。
 
 ### `audit_animation`
 
 只读审计，两件检查：
 
-**1. 声明的图层对是否重叠。** 用标准 AABB 判定（[`quality.py:356-359`](../aseprite_mcp/tools/quality.py#L356)）：
+**1. 声明的图层对是否重叠。** 用标准 AABB 判定（[`quality.py:356-359`](../aseprite_mcp/tools/quality.py)）：
 
 ```lua
 local overlap = a_pos.x < b_pos.x + b_w
@@ -350,7 +332,7 @@ local overlap = a_pos.x < b_pos.x + b_w
 
 **2. 越界 cel**：位于"该图层声明的帧范围"之外的 cel 会被记进 `out_of_range`。没在 `layer_frame_ranges` 里声明的图层，其所有 cel 都算**在范围内**（`in_ranges` 对未声明的层返回 true）—— 所以这个检查只对你显式声明的图层生效。
 
-输出信封（[`quality.py:382-434`](../aseprite_mcp/tools/quality.py#L382)）：
+输出信封（[`quality.py:382-434`](../aseprite_mcp/tools/quality.py)）：
 
 ```json
 {
@@ -369,11 +351,13 @@ local overlap = a_pos.x < b_pos.x + b_w
 
 ### `animation_sanitize`
 
-功能最全的一个，既审计又能修。`report_only=True` 时是**完整干跑** —— 所有检查都做、`sanitized` 计数都算，但**不写文件**（[`quality.py:761-763`](../aseprite_mcp/tools/quality.py#L761)）：
+功能最全的一个，既审计又能修。`report_only=True` 时是**完整干跑** —— 所有检查都做、`sanitized` 计数都算，但**不写文件**（[`quality.py:761-763`](../aseprite_mcp/tools/quality.py)）：
 
 ```lua
 if not {report_only_flag} and changed then
-    spr:saveAs(spr.filename)
+    save_project(spr)
+else
+    print("PROJECT_UNCHANGED")
 end
 ```
 
@@ -388,10 +372,10 @@ end
 
 细节：
 
-- **`layer_order` 按位置重排**：名单里的层依次排前面，未列到的层保持在后面（[`quality.py:607-622`](../aseprite_mcp/tools/quality.py#L607)）。
-- **存在组时跳过重排**（[`quality.py:591-606, 623-629`](../aseprite_mcp/tools/quality.py#L591)）。`has_groups` 会在两种情况下置真：sprite 里有任何 `isGroup` 图层，或目标图层的 `parent` 不一致。跨组设 `stackIndex` 语义不明确，所以直接放弃。此时仍报 `sanitized.reordered = not has_groups`，所以读到 `"reordered": true` 表示"**重排生效了**"（或"在 `report_only` 下本来会生效"），`false` 表示被跳过。
+- **`layer_order` 按位置重排**：名单里的层依次排前面，未列到的层保持在后面（[`quality.py:607-622`](../aseprite_mcp/tools/quality.py)）。
+- **存在组时跳过重排**（[`quality.py:591-606, 623-629`](../aseprite_mcp/tools/quality.py)）。`has_groups` 会在两种情况下置真：sprite 里有任何 `isGroup` 图层，或目标图层的 `parent` 不一致。跨组设 `stackIndex` 语义不明确，所以直接放弃。此时仍报 `sanitized.reordered = not has_groups`，所以读到 `"reordered": true` 表示"**重排生效了**"（或"在 `report_only` 下本来会生效"），`false` 表示被跳过。
 - **`out_of_range_action` 的默认值 `set_opacity_zero`** 把越界 cel 的 `opacity` 设为 `out_of_range_opacity`（默认 0），而不是删除。这是"可恢复"的默认：像素还在，只是看不见，反悔成本低。
-- **`ignore_full_canvas_overlaps` 默认 `True`**：只要参与重叠检测的任一 cel 是**整张画布**大小就跳过该对（[`quality.py:709-717`](../aseprite_mcp/tools/quality.py#L709)）。因为全画布层几乎必然与任何层重叠，这类命中是噪声。
+- **`ignore_full_canvas_overlaps` 默认 `True`**：只要参与重叠检测的任一 cel 是**整张画布**大小就跳过该对（[`quality.py:709-717`](../aseprite_mcp/tools/quality.py)）。因为全画布层几乎必然与任何层重叠，这类命中是噪声。
 
 输出信封在 `audit_animation` 的基础上多了修复计数与统计：
 
@@ -414,7 +398,7 @@ end
 ```
 
 - `layer_stats` 由 `include_stats=True`（默认）控制，`bounds` 是该层所有 cel 的并集包围盒（`[min_x, min_y, max_x, max_y]`），没有 cel 时为 `null`。
-- `alerts` 是**派生出来的告警字符串**（[`quality.py:811-822`](../aseprite_mcp/tools/quality.py#L811)）：`empty_frames_detected`、`cels_out_of_range`、以及每个有全画布 cel 的层一条 `full_canvas_cels:<layer>`。这是最该被调用方检视的字段。
+- `alerts` 是**派生出来的告警字符串**（[`quality.py:811-822`](../aseprite_mcp/tools/quality.py)）：`empty_frames_detected`、`cels_out_of_range`、以及每个有全画布 cel 的层一条 `full_canvas_cels:<layer>`。这是最该被调用方检视的字段。
 - `inactive_layers` 是整个区间内**一个 cel 都没有**的图层。
 
 ---
@@ -451,8 +435,8 @@ end
 
 ## 相关文档
 
-- [01 · Lua 桥](01-lua-bridge.md#二asepritecommand-的三个方法) —— `_checked` 与裸 `execute_lua_script` 的差别
+- [01 · Lua 桥](01-lua-bridge.md) —— `_checked` 与裸 `execute_lua_script` 的差别
 - [04 · 画布、图层与跨文件复制](04-layers-and-canvas.md#六flatten_sprite-的隐藏图层陷阱) —— `flatten()` 陷阱的另一面
-- [05 · 动画](05-animation.md#六onion-skin两个不同含义) —— `set_onion_skin` 的 no-op 与本文档 `render_onion_skin` 的分工
+- [05 · 动画](05-animation.md) —— `set_onion_skin` 的 no-op 与本文档 `render_onion_skin` 的分工
 - [06 · 特效与网格结构](06-effects-and-tilemap.md#五tilemap) —— tilemap 的数据模型与 `get_tile_at`
 - [reference/tools.md](reference/tools.md#pixel_readpy) —— 三个模块的完整签名

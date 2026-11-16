@@ -261,17 +261,13 @@ def render(tools: list[dict], warnings: list[str]) -> str:
     lines.append(f"> 生成基线：`{git_revision()}`")
     lines.append("")
     lines.append(
-        f"共 **{len(tools)}** 个 `@mcp.tool()` 工具，分布在 **{len(modules)}** 个模块。"
-    )
-    lines.append("")
-    lines.append(
         "参数列中 `*` 之后的是 keyword-only 参数；`filename` 通常可省略（回退到会话的活跃文件）。"
     )
     lines.append("")
     lines.append("## 模块索引")
     lines.append("")
-    lines.append("| 模块 | 工具数 | 说明 | 开发者文档 |")
-    lines.append("|---|---:|---|---|")
+    lines.append("| 模块 | 说明 | 开发者文档 |")
+    lines.append("|---|---|---|")
     for module in modules:
         own = [t for t in tools if t["module"] == module]
         summary = own[0]["module_summary"] if own else ""
@@ -279,7 +275,7 @@ def render(tools: list[dict], warnings: list[str]) -> str:
         doc_link = f"[{Path(doc).name}]({doc})" if doc else "—"
         anchor = module.removesuffix(".py")
         lines.append(
-            f"| [`{module}`](#{anchor}py) | {len(own)} | {cell(summary)} | {doc_link} |"
+            f"| [`{module}`](#{anchor}py) | {cell(summary)} | {doc_link} |"
         )
     lines.append("")
 
@@ -291,8 +287,6 @@ def render(tools: list[dict], warnings: list[str]) -> str:
         if summary:
             lines.append(summary)
             lines.append("")
-        lines.append(f"**{len(own)} 个工具**")
-        lines.append("")
         for tool in own:
             lines.append(f"### `{tool['name']}`")
             lines.append("")
