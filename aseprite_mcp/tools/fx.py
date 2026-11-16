@@ -4,7 +4,6 @@ from ..core.commands import lua_escape
 from ..core.lua import ENSURE_LAYER, FIND_LAYER, LAYER_NAMES, NORMALIZE_CEL, PSET, HSL
 from ..core.colors import parse_hex_color
 from ..core.state import prepare_filename
-from .. import mcp
 
 
 def _parse_hex_color(value: str) -> tuple[int, int, int] | None:
@@ -13,7 +12,6 @@ def _parse_hex_color(value: str) -> tuple[int, int, int] | None:
     return rgba[:3] if rgba else None
 
 
-@mcp.tool()
 async def outline_cel(filename: str='', *, layer_name: str, frame_index: int, color: str='#000000', include_diagonals: bool=False) -> str:
     """Add a 1px outline around all opaque pixels of a cel.
 
@@ -89,7 +87,6 @@ async def outline_cel(filename: str='', *, layer_name: str, frame_index: int, co
     return f"Outline added to '{layer_name}' frame {frame_index} in {filename}"
 
 
-@mcp.tool()
 async def replace_color(filename: str='', *, layer_name: str, frame_index: int, from_color: str, to_color: str, tolerance: int=0) -> str:
     """Replace one color with another in a cel, preserving alpha.
 
@@ -165,7 +162,6 @@ async def replace_color(filename: str='', *, layer_name: str, frame_index: int, 
     )
 
 
-@mcp.tool()
 async def adjust_hsl(filename: str='', *, layer_name: str, frame_index: int, hue_shift: float=0, saturation_shift: float=0, lightness_shift: float=0) -> str:
     """Shift hue, saturation, and lightness of all opaque pixels in a cel.
 
@@ -239,7 +235,6 @@ async def adjust_hsl(filename: str='', *, layer_name: str, frame_index: int, hue
     )
 
 
-@mcp.tool()
 async def apply_dither_gradient(filename: str='', *, layer_name: str, frame_index: int, x: int, y: int, width: int, height: int, color_start: str, color_end: str, horizontal: bool=False, create_if_missing: bool=True) -> str:
     """Fill a rectangle with a two-color gradient using Bayer 4x4 ordered dithering.
 
@@ -329,7 +324,6 @@ async def apply_dither_gradient(filename: str='', *, layer_name: str, frame_inde
     )
 
 
-@mcp.tool()
 async def apply_dither_pattern(filename: str='', *, layer_name: str, frame_index: int, x: int, y: int, width: int, height: int, color_a: str, color_b: str, density: float=0.5, create_if_missing: bool=True) -> str:
     """Fill a rectangle with a uniform Bayer-dithered mix of two colors.
 

@@ -4,6 +4,30 @@ A Python MCP server that gives AI assistants full control over [Aseprite](https:
 
 Tools cover canvas, drawing, sprite maps, layers, animation, palettes, effects, slices, tilemaps, exports, native filters, visual-feedback/analysis tools, and a raw Lua escape hatch. The tool set is designed so an LLM has everything it needs to produce *good* pixel art, not just primitives: compact character-grid sprite maps, shading ramps with hue shifting, ordered dithering, outlines, retro palette presets with quantization, onion-skin renders, frame diffing for animation work, and composite reads that match what the player actually sees.
 
+## Tool discovery and calls
+
+Every client uses the same stdio server. `tools/list` exposes core texture editing,
+inspection, palette, frame/cel/tag and common export tools, plus `search_tools` and
+`call_tool`. The public list stays fixed throughout the connection.
+
+Text, tilemaps, slices, motion tweening, extra filters, scene/quality tools, local
+HTTP preview, spritesheet and per-layer export are extensions. Discover their
+complete schemas, then execute them through the visible proxy:
+
+```json
+{"name":"search_tools","arguments":{"query":"draw_text","category":"text"}}
+{"name":"call_tool","arguments":{"name":"draw_text","arguments":{"text":"A","font":"/path/to/font","x":0,"y":0,"layer_name":"label","frame_index":1}}}
+```
+
+These are ordinary MCP `tools/call` requests. Search returns readable JSON text,
+including the full `inputSchema`; the client uses that schema to fill `arguments`.
+A known extension can be called without searching first. Empty queries browse
+categories; follow `next_offset` to paginate. Core tools are called directly.
+See the [tool reference](docs/reference/tools.md) for each tool's invocation mode.
+
+Client policies apply to the `call_tool` entry; extension targets share that
+policy. `run_lua_script` remains directly available for local Lua scripts.
+
 ## Example: a swordsman, drawn and animated by Claude
 
 <table>
@@ -46,7 +70,7 @@ Both were created end-to-end by Claude Fable 5 through this server's MCP tools �
 | [Analysis & Visual Feedback](#analysis--visual-feedback) | Onion-skin renders, frame diffing, color statistics |
 | [Quality](#quality) | Validate and sanitize animation consistency |
 | [Scene](#scene) | Copy layers between sprite files |
-| [Preview & Guide](#preview--guide) | Local HTTP preview server, workflow guide |
+| [Preview](#preview) | Local HTTP preview server |
 | [Scripting](#scripting) | Raw Lua escape hatch for anything not covered above |
 
 ### Canvas
@@ -115,13 +139,15 @@ Fonts are discovered in `~/.aseprite-mcp/fonts`: a bitmap font is a directory co
 
 Call `measure_text` first when the layout depends on the text: it returns the same metrics `draw_text` will use, so a label can be centred or a plate sized in one pass.
 
-```
-measure_text(text="MODERATOR", font="minecraft", size=2, bold=1)
-  -> width=115 height=15 advance_width=117 above_baseline=14 below_baseline=1 left_bearing=0
-
-draw_text(filename="badge.aseprite", text="MODERATOR", x=64, y=17,
-          font="minecraft", size=2, anchor="baseline", bold=1,
-          color="#FFFFFF", shadow_color="#14237A")
+```python
+search_tools(category="text")
+call_tool(name="measure_text", arguments={"text": "MODERATOR", "font": "minecraft", "size": 2, "bold": 1})
+call_tool(name="draw_text", arguments={
+    "filename": "badge.aseprite", "text": "MODERATOR", "x": 64, "y": 17,
+    "font": "minecraft", "size": 2, "anchor": "baseline", "bold": 1,
+    "color": "#FFFFFF", "shadow_color": "#14237A",
+    "layer_name": "label", "frame_index": 1
+})
 ```
 
 Anchors are `topleft`/`top`/`topright`, `left`/`center`/`right`, `bottomleft`/`bottom`/`bottomright`, plus `baselineleft`/`baseline`/`baselineright` for pinning several labels to one baseline. Outline and shadow grow the stamp but never move the glyphs.
@@ -201,7 +227,6 @@ The pixel-art toolbox: clean outlines, palette-respecting blends, and shading va
 | `oscillate_cel_positions` | Sine-wave motion (bobbing, breathing, hovering) |
 | `set_tag` / `delete_tag` | Animation tags with direction (forward/reverse/pingpong) |
 | `set_layer_visibility` / `set_layer_opacity` | Layer-level visibility and opacity |
-| `set_onion_skin` | Configure onion-skin UI prefs (see `render_onion_skin` for batch use) |
 | `get_sprite_info` | Sprite metadata: size, layers, frames, durations, tags |
 
 ### Palette
@@ -292,12 +317,11 @@ Batch-mode equivalents of what a human artist gets from the Aseprite UI.
 |------|-------------|
 | `copy_layers_between_sprites` | Copy layers by name from one .aseprite file to another |
 
-### Preview & Guide
+### Preview
 
 | Tool | Description |
 |------|-------------|
 | `start_preview_server` / `stop_preview_server` | Serve exported files over local HTTP |
-| `animation_workflow_guide` | Returns a step-by-step workflow guide for the LLM |
 
 ### Scripting
 
@@ -338,8 +362,8 @@ per-project in the client config (Claude Code `.mcp.json` example):
   "mcpServers": {
     "aseprite": {
       "command": "uv",
-      "args": ["--directory", "/path/to/aseprite_mcp", "run", "-m", "aseprite_mcp"],
-      "env": { "ASERITE_MCP_WORKSPACE": "${workspaceFolder}" }
+      "args": ["--directory", "/path/to/aseprite_mcp", "run", "--locked", "-m", "aseprite_mcp"],
+      "env": { "ASERITE_MCP_WORKSPACE": "/absolute/path/to/art-project" }
     }
   }
 }
@@ -356,70 +380,30 @@ time.
 2. **Build in layers**: background / body / equipment / effects, so parts can be animated and edited independently.
 3. **Draw coarse to fine**: silhouette with `draw_rectangle_at` / `draw_ellipse_at` / `fill_area_at`, then refine with `draw_pixels_at`. On a small canvas (roughly ≤ 32×32) skip the two-step and author the whole thing as a single `draw_sprite_map` grid, then read it back with `get_sprite_map` to check it.
 4. **Look at your work**: `export_frame` at 8×, inspect, fix, repeat. Use `get_color_stats` to keep the palette tight.
-5. **Shade with intent**: `adjust_hsl` for shadow layers, `apply_dither_gradient` for blends, `outline_cel` for readability.
-6. **Animate with the cel tools**: `propagate_cels`, then `tween_cel_positions_eased` / `oscillate_cel_positions`; verify with `render_onion_skin` and `compare_frames`; export with `export_tag`.
-
-## Docker Usage
-
-### Quick Start
-
-Build and run the Docker image:
-```bash
-docker build -t aseprite-mcp:latest .
-docker run -it --rm aseprite-mcp:latest
-```
-
-Or use the provided build scripts:
-- **Linux/macOS**: `chmod +x build-docker.sh && ./build-docker.sh`
-- **Windows**: `.\build-docker.ps1`
-
-### Using Docker Compose
-```bash
-# Production
-docker-compose up aseprite-mcp
-
-# Development mode
-docker-compose --profile dev up aseprite-mcp-dev
-```
-
-See [DOCKER.md](DOCKER.md) for detailed Docker setup instructions.
-
-### Optional: Install Aseprite via Steam
-
-To have the container install Aseprite via SteamCMD at startup, provide Steam credentials:
-
-```powershell
-# Create a .env with STEAM_USERNAME/STEAM_PASSWORD (and optional STEAM_GUARD_CODE)
-# Then
-docker run --rm -i --env-file .env aseprite-mcp:latest
-```
-
-If installed, the binary will be at `/opt/steamapps/common/Aseprite/aseprite` and `ASEPRITE_PATH` will be picked up automatically.
+5. **Shade with intent**: use palette ramps and core `replace_color`; discover extra filters with `search_tools(category="fx")` and execute them through `call_tool`.
+6. **Animate frame by frame**: copy a frame with `copy_frame`, edit its explicit layer/frame, then set tick-compatible durations and tags. Check `render_onion_skin` and `compare_frames`, and deliver with `export_minecraft_texture`. Discover motion tweening as an extension when needed.
 
 ## Local Installation
 
-### Prerequisites
-- Python 3.13+
-- `uv` package manager
-- Aseprite (set `ASEPRITE_PATH` in `.env` if it is not on your PATH)
+Requires Python 3.13+, [uv](https://docs.astral.sh/uv/) and a locally installed Aseprite.
+From a source checkout, install the locked dependencies:
 
-### Installation:
-```json
-{
-  "mcpServers": {
-      "aseprite": {
-          "command": "/opt/homebrew/bin/uv",
-          "args": [
-              "--directory",
-              "/path/to/repo",
-              "run",
-              "-m",
-              "aseprite_mcp"
-          ]
-      }
-  }
-}
+```text
+uv sync --locked
 ```
+
+Copy `sample.env` to `.env` and set `ASEPRITE_PATH` if Aseprite is not on PATH.
+Client/process environment variables take priority over the repository-root `.env`.
+Keep the root `SKILL.md` alongside the source: it supplies the MCP runtime instructions.
+
+Start from the repository or from another directory:
+
+```text
+uv run --locked -m aseprite_mcp
+uv --directory /absolute/path/to/aseprite_mcp_2 run --locked -m aseprite_mcp
+```
+
+For client configuration examples, see [development](docs/development.md#客户端配置).
 
 ## Server Lifecycle
 
@@ -432,4 +416,4 @@ process is force-killed.
 
 Architecture, internals, and contribution guides live in [docs/](docs/README.md):
 the Lua bridge and stdout protocol, path/error/process conventions, one doc per
-subsystem, the full generated tool reference, and setup/testing/Docker notes.
+subsystem, the full generated tool reference, and local setup and testing notes.

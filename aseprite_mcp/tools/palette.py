@@ -7,7 +7,6 @@ from ..core.commands import AsepriteCommand, lua_escape
 from ..core.lua import FIND_LAYER, LAYER_NAMES
 from ..core.colors import parse_hex_color
 from ..core.state import prepare_filename
-from .. import mcp
 
 # Well-known retro/pixel-art palettes.
 PALETTE_PRESETS = {
@@ -50,7 +49,6 @@ def _parse_hex_color(value: str) -> tuple[int, int, int] | None:
     rgba = parse_hex_color(value)
     return rgba[:3] if rgba else None
 
-@mcp.tool()
 async def get_palette(filename: str = "") -> str:
     """Get the active sprite palette as a JSON array of hex colors.
 
@@ -85,7 +83,6 @@ async def get_palette(filename: str = "") -> str:
     output = await AsepriteCommand.execute_lua_script_checked(script, filename)
     return output
 
-@mcp.tool()
 async def set_palette(filename: str = "", *, colors: List[str]) -> str:
     """Set the active sprite palette using a list of hex colors.
 
@@ -123,7 +120,6 @@ async def set_palette(filename: str = "", *, colors: List[str]) -> str:
     await execute_edit_script(script, filename)
     return f"Palette set with {len(colors)} colors in {filename}"
 
-@mcp.tool()
 async def remap_colors_in_cel_range(filename: str = "", *, layer_name: str, start_frame: int, end_frame: int, mappings: List[dict], create_missing_cels: bool = False, source_frame_index: int | None = None) -> str:
     """Remap colors in a layer across a frame range using explicit mappings.
 
@@ -231,7 +227,6 @@ async def remap_colors_in_cel_range(filename: str = "", *, layer_name: str, star
     )
 
 
-@mcp.tool()
 async def list_palette_presets() -> str:
     """List the built-in retro palette presets with their colors.
 
@@ -241,7 +236,6 @@ async def list_palette_presets() -> str:
     return json.dumps(PALETTE_PRESETS, indent=2)
 
 
-@mcp.tool()
 async def apply_palette_preset(filename: str = "", *, preset: str) -> str:
     """Set the sprite palette to a built-in retro preset.
 
@@ -263,7 +257,6 @@ async def apply_palette_preset(filename: str = "", *, preset: str) -> str:
     return f"Palette preset '{preset}' ({len(colors)} colors) applied to {filename}"
 
 
-@mcp.tool()
 async def generate_color_ramp(
     base_color: str,
     steps: int = 5,
@@ -312,7 +305,6 @@ async def generate_color_ramp(
     return json.dumps(ramp)
 
 
-@mcp.tool()
 async def quantize_to_palette(
     filename: str = "",
     layer_name: str = "",
@@ -424,7 +416,6 @@ async def quantize_to_palette(
     return f"Quantized {count} pixels to the palette in {filename}"
 
 
-@mcp.tool()
 async def set_color_mode(filename: str = "", *, mode: str) -> str:
     """Convert the sprite's color mode.
 

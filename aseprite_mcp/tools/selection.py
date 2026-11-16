@@ -4,7 +4,6 @@ from ..core.commands import lua_escape
 from ..core.lua import FIND_LAYER, LAYER_NAMES, NORMALIZE_CEL, PSET
 from ..core.state import prepare_filename
 from ..core.colors import parse_hex_color
-from .. import mcp
 
 
 def _parse_hex_color(value: str) -> tuple[int, int, int] | None:
@@ -13,7 +12,6 @@ def _parse_hex_color(value: str) -> tuple[int, int, int] | None:
     return rgba[:3] if rgba else None
 
 
-@mcp.tool()
 async def move_region(filename: str='', *, layer_name: str, frame_index: int, x: int, y: int, width: int, height: int, dest_x: int, dest_y: int) -> str:
     """Cut a rectangular region of pixels and paste it at a new position.
 
@@ -92,7 +90,6 @@ async def move_region(filename: str='', *, layer_name: str, frame_index: int, x:
     )
 
 
-@mcp.tool()
 async def copy_region(filename: str='', *, layer_name: str, frame_index: int, x: int, y: int, width: int, height: int, dest_x: int, dest_y: int, target_layer_name: str='', target_frame_index: int=0) -> str:
     """Copy a rectangular region of pixels to another position, layer, or frame.
 
@@ -180,7 +177,6 @@ async def copy_region(filename: str='', *, layer_name: str, frame_index: int, x:
     )
 
 
-@mcp.tool()
 async def erase_region(filename: str='', *, layer_name: str, frame_index: int, x: int, y: int, width: int, height: int) -> str:
     """Erase (make transparent) a rectangular region of pixels.
 
@@ -235,7 +231,6 @@ async def erase_region(filename: str='', *, layer_name: str, frame_index: int, x
     )
 
 
-@mcp.tool()
 async def erase_color(filename: str='', *, layer_name: str, frame_index: int, color: str, tolerance: int=0) -> str:
     """Make all pixels of a given color transparent (like a magic eraser).
 

@@ -1,35 +1,27 @@
 """Aseprite MCP - Model Context Protocol implementation for Aseprite."""
 
-import os
 import asyncio
 from contextlib import asynccontextmanager
+from importlib import import_module
+from pathlib import Path
 
 from mcp.server import MCPServer
+from mcp.server.mcpserver.tools import Tool
 
-_FALLBACK_INSTRUCTIONS = """\
-Aseprite MCP: every tool that touches a sprite file takes an optional
-`filename`, except create_canvas which REQUIRES an absolute `filename` and
-rejects relative paths. The first call that names a file (create_canvas, or
-any explicit filename) anchors it as the session's active file; later calls
-may omit `filename` and act on it. Relative paths on other tools resolve
-against ASERITE_MCP_WORKSPACE (if set) or the server working directory;
-absolute paths are used as-is.
-"""
-
+from .tool_catalog import CORE_TOOLS, DISCOVERY_TOOLS, EXTENSION_TOOLS
+from .tool_discovery import create_discovery_tools
 
 def _load_skill_instructions() -> str:
-    """Read SKILL.md from the project root for the MCP `instructions` field.
-
-    Falls back to a short built-in summary when the file is missing (e.g.
-    installed as a package or in Docker without the repo root).
-    """
-    skill_path = os.path.join(os.path.dirname(__file__), "..", "SKILL.md")
+    """Load the required checkout instructions for MCP initialization."""
+    skill_path = Path(__file__).resolve().parent.parent / "SKILL.md"
+    recovery = f"Restore a readable, nonempty UTF-8 SKILL.md at '{skill_path}' from the source checkout."
     try:
-        with open(skill_path, encoding="utf-8") as f:
-            content = f.read().strip()
-        return content or _FALLBACK_INSTRUCTIONS
-    except OSError:
-        return _FALLBACK_INSTRUCTIONS
+        content = skill_path.read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeError) as exc:
+        raise RuntimeError(f"Cannot read MCP instructions. {recovery}") from exc
+    if not content:
+        raise RuntimeError(f"MCP instructions are blank. {recovery}")
+    return content
 
 
 @asynccontextmanager
@@ -41,18 +33,32 @@ async def _lifespan(server):
         cleanup_review_directory()
 
 
-_tool_lock = asyncio.Lock()
+def _load_tools(catalog):
+    for category, names in catalog.items():
+        module = import_module(f".tools.{category}", __name__)
+        for name in names:
+            yield category, Tool.from_function(getattr(module, name))
 
 
-async def _serialize_tools(context, call_next):
-    if context.method == "tools/call":
-        async with _tool_lock:
-            return await call_next(context)
-    return await call_next(context)
+def create_server() -> MCPServer:
+    """Assemble a stable core tool list and the extension discovery interface."""
+    instructions = _load_skill_instructions()
+    core = [tool for _, tool in _load_tools(CORE_TOOLS)]
+    extensions = list(_load_tools(EXTENSION_TOOLS))
+    names = [tool.name for tool in core] + [tool.name for _, tool in extensions] + list(DISCOVERY_TOOLS)
+    if len(set(names)) != len(names):
+        raise ValueError("Duplicate names in the tool catalog")
+    discovery = create_discovery_tools({tool.name: (category, tool) for category, tool in extensions})
+    tool_lock = asyncio.Lock()
 
+    async def serialize_tools(context, call_next):
+        if context.method == "tools/call":
+            async with tool_lock:
+                return await call_next(context)
+        return await call_next(context)
 
-mcp = MCPServer("aseprite", instructions=_load_skill_instructions(),
-                lifespan=_lifespan, middleware=[_serialize_tools])
+    return MCPServer("aseprite", instructions=instructions, tools=core + discovery,
+                     lifespan=_lifespan, middleware=[serialize_tools])
 
 __version__ = "0.1.0"
 __author__ = "Divyansh Singh"

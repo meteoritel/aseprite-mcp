@@ -3,7 +3,6 @@ from ..core.editing import execute_edit_script
 import json
 from ..core.commands import AsepriteCommand, lua_escape
 from ..core.state import prepare_filename
-from .. import mcp
 
 _FIND_SLICE = """
 local function find_slice(spr, name)
@@ -15,7 +14,6 @@ end
 """
 
 
-@mcp.tool()
 async def create_slice(filename: str = "", *, name: str, x: int, y: int, width: int, height: int) -> str:
     """Create a named slice (a rectangular region usable by game engines).
 
@@ -55,7 +53,6 @@ async def create_slice(filename: str = "", *, name: str, x: int, y: int, width: 
     return f"Slice '{name}' created at ({x},{y}) {width}x{height} in {filename}"
 
 
-@mcp.tool()
 async def set_slice_center(filename: str = "", *, name: str, x: int, y: int, width: int, height: int) -> str:
     """Set a slice's 9-patch center rectangle (relative to the slice origin).
 
@@ -96,7 +93,6 @@ async def set_slice_center(filename: str = "", *, name: str, x: int, y: int, wid
     return f"Slice '{name}' 9-patch center set to ({x},{y}) {width}x{height} in {filename}"
 
 
-@mcp.tool()
 async def set_slice_pivot(filename: str = "", *, name: str, x: int, y: int) -> str:
     """Set a slice's pivot point (relative to the slice origin).
 
@@ -130,7 +126,6 @@ async def set_slice_pivot(filename: str = "", *, name: str, x: int, y: int) -> s
     return f"Slice '{name}' pivot set to ({x},{y}) in {filename}"
 
 
-@mcp.tool()
 async def list_slices(filename: str = "") -> str:
     """List all slices with their bounds, 9-patch centers, and pivots.
 
@@ -177,7 +172,6 @@ async def list_slices(filename: str = "") -> str:
     return json.dumps(slices)
 
 
-@mcp.tool()
 async def delete_slice(filename: str = "", *, name: str) -> str:
     """Delete a slice by name.
 

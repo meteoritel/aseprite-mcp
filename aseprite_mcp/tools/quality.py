@@ -4,7 +4,6 @@ import json
 from typing import List
 from ..core.commands import AsepriteCommand, lua_escape
 from ..core.state import prepare_filename
-from .. import mcp
 
 def _parse_layer_frame_ranges(layer_frame_ranges: List[str] | None) -> str:
     ranges = {}
@@ -55,7 +54,6 @@ def _parse_overlap_pairs(overlap_pairs: List[str] | None) -> str:
                 pairs.append((left, right))
     return "{" + ",".join([f"{{\"{a}\",\"{b}\"}}" for a, b in pairs]) + "}"
 
-@mcp.tool()
 async def ensure_layers_present(filename: str = "", *, layer_names: List[str], start_frame: int = 1, end_frame: int | None = None) -> str:
     """Ensure cels exist for layers across a frame range."""
     filename = prepare_filename(filename)
@@ -118,7 +116,6 @@ async def ensure_layers_present(filename: str = "", *, layer_names: List[str], s
         f"on frames {start_frame}-{end_frame or 'end'} in {filename}"
     )
 
-@mcp.tool()
 async def validate_scene(filename: str = "", *, required_layers: List[str], start_frame: int = 1, end_frame: int | None = None) -> str:
     """Validate presence of layers and cels across a frame range.
 
@@ -196,7 +193,6 @@ async def validate_scene(filename: str = "", *, required_layers: List[str], star
     output = await AsepriteCommand.execute_lua_script_checked(script, filename)
     return output
 
-@mcp.tool()
 async def audit_animation(
     filename: str = "",
     start_frame: int = 1,
@@ -429,7 +425,6 @@ async def audit_animation(
     output = await AsepriteCommand.execute_lua_script_checked(script, filename)
     return output
 
-@mcp.tool()
 async def animation_sanitize(
     filename: str = "",
     start_frame: int = 1,

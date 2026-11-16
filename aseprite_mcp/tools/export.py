@@ -17,7 +17,6 @@ from ..core.editing import execute_edit_script, native_project_path, validate_na
 from ..core.inspection import read_sprite_info
 from ..core.lua import EDIT_TARGET, NORMALIZE_CEL
 from ..core.state import get_review_directory, prepare_filename
-from .. import mcp
 
 REVIEW_SCALE = 8
 MILLISECONDS_PER_TICK = 50
@@ -130,7 +129,6 @@ def _read_sheet_data(path: Path, expected_frames: int) -> dict:
         raise ToolError(f"Aseprite returned invalid sheet metadata: {exc}") from exc
 
 
-@mcp.tool()
 async def export_sprite(*, filename: str = "", output_filename: str, format: str = "png") -> str:
     """Export to an image or image sequence; report the exact published files.
 
@@ -150,7 +148,6 @@ async def export_sprite(*, filename: str = "", output_filename: str, format: str
     return "Sprite exported to " + ", ".join(str(target) for _, target in files)
 
 
-@mcp.tool()
 async def copy_sprite(*, filename: str = "", output_filename: str, overwrite: bool = False) -> str:
     """Copy a native project, preserving layers, frames and tags.
 
@@ -169,7 +166,6 @@ async def copy_sprite(*, filename: str = "", output_filename: str, overwrite: bo
     return f"Sprite copied to {target}"
 
 
-@mcp.tool()
 async def export_frame(*, filename: str = "", frame_index: int, output_filename: str, scale: int = 1) -> str:
     """Export one validated frame to an exact PNG path.
 
@@ -196,7 +192,6 @@ async def export_frame(*, filename: str = "", frame_index: int, output_filename:
     return f"Frame {frame_index} exported to {target} at {scale}x"
 
 
-@mcp.tool()
 async def export_spritesheet(*, filename: str = "", output_filename: str,
                             sheet_type: str = "horizontal", data_filename: str = "",
                             scale: int = 1, padding: int = 0, tag_name: str = "",
@@ -244,7 +239,6 @@ async def export_spritesheet(*, filename: str = "", output_filename: str,
     return "Sprite sheet exported to " + ", ".join(str(path) for _, path in files)
 
 
-@mcp.tool()
 async def export_layers(*, filename: str = "", output_directory: str, include_hidden: bool = False) -> str:
     """Export layers into an exact set of newly generated PNG files.
 
@@ -269,7 +263,6 @@ async def export_layers(*, filename: str = "", output_directory: str, include_hi
     return "Layers exported to " + ", ".join(str(path) for _, path in files)
 
 
-@mcp.tool()
 async def export_tag(*, filename: str = "", tag_name: str, output_filename: str, scale: int = 1) -> str:
     """Export an existing tag as GIF or PNG sequence.
 
@@ -304,7 +297,6 @@ def _playback_indices(count: int, direction: str) -> list[int]:
     return order
 
 
-@mcp.tool()
 async def export_minecraft_texture(*, filename: str = "", output_filename: str,
                                    frame_index: int | None = None, tag_name: str = "") -> str:
     """Deliver Java Edition PNG and mcmeta, plus a temporary 8x review PNG.
@@ -379,7 +371,6 @@ async def export_minecraft_texture(*, filename: str = "", output_filename: str,
     })
 
 
-@mcp.tool()
 async def import_image_as_layer(*, filename: str = "", image_path: str, layer_name: str,
                                 frame_index: int, x: int = 0, y: int = 0) -> str:
     """Import an image into an explicit layer/frame of a native project.

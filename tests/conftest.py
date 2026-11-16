@@ -1,7 +1,4 @@
-"""Real Aseprite tests with independent projects under an owned temp directory.
-
-The temp root is also reachable through the Docker wrapper mounts.
-"""
+"""Real Aseprite tests with independent projects under an owned temp directory."""
 import asyncio
 import os
 import shutil
@@ -14,13 +11,9 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import aseprite_mcp.tools  # noqa: F401  (registers all tools)
 from aseprite_mcp.tools import canvas, drawing
 
-if sys.platform == "win32":
-    BASE = os.path.join(tempfile.gettempdir(), "ase-pytest", uuid.uuid4().hex)
-else:
-    BASE = f"/tmp/ase-pytest/{uuid.uuid4().hex}"
+BASE = os.path.join(tempfile.gettempdir(), "ase-pytest", uuid.uuid4().hex)
 
 
 def run(coro):
@@ -46,7 +39,7 @@ def base_dir():
 
 @pytest.fixture
 def new_sprite(base_dir):
-    """Create independent native projects under the mounted test directory."""
+    """Create independent native projects under the owned test directory."""
     def create(width=16, height=16):
         path = os.path.join(base_dir, f"{uuid.uuid4().hex}.aseprite")
         run(canvas.create_canvas(width, height, filename=path))

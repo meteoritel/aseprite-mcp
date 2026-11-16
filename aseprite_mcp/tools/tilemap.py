@@ -5,7 +5,6 @@ from typing import List, Dict, Any
 from ..core.commands import AsepriteCommand, lua_escape, parse_pixel_xy
 from ..core.lua import FIND_LAYER, LAYER_NAMES
 from ..core.state import prepare_filename
-from .. import mcp
 
 
 def _parse_hex_color(value: str) -> tuple[int, int, int] | None:
@@ -23,7 +22,6 @@ def _parse_hex_color(value: str) -> tuple[int, int, int] | None:
     return r, g, b
 
 
-@mcp.tool()
 async def create_tilemap_layer(filename: str = "", *, layer_name: str, tile_width: int, tile_height: int) -> str:
     """Create a tilemap layer with its own tileset.
 
@@ -75,7 +73,6 @@ async def create_tilemap_layer(filename: str = "", *, layer_name: str, tile_widt
     )
 
 
-@mcp.tool()
 async def draw_on_tile(filename: str = "", *, layer_name: str, tile_index: int, pixels: List[Dict[str, Any]]) -> str:
     """Draw pixels onto a tile in a tilemap layer's tileset.
 
@@ -155,7 +152,6 @@ async def draw_on_tile(filename: str = "", *, layer_name: str, tile_index: int, 
     )
 
 
-@mcp.tool()
 async def set_tiles(filename: str='', *, layer_name: str, frame_index: int, tiles: List[Dict[str, Any]]) -> str:
     """Place tiles on a tilemap layer by grid position.
 
@@ -251,7 +247,6 @@ async def set_tiles(filename: str='', *, layer_name: str, frame_index: int, tile
     )
 
 
-@mcp.tool()
 async def get_tile_at(filename: str='', *, layer_name: str, frame_index: int, col: int, row: int) -> str:
     """Read which tile is placed at a grid position.
 
@@ -305,7 +300,6 @@ async def get_tile_at(filename: str='', *, layer_name: str, frame_index: int, co
     raise ToolError("No tile data returned")
 
 
-@mcp.tool()
 async def get_tilemap_info(filename: str = "", *, layer_name: str) -> str:
     """Get tilemap layer info: tile size, tile count, and map dimensions.
 

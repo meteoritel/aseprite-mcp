@@ -1,10 +1,8 @@
 from mcp.server.mcpserver.exceptions import ToolError
 from ..core.commands import AsepriteCommand
 from ..core.state import get_active_file, prepare_filename
-from .. import mcp
 
 
-@mcp.tool()
 async def run_lua_script(script: str, filename: str = "") -> str:
     """Execute arbitrary Aseprite Lua code in batch mode (escape hatch).
 

@@ -6,9 +6,7 @@ import json
 from ..core.commands import lua_escape
 from ..core.state import prepare_filename
 from ..core.lua import FIND_LAYER, LAYER_NAMES
-from .. import mcp
 
-@mcp.tool()
 async def add_frames(filename: str = "", *, count: int, duration_ms: int | None = None) -> str:
     """Add multiple frames to a sprite and optionally set their duration.
 
@@ -44,7 +42,6 @@ async def add_frames(filename: str = "", *, count: int, duration_ms: int | None 
     await execute_edit_script(script, filename)
     return f"Added {count} frames to {filename}"
 
-@mcp.tool()
 async def set_frame_duration_all(filename: str = "", *, duration_ms: int) -> str:
     """Set the duration of all frames in milliseconds.
 
@@ -73,7 +70,6 @@ async def set_frame_duration_all(filename: str = "", *, duration_ms: int) -> str
     await execute_edit_script(script, filename)
     return f"Set duration of all frames to {duration_ms}ms in {filename}"
 
-@mcp.tool()
 async def set_layer_visibility(filename: str = "", *, layer_name: str, visible: bool = True) -> str:
     """Set layer visibility by name.
 
@@ -106,7 +102,6 @@ async def set_layer_visibility(filename: str = "", *, layer_name: str, visible: 
     await execute_edit_script(script, filename)
     return f"Layer '{layer_name}' visibility set to {visible} in {filename}"
 
-@mcp.tool()
 async def set_layer_opacity(filename: str = "", *, layer_name: str, opacity: int) -> str:
     """Set layer opacity by name (0-255).
 
@@ -140,14 +135,12 @@ async def set_layer_opacity(filename: str = "", *, layer_name: str, opacity: int
     await execute_edit_script(script, filename)
     return f"Layer '{layer_name}' opacity set to {opacity} in {filename}"
 
-@mcp.tool()
 async def get_sprite_info(filename: str = "") -> str:
     """Read canvas, layer tree, frame durations and tag metadata as JSON."""
     filename = prepare_filename(filename)
     return json.dumps(await read_sprite_info(filename), ensure_ascii=False)
 
 
-@mcp.tool()
 async def duplicate_frame_range(filename: str = "", *, start_frame: int, end_frame: int, times: int = 1) -> str:
     """Duplicate a frame range and append copies to the end.
 
@@ -186,7 +179,6 @@ async def duplicate_frame_range(filename: str = "", *, start_frame: int, end_fra
     await execute_edit_script(script, filename)
     return f"Duplicated frames {start_frame}-{end_frame} (x{times}) in {filename}"
 
-@mcp.tool()
 async def set_cel_position(filename: str='', *, layer_name: str, frame_index: int, x: int, y: int, create_if_missing: bool=False, source_frame_index: int | None=None) -> str:
     """Set a cel's position in a specific layer and frame.
 
@@ -251,7 +243,6 @@ async def set_cel_position(filename: str='', *, layer_name: str, frame_index: in
     await execute_edit_script(script, filename)
     return f"Cel position set to ({x}, {y}) on '{layer_name}' frame {frame_index} in {filename}"
 
-@mcp.tool()
 async def tween_cel_positions(filename: str = "", *, layer_name: str, start_frame: int, end_frame: int, start_x: int, start_y: int, end_x: int, end_y: int, create_missing_cels: bool = False, source_frame_index: int | None = None) -> str:
     """Tween cel positions linearly across a frame range.
 
@@ -330,7 +321,6 @@ async def tween_cel_positions(filename: str = "", *, layer_name: str, start_fram
     await execute_edit_script(script, filename)
     return f"Tweened cel positions on '{layer_name}' frames {start_frame}-{end_frame} in {filename}"
 
-@mcp.tool()
 async def offset_cel_positions(filename: str = "", *, layer_name: str, start_frame: int, end_frame: int, dx: int, dy: int) -> str:
     """Offset cel positions by a delta across a frame range.
 
@@ -378,7 +368,6 @@ async def offset_cel_positions(filename: str = "", *, layer_name: str, start_fra
     await execute_edit_script(script, filename)
     return f"Offset cel positions by ({dx}, {dy}) on '{layer_name}' frames {start_frame}-{end_frame} in {filename}"
 
-@mcp.tool()
 async def create_cel(filename: str='', *, layer_name: str, frame_index: int, x: int=0, y: int=0) -> str:
     """Create an empty cel on a layer/frame.
 
@@ -419,7 +408,6 @@ async def create_cel(filename: str='', *, layer_name: str, frame_index: int, x: 
     await execute_edit_script(script, filename)
     return f"Cel created on '{layer_name}' frame {frame_index} in {filename}"
 
-@mcp.tool()
 async def clear_cel(filename: str='', *, layer_name: str, frame_index: int) -> str:
     """Delete a cel on a layer/frame."""
     filename = prepare_filename(filename)
@@ -452,7 +440,6 @@ async def clear_cel(filename: str='', *, layer_name: str, frame_index: int) -> s
     await execute_edit_script(script, filename)
     return f"Cel cleared on '{layer_name}' frame {frame_index} in {filename}"
 
-@mcp.tool()
 async def copy_cel(filename: str = "", *, layer_name: str, source_frame: int, target_frame: int, replace: bool = True, create_target_frame: bool = True) -> str:
     """Copy a cel snapshot, optionally extending the timeline for its target.
 
@@ -493,7 +480,6 @@ async def copy_cel(filename: str = "", *, layer_name: str, source_frame: int, ta
     note = f" ({added} frame(s) auto-created)" if added else ""
     return f"Cel copied on '{layer_name}' from frame {source_frame} to frame {target_frame}{note} in {filename}"
 
-@mcp.tool()
 async def copy_frame(filename: str = "", *, source_frame: int, target_frame: int | None = None, overwrite: bool = True) -> str:
     """Copy all grouped and hidden cels; append when target_frame is omitted.
 
@@ -527,7 +513,6 @@ async def copy_frame(filename: str = "", *, source_frame: int, target_frame: int
     await execute_edit_script(script, filename)
     return f"Frame {source_frame} copied to {target_frame or 'new frame'} in {filename}"
 
-@mcp.tool()
 async def propagate_frame_to_range(filename: str = "", *, source_frame: int, start_frame: int, end_frame: int, overwrite: bool = True) -> str:
     """Copy source cels throughout an inclusive frame range, preserving durations."""
     filename = prepare_filename(filename)
@@ -550,7 +535,6 @@ async def propagate_frame_to_range(filename: str = "", *, source_frame: int, sta
     await execute_edit_script(script, filename)
     return f"Propagated frame {source_frame} to frames {start_frame}-{end_frame} in {filename}"
 
-@mcp.tool()
 async def set_tag(filename: str = "", *, name: str, from_frame: int, to_frame: int, direction: str = "forward") -> str:
     """Create or update an animation tag on the sprite.
 
@@ -598,27 +582,6 @@ async def set_tag(filename: str = "", *, name: str, from_frame: int, to_frame: i
     await execute_edit_script(script, filename)
     return f"Tag '{name}' set to frames {from_frame}-{to_frame} (direction={direction}) in {filename}"
 
-@mcp.tool()
-async def set_onion_skin(
-    filename: str = "",
-    enabled: bool = True,
-    before: int = 2,
-    after: int = 2,
-    opacity: int = 128
-) -> str:
-    """Configure onion skin settings for Aseprite."""
-    filename = prepare_filename(filename)
-    if before < 0 or after < 0:
-        raise ToolError("Before/after must be >= 0")
-    if opacity < 0 or opacity > 255:
-        raise ToolError("Opacity must be between 0 and 255")
-
-    return (
-        "Onion skin settings are UI-only in batch mode; no changes applied "
-        f"(enabled={enabled}, before={before}, after={after}, opacity={opacity})"
-    )
-
-@mcp.tool()
 async def propagate_cels(filename: str = "", *, layer_names: list[str], source_frame: int, start_frame: int, end_frame: int, replace: bool = True) -> str:
     """Copy cels from a source frame to a range of frames for specific layers.
 
@@ -670,7 +633,6 @@ async def propagate_cels(filename: str = "", *, layer_names: list[str], source_f
         f"for layers {', '.join(layer_names)} in {filename}"
     )
 
-@mcp.tool()
 async def tween_cel_positions_eased(filename: str = "", *, layer_name: str, start_frame: int, end_frame: int, start_x: int, start_y: int, end_x: int, end_y: int, easing: str = "smoothstep", create_missing_cels: bool = False, source_frame_index: int | None = None) -> str:
     """Tween cel positions with easing across a frame range."""
     filename = prepare_filename(filename)
@@ -753,7 +715,6 @@ async def tween_cel_positions_eased(filename: str = "", *, layer_name: str, star
         f"in {filename}"
     )
 
-@mcp.tool()
 async def oscillate_cel_positions(filename: str = "", *, layer_name: str, start_frame: int, end_frame: int, amplitude_x: int = 0, amplitude_y: int = 0, cycles: float = 1.0, phase_deg: float = 0.0, create_missing_cels: bool = False, source_frame_index: int | None = None) -> str:
     """Oscillate cel positions across a frame range using a sine wave."""
     filename = prepare_filename(filename)
@@ -826,7 +787,6 @@ async def oscillate_cel_positions(filename: str = "", *, layer_name: str, start_
         f"in {filename}"
     )
 
-@mcp.tool()
 async def tween_cel_opacity_eased(filename: str = "", *, layer_name: str, start_frame: int, end_frame: int, start_opacity: int, end_opacity: int, easing: str = "smoothstep", create_missing_cels: bool = False, source_frame_index: int | None = None) -> str:
     """Tween cel opacity with easing across a frame range."""
     filename = prepare_filename(filename)
@@ -912,7 +872,6 @@ async def tween_cel_opacity_eased(filename: str = "", *, layer_name: str, start_
         f"in {filename}"
     )
 
-@mcp.tool()
 async def tween_cel_scale_eased(filename: str = "", *, layer_name: str, start_frame: int, end_frame: int, start_scale: float, end_scale: float, easing: str = "smoothstep", anchor: str = "center", replace: bool = True, create_missing_cels: bool = True, source_frame_index: int | None = None) -> str:
     """Tween cel scale with easing across a frame range."""
     filename = prepare_filename(filename)
@@ -1023,7 +982,6 @@ async def tween_cel_scale_eased(filename: str = "", *, layer_name: str, start_fr
     )
 
 
-@mcp.tool()
 async def delete_frame(filename: str = "", *, frame_index: int) -> str:
     """Delete a frame by index.
 
@@ -1053,7 +1011,6 @@ async def delete_frame(filename: str = "", *, frame_index: int) -> str:
     return f"Frame {frame_index} deleted from {filename}"
 
 
-@mcp.tool()
 async def delete_tag(filename: str = "", *, name: str) -> str:
     """Delete an animation tag by name.
 
@@ -1086,7 +1043,6 @@ async def delete_tag(filename: str = "", *, name: str) -> str:
     return f"Tag '{name}' deleted from {filename}"
 
 
-@mcp.tool()
 async def set_cel_opacity(filename: str='', *, layer_name: str, frame_index: int, opacity: int) -> str:
     """Set the opacity of a single cel (0-255).
 

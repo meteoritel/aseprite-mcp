@@ -3,7 +3,6 @@ import json
 import os
 from ..core.commands import AsepriteCommand, lua_escape
 from ..core.state import prepare_filename
-from .. import mcp
 
 # Composite the *visible* layers of one frame into a canvas-sized RGB
 # image. Used by the analysis tools so layer offsets and trimmed cels do
@@ -64,7 +63,6 @@ end
 """
 
 
-@mcp.tool()
 async def render_onion_skin(filename: str = "", *, frame_index: int, output_filename: str, before: int = 1, after: int = 1, scale: int = 4, ghost_opacity: int = 100) -> str:
     """Render a frame with neighboring frames as translucent onion-skin ghosts.
 
@@ -152,7 +150,6 @@ async def render_onion_skin(filename: str = "", *, frame_index: int, output_file
     )
 
 
-@mcp.tool()
 async def compare_frames(filename: str = "", *, frame_a: int, frame_b: int) -> str:
     """Compare two frames and report how much they differ.
 
@@ -244,7 +241,6 @@ async def compare_frames(filename: str = "", *, frame_a: int, frame_b: int) -> s
     raise ToolError("No diff data returned")
 
 
-@mcp.tool()
 async def get_color_stats(filename: str = "", frame_index: int = 1, top: int = 16) -> str:
     """Report the colors used in a frame and how often each appears.
 

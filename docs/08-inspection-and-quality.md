@@ -3,6 +3,8 @@
 > 从精灵里读回像素与统计信息、渲染可视结果用于检查，以及审计动画的结构一致性。
 > 覆盖源文件：[`tools/pixel_read.py`](../aseprite_mcp/tools/pixel_read.py) · [`tools/analysis.py`](../aseprite_mcp/tools/analysis.py) · [`tools/quality.py`](../aseprite_mcp/tools/quality.py)
 
+像素与 analysis 工具直接调用；quality 工具经 `search_tools(category="quality")` 发现后使用 `call_tool` 执行。完整签名见 [工具参考](reference/tools.md)。
+
 ## 职责边界
 
 **负责**：单个 cel 的像素读取、可见合成结果的像素读取、帧差异对比、颜色直方图、洋葱皮渲染、图层/ cel 覆盖度校验与动画结构归一化。
@@ -160,7 +162,7 @@ end
 
 ---
 
-## 三、`analysis.py` 的三个工具
+## 三、`analysis.py` 的图像分析工具
 
 | 工具 | 产物 | 关键参数 |
 |---|---|---|
@@ -172,7 +174,7 @@ end
 
 ### `render_onion_skin`：批量模式下的"洋葱皮"
 
-它**不是**编辑器里的辅助显示，而是一张可以看的图片 —— 这是 [05 §6](05-animation.md) 里 `set_onion_skin` 为 no-op 之后的替代方案。
+`render_onion_skin` 将当前帧和邻帧幽灵合成为可查看的 PNG，适用于 batch 审阅。
 
 要点：
 
@@ -437,6 +439,6 @@ end
 
 - [01 · Lua 桥](01-lua-bridge.md) —— `_checked` 与裸 `execute_lua_script` 的差别
 - [04 · 画布、图层与跨文件复制](04-layers-and-canvas.md#六flatten_sprite-的隐藏图层陷阱) —— `flatten()` 陷阱的另一面
-- [05 · 动画](05-animation.md) —— `set_onion_skin` 的 no-op 与本文档 `render_onion_skin` 的分工
+- [05 · 动画](05-animation.md) —— 逐帧编辑、复制与审阅
 - [06 · 特效与网格结构](06-effects-and-tilemap.md#五tilemap) —— tilemap 的数据模型与 `get_tile_at`
 - [reference/tools.md](reference/tools.md#pixel_readpy) —— 三个模块的完整签名

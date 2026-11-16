@@ -4,10 +4,8 @@ from ..core.commands import AsepriteCommand, lua_escape
 from ..core.lua import FIND_LAYER, LAYER_NAMES
 from ..core.state import prepare_filename
 from .analysis import _COMPOSE_FRAME
-from .. import mcp
 
 
-@mcp.tool()
 async def get_pixel_color(filename: str='', *, x: int, y: int, layer_name: str, frame_index: int) -> str:
     """Read the RGBA color of a single pixel from one layer's cel.
 
@@ -72,7 +70,6 @@ async def get_pixel_color(filename: str='', *, x: int, y: int, layer_name: str, 
     raise ToolError("No pixel data returned")
 
 
-@mcp.tool()
 async def get_pixels_rect(filename: str='', *, x: int, y: int, width: int, height: int, layer_name: str, frame_index: int) -> str:
     """Read all pixel colors in a rectangular region from one layer's cel.
 
@@ -161,7 +158,6 @@ async def get_pixels_rect(filename: str='', *, x: int, y: int, width: int, heigh
     return json.dumps(pixels)
 
 
-@mcp.tool()
 async def get_composite_pixel(filename: str = "", *, x: int, y: int, frame_index: int = 1) -> str:
     """Read the RGBA colour VISIBLE at a pixel (flattened composite of all layers).
 
@@ -205,7 +201,6 @@ async def get_composite_pixel(filename: str = "", *, x: int, y: int, frame_index
     raise ToolError("No pixel data returned")
 
 
-@mcp.tool()
 async def get_composite_rect(filename: str = "", *, x: int, y: int, width: int, height: int, frame_index: int = 1) -> str:
     """Read VISIBLE RGBA over a rectangle (flattened composite of all layers).
 

@@ -7,7 +7,11 @@
 ```mermaid
 flowchart LR
     Client[MCP 客户端] --> Server[tools/call 串行门控]
-    Server --> Tools[tools 参数与业务语义]
+    Catalog[静态工具目录] --> Server
+    Server --> Direct[核心直接调用]
+    Server --> Discovery[search_tools / call_tool]
+    Direct --> Tools[tools 参数与业务语义]
+    Discovery --> Tools
     Tools --> State[core/state 路径与活跃文件]
     Tools --> Edit[core/editing 标准编辑提交]
     Tools --> Inspect[core/inspection 工程元数据]
@@ -27,7 +31,13 @@ flowchart LR
 
 ## 注册与新增工具
 
-`aseprite_mcp/__init__.py` 创建带 lifespan 和 middleware 的 `MCPServer`。`__main__.py` 导入 `tools` 并启动 stdio；各模块以 `@mcp.tool()` 注册，`tools/__init__.py` 显式导入模块。新增模块时同步该导入入口。
+`aseprite_mcp/__init__.py` 的 `create_server()` 读取根 SKILL，构建 SDK 工具描述，安装 lifespan 与 middleware；`__main__.py` 创建后启动 stdio。工具 implementation 不依赖 server，import 不注册工具。
+
+[`tool_catalog.py`](../aseprite_mcp/tool_catalog.py) 的字面量目录是核心／扩展归属及顺序的唯一来源。新增工具须明确加入对应目录，重名或无效符号在装配时失败。核心及固定发现入口直接公开；扩展通过 [`tool_discovery.py`](../aseprite_mcp/tool_discovery.py) 的 `search_tools`／`call_tool` 发现和执行。
+
+搜索返回扩展的完整 SDK schema、类别与说明，支持分词匹配、类别浏览和分页；结果同时提供可读 JSON 文本。代理使用 SDK 描述校验、补默认值和执行，保留 content、structuredContent 与 isError。外层 tools/call 持有一次串行锁，目标复用请求上下文。公开工具集合在搜索、调用与重连前后保持稳定。
+
+工具参考从同一目录与函数 AST 生成，标注直接或代理调用。客户端使用方式见 [本地开发与接入](development.md#客户端配置)。
 
 新增编辑工具应遵循这些接口：
 
@@ -55,7 +65,7 @@ return "编辑完成"
 | [06 · 特效与 tilemap](06-effects-and-tilemap.md) | 原生滤镜、抖动、slice 与瓦片 |
 | [07 · 导出与预览](07-output.md) | 隔离生成、精确发布与 JE 交付 |
 | [08 · 读取与质量校验](08-inspection-and-quality.md) | 可见合成、统计与结构校验 |
-| [开发与部署](development.md) | 环境、独立测试、Docker 与 CI |
+| [本地开发与验证](development.md) | 环境、跨客户端配置、依赖与独立测试 |
 | [工具参考](reference/tools.md) | 从源码签名生成的接口 |
 
 sprite 是工程；cel 是图层与帧交点的图像，带位置、不透明度与 zIndex；没有 cel 表示该层该帧为空。外部帧号从 1 开始，sprite-global 坐标以画布左上角为原点。tag 指定帧区间和播放方向；tilemap 的 cel 保存瓦片索引。

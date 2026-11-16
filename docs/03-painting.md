@@ -1,5 +1,7 @@
 # 03 · 绘图与像素编辑
 
+文字与字体工具属于扩展：`search_tools(category="text")` 返回完整 schema，再用 `call_tool(name=目标名称, arguments=原参数对象)` 执行。本页其它绘图、选区、变换和调色板工具直接调用。
+
 > 把像素画到画布上（含按字符网格批量作画）、把已有像素搬走或改色、以及文本栅格化与调色板。
 > 覆盖源文件：[`tools/drawing.py`](../aseprite_mcp/tools/drawing.py) · [`tools/sprite_map.py`](../aseprite_mcp/tools/sprite_map.py) · [`tools/selection.py`](../aseprite_mcp/tools/selection.py) · [`tools/transform.py`](../aseprite_mcp/tools/transform.py) · [`tools/text.py`](../aseprite_mcp/tools/text.py) · [`tools/palette.py`](../aseprite_mcp/tools/palette.py) · [`core/fonts.py`](../aseprite_mcp/core/fonts.py)
 

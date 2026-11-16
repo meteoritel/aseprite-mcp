@@ -3,7 +3,6 @@ from ..core.editing import execute_edit_script
 from ..core.commands import lua_escape
 from ..core.lua import FIND_LAYER, LAYER_NAMES
 from ..core.state import prepare_filename
-from .. import mcp
 
 _BLEND_MODES = {
     "normal": "BlendMode.NORMAL",
@@ -28,7 +27,6 @@ _BLEND_MODES = {
 }
 
 
-@mcp.tool()
 async def delete_layer(filename: str = "", *, layer_name: str) -> str:
     """Delete a layer by name.
 
@@ -62,7 +60,6 @@ async def delete_layer(filename: str = "", *, layer_name: str) -> str:
     return f"Layer '{layer_name}' deleted from {filename}"
 
 
-@mcp.tool()
 async def rename_layer(filename: str = "", *, layer_name: str, new_name: str) -> str:
     """Rename a layer.
 
@@ -99,7 +96,6 @@ async def rename_layer(filename: str = "", *, layer_name: str, new_name: str) ->
     return f"Layer '{layer_name}' renamed to '{new_name}' in {filename}"
 
 
-@mcp.tool()
 async def duplicate_layer(filename: str = "", *, layer_name: str, new_name: str = "", group: str = "") -> str:
     """Duplicate a layer with all its cels across every frame.
 
@@ -165,7 +161,6 @@ async def duplicate_layer(filename: str = "", *, layer_name: str, new_name: str 
     return f"Layer '{layer_name}' duplicated as '{final_name}'{location} in {filename}"
 
 
-@mcp.tool()
 async def reorder_layer(filename: str = "", *, layer_name: str, position: int) -> str:
     """Move a layer to a new position in the layer stack.
 
@@ -202,7 +197,6 @@ async def reorder_layer(filename: str = "", *, layer_name: str, position: int) -
     return f"Layer '{layer_name}' moved to position {position} in {filename}"
 
 
-@mcp.tool()
 async def set_layer_blend_mode(filename: str = "", *, layer_name: str, mode: str) -> str:
     """Set a layer's blend mode.
 
@@ -243,7 +237,6 @@ async def set_layer_blend_mode(filename: str = "", *, layer_name: str, mode: str
     return f"Layer '{layer_name}' blend mode set to {mode} in {filename}"
 
 
-@mcp.tool()
 async def merge_layer_down(filename: str = "", *, layer_name: str) -> str:
     """Merge a layer into the layer directly below it.
 
@@ -276,7 +269,6 @@ async def merge_layer_down(filename: str = "", *, layer_name: str) -> str:
     return f"Layer '{layer_name}' merged down in {filename}"
 
 
-@mcp.tool()
 async def flatten_sprite(filename: str = "") -> str:
     """Flatten all layers into a single layer.
 

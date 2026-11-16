@@ -1,5 +1,4 @@
-from . import mcp
-from .tools import *
+from . import create_server
 
 if __name__ == "__main__":
-    mcp.run(transport='stdio')
+    create_server().run(transport="stdio")

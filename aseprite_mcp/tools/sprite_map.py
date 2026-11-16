@@ -23,7 +23,6 @@ from ..core.commands import AsepriteCommand, lua_escape
 from ..core.lua import EDIT_TARGET, FIND_LAYER, LAYER_NAMES, NORMALIZE_CEL, PSET
 from ..core.state import prepare_filename
 from .analysis import _COMPOSE_FRAME
-from .. import mcp
 
 
 # Characters used for auto-assigned palette entries. "." is reserved for
@@ -137,7 +136,6 @@ def _quantise(
     return mapping
 
 
-@mcp.tool()
 async def draw_sprite_map(*, filename: str='', layer_name: str, frame_index: int, rows: List[str], palette: Dict[str, str], x: int=0, y: int=0, transparent: str='.', mirror_x: bool=False, mirror_y: bool=False, erase_transparent: bool=False, create_if_missing: bool=True) -> str:
     """Draw a whole region from a compact character-grid map.
 
@@ -249,7 +247,6 @@ async def draw_sprite_map(*, filename: str='', layer_name: str, frame_index: int
     )
 
 
-@mcp.tool()
 async def get_sprite_map(
     *,
     filename: str = "",

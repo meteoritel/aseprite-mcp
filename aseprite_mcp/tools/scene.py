@@ -4,9 +4,7 @@ from typing import List
 from ..core.commands import lua_escape
 from ..core.lua import FIND_LAYER
 from ..core.state import prepare_filename
-from .. import mcp
 
-@mcp.tool()
 async def copy_layers_between_sprites(
     *,
     source_filename: str = "",

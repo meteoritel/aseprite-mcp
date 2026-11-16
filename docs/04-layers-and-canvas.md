@@ -1,5 +1,7 @@
 # 04 · 画布、图层与跨文件复制
 
+画布与图层工具直接调用；跨工程复制属于 scene 扩展，经 `search_tools(category="scene")` 查找后使用 `call_tool` 执行。
+
 > 创建画布、维护图层树（含组与嵌套）、调整堆叠与混合，以及在两个精灵文件之间搬运图层。
 > 覆盖源文件：[`tools/canvas.py`](../aseprite_mcp/tools/canvas.py) · [`tools/layers.py`](../aseprite_mcp/tools/layers.py) · [`tools/scene.py`](../aseprite_mcp/tools/scene.py)
 

@@ -6,9 +6,7 @@ from ..core.commands import lua_escape
 from ..core.state import prepare_filename, set_active_file
 from ..core.editing import native_project_path
 from ..core.lua import FIND_LAYER, LAYER_NAMES
-from .. import mcp
 
-@mcp.tool()
 async def create_canvas(width: int, height: int, *, filename: str, overwrite: bool = False) -> str:
     """Create a new Aseprite canvas with specified dimensions.
 
@@ -47,7 +45,6 @@ async def create_canvas(width: int, height: int, *, filename: str, overwrite: bo
     set_active_file(filename)
     return f"Canvas created and anchored as active file: {filename}. Subsequent tool calls may omit filename."
 
-@mcp.tool()
 async def add_layer(filename: str = "", *, layer_name: str, group: str = "") -> str:
     """Add a new layer to the Aseprite file.
 
@@ -89,7 +86,6 @@ async def add_layer(filename: str = "", *, layer_name: str, group: str = "") -> 
     location = f" inside group '{group}'" if group else ""
     return f"Layer '{layer_name}' added{location} to {filename}"
 
-@mcp.tool()
 async def add_group(filename: str = "", *, group_name: str, parent_group: str = "") -> str:
     """Add a new, empty group layer.
 
@@ -134,7 +130,6 @@ async def add_group(filename: str = "", *, group_name: str, parent_group: str = 
     location = f" inside '{parent_group}'" if parent_group else ""
     return f"Group '{group_name}' created{location} in {filename}"
 
-@mcp.tool()
 async def add_frame(filename: str = "") -> str:
     """Add a new frame to the Aseprite file.
 
@@ -160,7 +155,6 @@ async def add_frame(filename: str = "") -> str:
     return f"New frame added successfully to {filename}"
 
 
-@mcp.tool()
 async def set_frame_duration(filename: str = "", *, frame_index: int, duration_ms: int) -> str:
     """Set the duration of a frame in milliseconds.
 

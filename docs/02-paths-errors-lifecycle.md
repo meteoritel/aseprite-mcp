@@ -29,9 +29,11 @@ output = prepare_filename(output_filename, must_exist=False, anchor=False)
 
 ## 会话串行与退出
 
-[`aseprite_mcp/__init__.py`](../aseprite_mcp/__init__.py) 的公开 middleware 锁住整个 `tools/call`，覆盖活跃文件解析、读取、编辑暂存、发布与结果生成。握手、discovery 和 `notifications/cancelled` 不取工具锁；等待中的调用取消后不会启动进程。
+[`aseprite_mcp/__init__.py`](../aseprite_mcp/__init__.py) 的公开 middleware 锁住整个 `tools/call`，覆盖活跃文件解析、读取、编辑暂存、发布与结果生成。握手、协议 discovery 和 `notifications/cancelled` 不取工具锁；`search_tools` 与扩展代理都是 tools/call，共用此锁；等待中的调用取消后不会启动进程。
 
-stdio 客户端断开后 SDK 结束 server。lifespan 清理当前会话的临时 8× 审阅图目录。独立 HTTP preview server 由 `start_preview_server`／`stop_preview_server` 和端口 PID 文件管理。
+`call_tool` 在锁内通过 SDK 描述执行扩展，不重新进入协议分发或获取同一把锁。核心和扩展共享活跃工程、取消与提交路径。
+
+stdio 客户端断开后 SDK 结束 server。lifespan 清理当前会话的临时 8× 审阅图目录。独立 HTTP preview server 由扩展 `start_preview_server`／`stop_preview_server` 和端口 PID 文件管理。
 
 会话门控协调本 server 内的工具调用。外部 Aseprite GUI 或其它 server 同时写同一工程需要使用者协调。
 

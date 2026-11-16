@@ -1,5 +1,7 @@
 # 07 · 导出与预览
 
+常用导出与图片导入直接调用；`export_spritesheet`、`export_layers` 和本地 HTTP preview 属于扩展，经 `search_tools` 查找后使用 `call_tool` 执行。
+
 [`tools/export.py`](../aseprite_mcp/tools/export.py) 负责将原生工程转为图像并发布精确目标。导出不修改源工程或切换活跃文件；产物路径作为文本或 JSON 返回。
 
 ## 生成、校验与发布

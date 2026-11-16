@@ -5,7 +5,6 @@ import sys
 import tempfile
 import signal
 from ..core.state import get_workspace_dir, resolve_path
-from .. import mcp
 
 def _pid_path(port: int) -> str:
     return os.path.join(tempfile.gettempdir(), f"aseprite_mcp_preview_{port}.pid")
@@ -25,7 +24,6 @@ def _pid_is_running(pid: int) -> bool:
     except Exception:
         return False
 
-@mcp.tool()
 async def start_preview_server(directory: str = "", port: int = 8000) -> str:
     """Start a simple HTTP server to preview exported sprites.
 
@@ -60,7 +58,6 @@ async def start_preview_server(directory: str = "", port: int = 8000) -> str:
 
     return f"Preview server started: http://localhost:{port}/"
 
-@mcp.tool()
 async def stop_preview_server(port: int = 8000) -> str:
     """Stop the preview HTTP server for a given port.
 

@@ -18,7 +18,6 @@ from ..core.state import prepare_filename
 from ..core.colors import parse_hex_color
 from ..core.lua import EDIT_TARGET, NORMALIZE_CEL
 from ..core import fonts as fontlib
-from .. import mcp
 
 _ANCHORS = (
     "topleft", "top", "topright",
@@ -52,7 +51,6 @@ def _text_origin(anchor: str, x: int, y: int, metrics: dict) -> tuple[int, int]:
     return origin_x, y - metrics["top"]
 
 
-@mcp.tool()
 async def list_text_fonts() -> str:
     """List fonts that draw_text can use.
 
@@ -80,7 +78,6 @@ async def list_text_fonts() -> str:
     return "\n".join(lines)
 
 
-@mcp.tool()
 async def measure_text(
     text: str,
     font: str,
@@ -120,7 +117,6 @@ async def measure_text(
     )
 
 
-@mcp.tool()
 async def draw_text(filename: str='', *, text: str, x: int, y: int, font: str, size: int=1, color: str='#FFFFFF', layer_name: str, frame_index: int, anchor: str='topleft', letter_spacing: int=0, bold: int=0, outline_color: Optional[str]=None, outline_width: int=1, outline_diagonal: bool=True, shadow_color: Optional[str]=None, shadow_dx: int=1, shadow_dy: int=1, antialias: bool=False, create_if_missing: bool=True) -> str:
     """Draw text onto a sprite.
 

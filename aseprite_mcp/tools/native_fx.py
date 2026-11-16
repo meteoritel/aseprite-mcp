@@ -8,7 +8,6 @@ from ..core.commands import lua_escape
 from ..core.native import build_native_command_script
 from ..core.state import prepare_filename
 from .fx import _parse_hex_color
-from .. import mcp
 
 # Built-in convolution-matrix resource names (Aseprite data/convmatr.def).
 CONVOLUTION_MATRICES = frozenset({
@@ -31,7 +30,6 @@ def _region(x: int, y: int, width: int, height: int):
     return (x, y, width, height) if width > 0 and height > 0 else None
 
 
-@mcp.tool()
 async def outline_native(filename: str='', *, layer_name: str, frame_index: int, color: str='#000000', place: str='outside', matrix: str='circle') -> str:
     """Native Aseprite Outline around opaque pixels (app.command.Outline).
 
@@ -63,7 +61,6 @@ async def outline_native(filename: str='', *, layer_name: str, frame_index: int,
     return f"Outlined ({place}, {matrix}) {layer_name or 'active layer'} in {filename}"
 
 
-@mcp.tool()
 async def adjust_hsl_native(filename: str='', *, layer_name: str, frame_index: int, hue: int=0, saturation: int=0, lightness: int=0, x: int=0, y: int=0, width: int=0, height: int=0) -> str:
     """Native Hue/Saturation/Lightness filter (engine-quality vs adjust_hsl).
 
@@ -90,7 +87,6 @@ async def adjust_hsl_native(filename: str='', *, layer_name: str, frame_index: i
     return f"Adjusted HSL on {layer_name or 'active layer'} in {filename}"
 
 
-@mcp.tool()
 async def adjust_brightness_contrast(filename: str='', *, layer_name: str, frame_index: int, brightness: int=0, contrast: int=0, x: int=0, y: int=0, width: int=0, height: int=0) -> str:
     """Native Brightness/Contrast filter (app.command.BrightnessContrast).
 
@@ -114,7 +110,6 @@ async def adjust_brightness_contrast(filename: str='', *, layer_name: str, frame
     return f"Adjusted brightness/contrast on {layer_name or 'active layer'} in {filename}"
 
 
-@mcp.tool()
 async def invert_colors(filename: str='', *, layer_name: str, frame_index: int, x: int=0, y: int=0, width: int=0, height: int=0) -> str:
     """Native colour inversion (app.command.InvertColor).
 
@@ -133,7 +128,6 @@ async def invert_colors(filename: str='', *, layer_name: str, frame_index: int, 
     return f"Inverted colours on {layer_name or 'active layer'} in {filename}"
 
 
-@mcp.tool()
 async def apply_convolution(filename: str='', *, matrix: str, layer_name: str, frame_index: int, x: int=0, y: int=0, width: int=0, height: int=0) -> str:
     """Native convolution filter (blur / sharpen / edge / emboss …).
 
@@ -157,7 +151,6 @@ async def apply_convolution(filename: str='', *, matrix: str, layer_name: str, f
     return f"Applied convolution '{matrix}' on {layer_name or 'active layer'} in {filename}"
 
 
-@mcp.tool()
 async def list_convolution_matrices() -> str:
     """List the built-in convolution-matrix names usable with apply_convolution.
 
@@ -167,7 +160,6 @@ async def list_convolution_matrices() -> str:
     return json.dumps(sorted(CONVOLUTION_MATRICES))
 
 
-@mcp.tool()
 async def extract_palette(
     filename: str = "",
     max_colors: int = 16,

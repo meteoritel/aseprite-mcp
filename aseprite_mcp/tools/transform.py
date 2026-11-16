@@ -3,10 +3,8 @@ from ..core.editing import execute_edit_script
 from ..core.commands import lua_escape
 from ..core.lua import FIND_LAYER, LAYER_NAMES
 from ..core.state import prepare_filename
-from .. import mcp
 
 
-@mcp.tool()
 async def flip_layer(filename: str='', *, layer_name: str, frame_index: int, direction: str='horizontal') -> str:
     """Flip a layer's image horizontally or vertically.
 
@@ -71,7 +69,6 @@ async def flip_layer(filename: str='', *, layer_name: str, frame_index: int, dir
     return f"Layer '{layer_name}' flipped {direction}ly in {filename}"
 
 
-@mcp.tool()
 async def rotate_layer(filename: str='', *, layer_name: str, frame_index: int, angle: int=90) -> str:
     """Rotate a layer's image 90, 180, or 270 degrees clockwise.
 
@@ -159,7 +156,6 @@ async def rotate_layer(filename: str='', *, layer_name: str, frame_index: int, a
     return f"Layer '{layer_name}' rotated {angle}° clockwise in {filename}"
 
 
-@mcp.tool()
 async def resize_canvas(filename: str = "", *, width: int, height: int) -> str:
     """Scale the canvas and all its content to new dimensions.
 
@@ -188,7 +184,6 @@ async def resize_canvas(filename: str = "", *, width: int, height: int) -> str:
     return f"Canvas resized to {width}x{height} in {filename}"
 
 
-@mcp.tool()
 async def crop_canvas(filename: str = "", *, x: int, y: int, width: int, height: int) -> str:
     """Crop the canvas to the given rectangle, discarding content outside it.
 

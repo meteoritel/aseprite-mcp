@@ -1,5 +1,7 @@
 # 06 · 特效与网格结构
 
+`replace_color` 与 `extract_palette` 直接调用。其它滤镜、tilemap 和 slice 工具经 `search_tools` 按 `fx`／`native_fx`／`tilemap`／`slices` 类别查找，再以 `call_tool(name=目标名称, arguments=原参数对象)` 执行。
+
 > 本文档覆盖两个相互独立、但都属于"对已有结构做批量处理"的主题：**特效**（对像素做滤镜）与**网格/区域抽象**（tilemap 与 slice）。
 > 覆盖源文件：[`tools/fx.py`](../aseprite_mcp/tools/fx.py) · [`tools/native_fx.py`](../aseprite_mcp/tools/native_fx.py) · [`tools/tilemap.py`](../aseprite_mcp/tools/tilemap.py) · [`tools/slices.py`](../aseprite_mcp/tools/slices.py)
 

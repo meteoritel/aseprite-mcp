@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate docs/reference/tools.md from the source tree.
 
-Static-only: parses `aseprite_mcp/tools/*.py` with `ast`, so it needs neither a
+Static-only: reads the tool catalog and function definitions with `ast`, so it needs neither a
 running Aseprite nor the project dependencies. Re-run it after adding, removing
 or re-signing a tool so the reference cannot drift from the code:
 
@@ -13,18 +13,16 @@ from __future__ import annotations
 
 import argparse
 import ast
-import subprocess
 import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-TOOLS_DIR = REPO_ROOT / "aseprite_mcp" / "tools"
 OUTPUT = REPO_ROOT / "docs" / "reference" / "tools.md"
 
 # One-line index labels. Used when the module has no docstring of its own, so
 # the module index stays readable without duplicating the developer docs.
 MODULE_SUMMARY = {
-    "canvas.py": "画布创建、图层/帧的增删与活跃状态设置",
+    "canvas.py": "原生工程、图层、组、帧与时长",
     "drawing.py": "像素、线、矩形、圆、椭圆、多边形、路径、填充、渐变",
     "text.py": "用 bitmap 或 TrueType 字体绘制与测量文本",
     "layers.py": "图层删除、重命名、复制、排序、混合模式、合并、展平",
@@ -43,7 +41,7 @@ MODULE_SUMMARY = {
     "analysis.py": "洋葱皮渲染、帧差异、颜色统计",
     "quality.py": "动画一致性校验与归一化（结构校验器，非评分器）",
     "scene.py": "在两个精灵文件之间复制图层",
-    "guide.py": "返回面向 LLM 的动画工作流指南文本",
+    "tool_discovery.py": "扩展工具的搜索、完整 schema 与代理执行",
     "script.py": "任意 Aseprite Lua 的逃生舱",
 }
 
@@ -59,7 +57,7 @@ DOC_MAP = {
     "text.py": "../03-painting.md",
     "palette.py": "../03-painting.md",
     "animation.py": "../05-animation.md",
-    "guide.py": "../05-animation.md",
+    "tool_discovery.py": "../README.md",
     "fx.py": "../06-effects-and-tilemap.md",
     "native_fx.py": "../06-effects-and-tilemap.md",
     "tilemap.py": "../06-effects-and-tilemap.md",
@@ -73,30 +71,18 @@ DOC_MAP = {
 }
 
 
-def module_order() -> list[str]:
-    """Read tools/__init__.py so the doc follows the registration order."""
-    init_path = TOOLS_DIR / "__init__.py"
-    tree = ast.parse(init_path.read_text(encoding="utf-8"))
-    order = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module is None:
-            for alias in node.names:
-                order.append(f"{alias.name}.py")
-    if not order:
-        raise SystemExit(f"could not read tool import order from {init_path}")
-    return order
-
-
-def is_mcp_tool(node: ast.stmt) -> bool:
-    if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-        return False
-    for dec in node.decorator_list:
-        if isinstance(dec, ast.Attribute) and dec.attr == "tool":
-            return True
-        if isinstance(dec, ast.Call) and isinstance(dec.func, ast.Attribute):
-            if dec.func.attr == "tool":
-                return True
-    return False
+def read_catalog() -> list[tuple[str, str, str]]:
+    """Project literal membership without importing the runtime or any tools."""
+    path = REPO_ROOT / "aseprite_mcp" / "tool_catalog.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    values = {node.targets[0].id: ast.literal_eval(node.value)
+              for node in tree.body if isinstance(node, ast.Assign)}
+    entries = []
+    for catalog, invocation in (("CORE_TOOLS", "直接调用"), ("EXTENSION_TOOLS", "经 call_tool")):
+        for module, names in values[catalog].items():
+            entries.extend((f"tools/{module}.py", name, invocation) for name in names)
+    entries.extend(("tool_discovery.py", name, "直接调用") for name in values["DISCOVERY_TOOLS"])
+    return entries
 
 
 def unparse(node: ast.expr | None) -> str:
@@ -120,6 +106,8 @@ def render_params(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> list[dict]:
     # defaults align to the tail of positional args
     pad = len(positional) - len(a.defaults)
     for i, arg in enumerate(positional):
+        if unparse(arg.annotation) == "Context":
+            continue
         default = a.defaults[i - pad] if i >= pad else None
         params.append(
             {
@@ -148,6 +136,8 @@ def render_signature(fn: ast.FunctionDef | ast.AsyncFunctionDef, name: str) -> s
     pad = len(positional) - len(a.defaults)
     parts = []
     for i, arg in enumerate(positional):
+        if unparse(arg.annotation) == "Context":
+            continue
         text = arg.arg
         if arg.annotation:
             text += f": {unparse(arg.annotation)}"
@@ -195,30 +185,31 @@ def split_docstring(doc: str | None) -> tuple[str, dict[str, str]]:
     return summary, described
 
 
-def collect() -> tuple[list[dict], list[str]]:
+def collect() -> list[dict]:
     tools: list[dict] = []
-    warnings: list[str] = []
-    for filename in module_order():
-        path = TOOLS_DIR / filename
-        if not path.exists():
-            warnings.append(f"{filename}: listed in __init__.py but missing on disk")
-            continue
-        source = path.read_text(encoding="utf-8")
-        tree = ast.parse(source)
+    trees = {}
+    for source_path, name, invocation in read_catalog():
+        path = REPO_ROOT / "aseprite_mcp" / source_path
+        filename = path.name
+        if source_path not in trees:
+            trees[source_path] = ast.parse(path.read_text(encoding="utf-8"))
+        tree = trees[source_path]
         module_doc = (ast.get_docstring(tree) or "").strip()
         # Curated Chinese label wins; the module docstring is a fallback for a
         # module added without a MODULE_SUMMARY entry.
         module_summary = MODULE_SUMMARY.get(filename)
         if not module_summary and module_doc:
             module_summary = " ".join(module_doc.splitlines()[0].split())
-        for node in tree.body:
-            if not is_mcp_tool(node):
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) or node.name != name:
                 continue
             summary, described = split_docstring(ast.get_docstring(node))
             tools.append(
                 {
                     "name": node.name,
                     "module": filename,
+                    "source_path": source_path,
+                    "invocation": invocation,
                     "module_summary": module_summary,
                     "signature": render_signature(node, node.name),
                     "summary": summary,
@@ -228,24 +219,13 @@ def collect() -> tuple[list[dict], list[str]]:
                     "async": isinstance(node, ast.AsyncFunctionDef),
                 }
             )
-    return tools, warnings
+            break
+        else:
+            raise ValueError(f"Catalog tool {name!r} has no definition in {source_path}")
+    return tools
 
 
-def git_revision() -> str:
-    try:
-        out = subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"],
-            cwd=REPO_ROOT,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        return out.stdout.strip()
-    except (OSError, subprocess.CalledProcessError):
-        return "unknown"
-
-
-def render(tools: list[dict], warnings: list[str]) -> str:
+def render(tools: list[dict]) -> str:
     modules: list[str] = []
     for tool in tools:
         if tool["module"] not in modules:
@@ -258,7 +238,9 @@ def render(tools: list[dict], warnings: list[str]) -> str:
         "> ⚠️ 本文件由 `scripts/gen_tool_reference.py` 解析源码 AST 生成，**请勿手改**。"
     )
     lines.append("> 新增或修改工具后重新生成：`uv run python scripts/gen_tool_reference.py`")
-    lines.append(f"> 生成基线：`{git_revision()}`")
+    lines.append("")
+    lines.append("核心与发现入口直接调用；扩展使用 `call_tool(name=工具名, arguments=原参数对象)`。")
+    lines.append("用 `search_tools` 查询扩展完整 schema；每个条目的调用方式以下方标注为准。")
     lines.append("")
     lines.append(
         "参数列中 `*` 之后的是 keyword-only 参数；`filename` 通常可省略（回退到会话的活跃文件）。"
@@ -294,9 +276,11 @@ def render(tools: list[dict], warnings: list[str]) -> str:
             lines.append(tool["signature"])
             lines.append(f"```")
             lines.append("")
+            lines.append(f"调用方式：**{tool['invocation']}**。")
+            lines.append("")
             lines.append(
-                f"源码：[`aseprite_mcp/tools/{tool['module']}:{tool['line']}`]"
-                f"(../../aseprite_mcp/tools/{tool['module']}#L{tool['line']})"
+                f"源码：[`aseprite_mcp/{tool['source_path']}:{tool['line']}`]"
+                f"(../../aseprite_mcp/{tool['source_path']}#L{tool['line']})"
             )
             lines.append("")
             if tool["summary"]:
@@ -319,13 +303,6 @@ def render(tools: list[dict], warnings: list[str]) -> str:
                     )
                 lines.append("")
 
-    if warnings:
-        lines.append("## 生成器警告")
-        lines.append("")
-        for warning in warnings:
-            lines.append(f"- {warning}")
-        lines.append("")
-
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -338,36 +315,26 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    tools, warnings = collect()
+    tools = collect()
     names = [t["name"] for t in tools]
     duplicates = sorted({n for n in names if names.count(n) > 1})
-    new_content = render(tools, warnings)
+    if duplicates:
+        print(f"ERROR: duplicate tool names: {', '.join(duplicates)}")
+        return 1
+    new_content = render(tools)
 
     if args.check:
         current = OUTPUT.read_text(encoding="utf-8") if OUTPUT.exists() else ""
         if current != new_content:
             print(f"STALE: {OUTPUT.relative_to(REPO_ROOT)} needs regeneration")
             return 1
-        print(f"OK: {OUTPUT.relative_to(REPO_ROOT)} is up to date ({len(tools)} tools)")
+        print(f"OK: {OUTPUT.relative_to(REPO_ROOT)} is up to date")
         return 0
 
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT.write_text(new_content, encoding="utf-8")
 
-    modules: list[str] = []
-    for tool in tools:
-        if tool["module"] not in modules:
-            modules.append(tool["module"])
     print(f"Wrote {OUTPUT.relative_to(REPO_ROOT)}")
-    for module in modules:
-        count = sum(1 for t in tools if t["module"] == module)
-        print(f"  {module:<16} {count:>3} tools")
-    print(f"  {'TOTAL':<16} {len(tools):>3} tools across {len(modules)} modules")
-    for warning in warnings:
-        print(f"WARNING: {warning}")
-    if duplicates:
-        print(f"ERROR: duplicate tool names: {', '.join(duplicates)}")
-        return 1
     return 0
 
 
