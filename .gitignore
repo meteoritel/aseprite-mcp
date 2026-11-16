@@ -46,3 +46,5 @@ ENV/
 !examples/swordsman/swordsman_slash.gif
 !examples/swordsman/swordsman_slash_sheet.png
 /report.md
+/.scratch/
+/.local/
