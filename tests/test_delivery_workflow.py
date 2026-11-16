@@ -1,5 +1,4 @@
-"""Java textures preserve pixels, timing, source projects and old deliveries."""
-
+"""Decode delivered images and metadata, preserving projects and previous outputs on failure."""
 import json
 from pathlib import Path
 
@@ -7,11 +6,10 @@ import pytest
 from PIL import Image
 from mcp.server.mcpserver.exceptions import ToolError
 
-from conftest import run
 from aseprite_mcp.core.commands import AsepriteCommand
 from aseprite_mcp.core import state
-from aseprite_mcp.tools import animation, canvas, export, sprite_map
-from test_project_editing import digest
+from aseprite_mcp.tools import animation, canvas, drawing, export, sprite_map
+from support import digest, run
 
 
 def animated_project(new_sprite):
@@ -133,14 +131,6 @@ def test_publish_failure_restores_existing_pair(new_sprite, tmp_path, monkeypatc
     assert sidecar.read_bytes() == b"old metadata"
 
 
-def test_invalid_frame_does_not_create_export(new_sprite, tmp_path):
-    filename = new_sprite()
-    target = tmp_path / "texture.png"
-    with pytest.raises(ToolError, match="out of range"):
-        run(export.export_frame(filename=filename, frame_index=999, output_filename=str(target)))
-    assert not target.exists()
-
-
 @pytest.mark.parametrize("corruption", ["png", "json", "layout"])
 def test_corrupt_delivery_is_rejected_before_publication(new_sprite, tmp_path, monkeypatch, corruption):
     filename = new_sprite()
@@ -181,3 +171,19 @@ def test_numbered_png_export_publishes_only_this_sequence(new_sprite, tmp_path):
         with Image.open(path) as image:
             assert image.convert("RGBA").getpixel((0, 0)) == colour
     assert reference.read_bytes() == b"reference"
+
+
+def test_export_tag_gif(sprite, tmp_path):
+    run(animation.add_frames(filename=sprite, count=1, duration_ms=150))
+    run(drawing.draw_pixels_at(filename=sprite, layer_name="body", frame_index=2,
+        pixels=[{"x": 0, "y": 0, "color": "#00ff00"}]))
+    run(animation.set_tag(filename=sprite, name="clip", from_frame=1, to_frame=2))
+    out = tmp_path / "clip.gif"
+    run(export.export_tag(filename=sprite, tag_name="clip", output_filename=str(out), scale=4))
+    with Image.open(out) as image:
+        assert image.size == (128, 128)
+        assert image.n_frames == 2
+        assert image.info["duration"] == 100
+        image.seek(1)
+        assert image.info["duration"] == 150
+        assert image.convert("RGBA").getpixel((0, 0)) == (0, 255, 0, 255)

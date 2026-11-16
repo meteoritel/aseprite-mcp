@@ -115,7 +115,7 @@ end
 
 ### 多边形的扫描线填充
 
-`draw_polygon(fill=True)` 自己实现了一条扫描线算法（[`drawing.py:820-850`](../aseprite_mcp/tools/drawing.py)）：按 y 求所有边的交点、排序、成对填充，交点用 `math.floor(x + 0.5)` 取整。顶点越界不会崩，因为走的是 `pset`（带边界判断）。回归测试：[`tests/test_drawing_fixes.py`](../tests/test_drawing_fixes.py)。
+`draw_polygon(fill=True)` 自己实现了一条扫描线算法（[`drawing.py:820-850`](../aseprite_mcp/tools/drawing.py)）：按 y 求所有边的交点、排序、成对填充，交点用 `math.floor(x + 0.5)` 取整。顶点越界不会崩，因为走的是 `pset`（带边界判断）。
 
 ### 渐变的插值
 
@@ -311,16 +311,11 @@ ns = min(1.0, max(0.0, s - t * 0.15))   # 暗侧更饱和，亮侧更灰
 
 ## 相关测试
 
-| 测试 | 覆盖 |
+| 测试 | 验证链路 |
 |---|---|
-| [`tests/test_drawing.py`](../tests/test_drawing.py) | `draw_ellipse_at` 画到中心、非法半径被拒 |
-| [`tests/test_drawing_fixes.py`](../tests/test_drawing_fixes.py) | 多边形越界顶点不被静默裁剪、渐变落在 sprite 全局坐标、RGBA/短十六进制被接受、坏颜色被拒 |
-| [`tests/test_text.py`](../tests/test_text.py) | 字体发现与报错、从磁盘 fixture 构建 bitmap 字体、度量/缩放/字距、粗体、基线、未映射字符、`overrides`、各 anchor、轮廓、空文本 no-op、TrueType（无系统字体则 skip） |
-| [`tests/test_palette.py`](../tests/test_palette.py) | 预设列举、应用预设、未知预设被拒、量化、色阶、色彩模式往返 |
-| [`tests/test_selection.py`](../tests/test_selection.py) | 区域复制/移动/擦除、按色擦除 |
-| [`tests/test_pixel_xy_validation.py`](../tests/test_pixel_xy_validation.py) | `pixels` 的 `x`/`y` 非整数被拒（注入防护） |
-| [`tests/test_visibility.py`](../tests/test_visibility.py) | 抖动工具的自动建层与拒绝、缺失图层报错带上下文 |
-| [`tests/test_sprite_map.py`](../tests/test_sprite_map.py) | 字符网格落位与 `x,y` 锚点、`"."` 跳过 vs `erase_transparent` 擦除、镜像、四种非法输入被拒；`get_sprite_map` 的读→画→读像素完全一致、回灌 `palette` 后字符稳定、量化、合成读取、alpha 阈值 |
+| [编辑工作流](../tests/test_editing_workflow.py) | 明确 layer/frame、RGBA 网格读取与修改后回灌、镜像和透明格编辑、区域复制移动擦除、图片导入 |
+| [MCP 工作流](../tests/test_mcp_workflow.py) | bitmap 文字代理绘制、中文路径和引号、非法坐标与目标的失败恢复、最终 PNG 像素 |
+| [可选扩展链路](../tests/optional/extension_workflows.py) | 原生反色、颜色替换和调色板读取 |
 
 ## 相关文档
 

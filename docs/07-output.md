@@ -49,4 +49,4 @@ CLI 帧过滤在打开文件前设置；`--scale` 等导出选项按 Aseprite �
 
 临时审阅图须在会话退出前查看。持久审阅图可显式调用通用导出；`start_preview_server` 提供本地 HTTP 目录预览，`stop_preview_server` 按端口 PID 停止。
 
-`test_export.py` 独立解码 PNG／GIF，检查内容、布局和时长；`test_minecraft_export.py` 检查四种方向、RGBA、局部索引、8×、源保全、无新文件和发布恢复。`test_protocol.py` 覆盖真实会话的审阅图清理。
+[交付工作流](../tests/test_delivery_workflow.py) 独立解码 PNG／GIF，检查 tag 方向、RGBA、时序、审阅图、源工程与旧产物保全、发布恢复；[MCP 工作流](../tests/test_mcp_workflow.py) 验证真实会话的交付和审阅图清理；图层与精灵表输出见[可选扩展链路](../tests/optional/extension_workflows.py)。

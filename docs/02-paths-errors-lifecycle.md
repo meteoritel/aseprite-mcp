@@ -39,4 +39,4 @@ stdio 客户端断开后 SDK 结束 server。lifespan 清理当前会话的临�
 
 ## 验证入口
 
-路径与编码见 `test_path_resolution.py`、`test_encoding.py`；执行期限、输出预算与回收见 `test_execution.py`；取消前工程保全见 `test_project_editing.py`；真实 MCP 的成功、失败、取消恢复与并发编辑见 `test_protocol.py`；断开退出见 `test_stdio_lifecycle.py`。
+真实 MCP 的相对路径、活跃文件、中文路径和失败恢复见 `tests/test_mcp_workflow.py`；进程期限、输出预算、UTF-8 诊断与进程树回收见 `tests/test_process_adapter.py`；取消、并发、断开和工程暂存清理见 `tests/test_lifecycle.py`；提交失败后的工程保全见 `tests/test_editing_workflow.py`。

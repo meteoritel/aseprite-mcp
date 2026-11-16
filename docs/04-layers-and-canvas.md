@@ -40,7 +40,7 @@ spr.layers
 
 1. **名字里的 `/` 有歧义**：`abc/x/y` 既可能指一个叫 `abc/x` 的组里的 `y`，也可能指 `abc → x → y` 三级结构。两种都成立时取最长的组名前缀。
 2. **裸名匹配优先取较浅的层**：不同组里有同名图层时，靠树的 BFS 顺序决定命中哪个。
-3. **判重只看顶层**。这是刻意的 —— Aseprite 允许不同组里有同名图层，所以"这个名字是否已存在"的检查必须限定在顶层，否则会误报。见 [`lua.py:20-21`](../aseprite_mcp/core/lua.py) 的注释与 [`tests/test_group_layers.py:87-91`](../tests/test_group_layers.py)。
+3. **判重只看顶层**。这是刻意的 —— Aseprite 允许不同组里有同名图层，所以"这个名字是否已存在"的检查必须限定在顶层，否则会误报。见 [`lua.py`](../aseprite_mcp/core/lua.py) 的共享查层规则。
 
 ### 自动创建只处理顶层
 
@@ -232,13 +232,10 @@ save_project(dst)               ← 暂存校验后提交目标
 
 ## 相关测试
 
-| 测试 | 覆盖 |
+| 测试 | 验证链路 |
 |---|---|
-| [`tests/test_layers.py`](../tests/test_layers.py) | 改名、复制、混合模式（未知模式被拒）、重排、向下合并、删除、展平 |
-| [`tests/test_group_layers.py`](../tests/test_group_layers.py) | **回归（issue #17）**：按裸名与路径访问组内图层、同名冲突时取较浅者、顶层判重、组名含 `/` |
-| [`tests/test_create_into_group.py`](../tests/test_create_into_group.py) | **回归（#17 后续）**：`add_group` 顶层/嵌套、`add_layer`/`duplicate_layer` 放进指定组或 `group/subgroup`、非组目标被拒 |
-| [`tests/test_sprite_info_groups.py`](../tests/test_sprite_info_groups.py) | **回归**：`get_sprite_info` 枚举组内子层并带 `parent` 字段 |
-| [`tests/test_path_resolution.py`](../tests/test_path_resolution.py) | `create_canvas` 要求绝对路径、只在成功后锚定 |
+| [编辑工作流](../tests/test_editing_workflow.py) | 组路径和含 `/` 的名称、裸名优先浅层、嵌套层信息、明确 cel 编辑、复制保留元数据、原生创建和提交保全 |
+| [MCP 工作流](../tests/test_mcp_workflow.py) | 会话活跃工程、工作区相对路径、嵌套组编辑、非法目标与失败后的继续编辑 |
 
 ## 相关文档
 

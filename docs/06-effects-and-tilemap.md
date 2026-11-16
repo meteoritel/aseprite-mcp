@@ -115,7 +115,7 @@ if f >= threshold then pset(img, px, py, c2) else pset(img, px, py, c1) end
 
 注意 `apply_dither_gradient` 的 `horizontal` 默认值是 **`False`**，与 `drawing.apply_gradient_rect` 的默认 `True` **相反**。这是个容易踩的不一致。
 
-两个工具都走 `ENSURE_LAYER` + `normalize_cel`，所以能自动创建缺失的顶层图层与 cel —— 这是 [commit `0f2bebf`](03-painting.md#三本子系统工具一览) 那批改动的产物，回归测试见 [`tests/test_visibility.py:239-265`](../tests/test_visibility.py)。
+两个工具都走 `ENSURE_LAYER` + `normalize_cel`，能够自动创建缺失的顶层图层与 cel。
 
 ---
 
@@ -398,7 +398,7 @@ print("SLICE:{" .. table.concat(parts, ",") .. "}")   -- 每行一个完整 JSON
 print("DONE")
 ```
 
-切片名用 Lua 的 `%q` 输出（`string.format("%q", slice.name)`），它会对引号和控制字符做正确转义。于是名字里含 `|`、`,`、`:` 都不会破坏解析 —— 而早期的"用 `|` 连接一行"方案在遇到这些字符时会整批解析失败。回归测试：[`tests/test_slices_pipe.py`](../tests/test_slices_pipe.py)。
+切片名用 Lua 的 `%q` 输出（`string.format("%q", slice.name)`），转义引号和控制字符。名称中含 `|`、`,`、`:` 时仍按 JSON 字符串解析；slice 元数据往返见[可选扩展链路](../tests/optional/extension_workflows.py)。
 
 Python 侧只 `json.loads` 每个 `SLICE:` 行并收进列表（[`slices.py:186-191`](../aseprite_mcp/tools/slices.py)），最后整体 `json.dumps`。所以工具返回的是一个**JSON 数组**，而传输层用的是**逐行协议** —— 两层是分开的。
 
@@ -434,14 +434,9 @@ Python 侧只 `json.loads` 每个 `SLICE:` 行并收进列表（[`slices.py:186-
 
 ## 相关测试
 
-| 测试 | 覆盖 |
+| 测试 | 验证链路 |
 |---|---|
-| [`tests/test_fx.py`](../tests/test_fx.py) | `outline_cel`、`replace_color`、`adjust_hsl`、两个抖动工具 |
-| [`tests/test_native_fx.py`](../tests/test_native_fx.py) | 卷积矩阵列举与未知值拒绝、原生描边、精确反色、HSL、亮度对比、模糊、范围校验、`extract_palette` |
-| [`tests/test_tilemap.py`](../tests/test_tilemap.py) | 创建 tilemap 图层、`draw_on_tile`、tilemap 信息、`set_tiles`/`get_tile_at`、越界索引被拒 |
-| [`tests/test_slices.py`](../tests/test_slices.py) | 创建（重复名被拒）、中心、轴心、列举、删除 |
-| [`tests/test_slices_pipe.py`](../tests/test_slices_pipe.py) | **回归**：slice 名字里含 `\|` 和 `,` 时 `list_slices` 仍能解析 |
-| [`tests/test_visibility.py`](../tests/test_visibility.py) | **回归**：`extract_palette` 排除透明槽并遵守 N−1 预算、抖动工具自动建层与拒绝 |
+| [可选扩展链路](../tests/optional/extension_workflows.py) | 原生反色与颜色替换的保存后像素、调色板透明槽、tilemap 绘制放置和渲染、slice 元数据和重复名失败保全 |
 
 ## 相关文档
 

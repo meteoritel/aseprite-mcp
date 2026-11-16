@@ -156,7 +156,7 @@ end
 
 ### 一致性保证
 
-**结果与 `export_frame` 写出的 PNG 逐像素一致**，因为合并这一步是 Aseprite 自己的代码。这个不变量被测试直接锁定：[`tests/test_visibility.py:96-105`](../tests/test_visibility.py)。
+**结果与 `export_frame` 写出的 PNG 逐像素一致**，因为合并这一步是 Aseprite 自己的代码。这个不变量被测试直接锁定：[可见工作流](../tests/test_visual_workflow.py)。
 
 写新的"合成读取"类工具时**必须**复用 `_COMPOSE_FRAME`，不要自己调 `spr:flatten()`。
 
@@ -428,12 +428,11 @@ end
 
 ## 相关测试
 
-| 测试 | 覆盖 |
+| 测试 | 验证链路 |
 |---|---|
-| [`tests/test_composite_read.py`](../tests/test_composite_read.py) | **回归**：`get_composite_*` 返回可见顶层的内容、矩形形状、越界像素为透明 |
-| [`tests/test_visibility.py`](../tests/test_visibility.py) | **回归（field report）**：合成与分析工具排除隐藏层并与导出的 PNG 一致、组可见性、像素读取拒绝 tilemap 层、`extract_palette` 的槽位预算、Lua 错误能浮出、缺失图层报错带上下文（18 个参数化站点） |
-| [`tests/test_analysis.py`](../tests/test_analysis.py) | `render_onion_skin`、`compare_frames`、`get_color_stats` |
-| [`tests/test_error_propagation.py`](../tests/test_error_propagation.py) | **回归（issue #15）**：非法输入必须报失败 |
+| [可见工作流](../tests/test_visual_workflow.py) | 可见层与组的合成、隐藏 cel 单独读取、颜色统计、帧差及审阅 PNG 与独立 CLI 渲染一致 |
+| [MCP 工作流](../tests/test_mcp_workflow.py) | Lua 诊断、缺失目标上下文、坐标与路径拒绝、失败后继续编辑 |
+| [可选扩展链路](../tests/optional/extension_workflows.py) | tilemap 索引读取与渲染色、错误像素读取提示、调色板透明槽 |
 
 ## 相关文档
 

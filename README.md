@@ -409,7 +409,7 @@ For client configuration examples, see [development](docs/development.md#客户�
 
 The MCP Python SDK owns the stdio transport lifecycle. When the client closes
 its input pipe, the server transport finishes and the process exits. The
-`tests/test_stdio_lifecycle.py` regression test verifies this after a client
+`tests/test_lifecycle.py` regression test verifies this after a client
 process is force-killed.
 
 ## Developer Documentation

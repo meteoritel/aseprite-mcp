@@ -95,17 +95,25 @@ uv run --locked python -B -m pytest -p no:cacheprovider
 git diff --check
 ```
 
-标准编辑测试需要本机 Aseprite。`tests/conftest.py` 在 `tempfile.gettempdir()` 下为每次运行创建 UUID 隔离目录，每个场景使用独立原生工程；退出仅清理本次目录。
+默认测试围绕真实编辑、审阅、交付和会话生命周期组织，需要本机 Aseprite。工程和输出由 pytest 的 `tmp_path` 隔离；`tests/conftest.py` 提供独立工程和确定的 bitmap 字体，并在场景结束后重置活跃文件、清理审阅图。`tests/support.py` 集中承载 stdio 会话、按 requestId 暂存响应和独立 CLI 图片读取。
 
 | 验证面 | 测试入口 |
 |---|---|
-| 原生编辑、group、cel 元数据与失败保全 | `test_project_editing.py` |
-| 网格 RGBA、镜像与回灌 | `test_sprite_map.py`、`test_project_editing.py` |
-| PNG／GIF、JE 时序和发布恢复 | `test_export.py`、`test_minecraft_export.py` |
-| 可见合成与隐藏层 | `test_visibility.py` |
-| 进程超时、取消、预算与回收 | `test_execution.py`、`test_encoding.py` |
-| 标准发现、扩展代理、JE 闭环、串行与断开 | `test_protocol.py`、`test_stdio_lifecycle.py` |
-| 注册副作用、完整 schema、确定性参考 | `test_tool_catalog.py` |
+| MCP 发现、绘制、回读、文字代理、JE 交付与失败恢复 | `tests/test_mcp_workflow.py` |
+| 明确编辑目标、嵌套组、RGBA 回灌、区域编辑、复制与提交保全 | `tests/test_editing_workflow.py` |
+| 可见合成、隐藏层和组、帧差与审阅图 | `tests/test_visual_workflow.py` |
+| PNG／GIF、JE 时序、产物校验与发布恢复 | `tests/test_delivery_workflow.py` |
+| 并发、取消、断开与客户端突然退出 | `tests/test_lifecycle.py` |
+| 真实子进程的期限、预算、UTF-8 诊断与回收 | `tests/test_process_adapter.py` |
+
+扩展场景和维护校验使用显式入口，按需执行：
+
+```text
+uv run --locked python -B -m pytest -p no:cacheprovider tests/optional/extension_workflows.py
+uv run --locked python -B -m pytest -p no:cacheprovider tests/maintenance/checks.py
+```
+
+扩展链路验证 tilemap 的绘制、放置和渲染，slice 元数据往返，原生颜色处理与调色板读取，以及图层和 tag 精灵表交付。维护校验验证参考生成、接口变化检测和启动指令资源；这些文件不参与默认测试收集。
 
 参考生成器只解析目录字面量和源码 AST，无需 Git 元数据、第三方依赖或 Aseprite。归属、签名及 docstring 变化会使 `--check` 报过期。IDE 分析使用项目 `.venv`；包版本相关提示结合该解释器中的实际导入与协议测试判断。
 
