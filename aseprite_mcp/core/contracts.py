@@ -28,7 +28,7 @@ NonnegativeInt = Annotated[int, Field(ge=0)]
 Byte = Annotated[int, Field(ge=0, le=255)]
 FrameIndex = Annotated[int, Field(ge=1, description="External frame number, starting at 1.")]
 LayerPath = Annotated[list[Annotated[str, Field(min_length=1)]], Field(min_length=1)]
-LayerRef = Annotated[str | LayerPath, Field(description="Legacy name/group path, or exact path segments. An array never splits names containing '/'.")]
+LayerRef = Annotated[str | LayerPath, Field(description="A name or group path, or exact path segments from get_sprite_info. Use an array to distinguish a nested layer from a name containing '/'.")]
 
 
 @with_config(ConfigDict(extra="forbid"))
@@ -65,14 +65,14 @@ class SpriteMapEdit(ContractModel):
     layer_name: LayerRef
     frame_index: FrameIndex
     rows: Annotated[list[str], Field(min_length=1, description="Equal-width pixel rows, top to bottom.")]
-    palette: Annotated[Palette, Field(description="Single-character keys mapped to RGB/RGBA hex colours; transparent is reserved.")]
+    palette: Annotated[Palette, Field(description="Single-character keys mapped to #RGB, #RGBA, #RRGGBB or #RRGGBBAA. The transparent character is reserved.")]
     x: int = Field(default=0, description="Sprite-global x of the grid origin; may be negative for clipping.")
     y: int = Field(default=0, description="Sprite-global y of the grid origin; may be negative for clipping.")
-    transparent: Character = "."
-    mirror_x: bool = False
-    mirror_y: bool = False
-    erase_transparent: bool = False
-    create_if_missing: bool = True
+    transparent: Character = Field(default=".", description="Character for cells to skip or erase.")
+    mirror_x: bool = Field(default=False, description="Reflect within the grid width. Different colors at the same reflected position are an error.")
+    mirror_y: bool = Field(default=False, description="Reflect within the grid height. Different colors at the same reflected position are an error.")
+    erase_transparent: bool = Field(default=False, description="Erase transparent cells. By default they leave the current pixels in place.")
+    create_if_missing: bool = Field(default=True, description="Create a missing top-level image layer or cel. Nested layers and target frames must already exist.")
 
 
 class ContractTool(Tool):

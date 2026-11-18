@@ -8,7 +8,7 @@ from pathlib import Path
 from mcp.server import MCPServer
 from .core.contracts import ContractTool
 
-from .tool_catalog import CORE_TOOLS, DISCOVERY_TOOLS, EXTENSION_TOOLS
+from .tool_catalog import CORE_TOOLS, DISCOVERY_TOOLS, EXTENSION_TOOLS, TOOL_EXAMPLES
 from .tool_discovery import create_discovery_tools
 
 def _load_skill_instructions() -> str:
@@ -37,7 +37,12 @@ def _load_tools(catalog):
     for category, names in catalog.items():
         module = import_module(f".tools.{category}", __name__)
         for name in names:
-            yield category, ContractTool.from_function(getattr(module, name))
+            tool = ContractTool.from_function(getattr(module, name))
+            if examples := TOOL_EXAMPLES.get(name):
+                for example in examples:
+                    tool.validate_example(example)
+                tool.parameters["examples"] = examples
+            yield category, tool
 
 
 def create_server() -> MCPServer:

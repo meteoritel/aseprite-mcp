@@ -96,22 +96,9 @@ async def draw_sprite_maps(*, filename: str = "", maps: Annotated[list[SpriteMap
 async def draw_sprite_map(*, filename: str='', layer_name: LayerRef, frame_index: FrameIndex, rows: List[str], palette: Palette, x: int=0, y: int=0, transparent: Character='.', mirror_x: bool=False, mirror_y: bool=False, erase_transparent: bool=False, create_if_missing: bool=True) -> ToolOutput[EditReceipt]:
     """Draw a whole region from a compact character-grid map.
 
-    `rows` is a list of equal-length strings, one per pixel row, top to
-    bottom; `palette` maps each character to a colour. This is the compact
-    alternative to draw_pixels_at's {x, y, color} lists:
-
-        draw_sprite_map(
-            layer_name="hero", frame_index=1,
-            rows=["..1111..",
-                  ".122221.",
-                  "12233221"],
-            palette={"1": "#3b2a1e", "2": "#8b5a2b", "3": "#f2c48d"},
-        )
-
-    Characters equal to `transparent` ("." by default) are skipped, so
-    whatever is already on the layer shows through. Pass
-    erase_transparent=true to clear them instead — that is what makes a
-    map round-trip exactly after pixels are deleted in an edit.
+    Use an RGB project. For a reviewed cel, pass a copy of cel.edit from
+    review_frame and the project filename. The edit grid erases transparent
+    cells inside its rectangle and leaves pixels outside it intact.
 
     Args:
         filename: Aseprite file to modify (optional; defaults to the session's active file)
@@ -157,24 +144,13 @@ async def get_sprite_map(
 ) -> ToolOutput[SpriteMap]:
     """Read a rectangular region back as a compact character-grid map.
 
-    Returns JSON whose `rows`, `palette` and `transparent` are shaped
-    exactly like draw_sprite_map's arguments, so a read/edit/write loop
-    needs no reformatting:
+    RGB cel reads preserve RGBA with the default settings. The result is
+    lossy when a color limit or alpha threshold changes pixels. Use a smaller
+    region if exact colors exceed the available character slots.
 
-        {"layer": "hero", "frame": 1, "x": 0, "y": 0,
-         "width": 16, "height": 16, "transparent": ".",
-         "columns": "0123456789abcdef",
-         "palette": {"0": "#3b2a1e", "1": "#8b5a2b"},
-         "rows": ["....0011........", ...]}
-
-    `columns` labels each column's x offset, so a character's position can
-    be read off without counting. Against get_pixels_rect's per-pixel JSON
-    a 16x16 region goes from ~256 objects to 16 short strings — and unlike
-    judging an exported PNG by eye, the hex values are exact.
-
-    Auto-assigned characters follow ascending colour order. Pass `palette`
-    (e.g. a previous result's) to pin the assignment: characters then stay
-    stable across edits, so two maps can be diffed character by character.
+    Reuse rows, palette, transparent and the origin for draw_sprite_map.
+    Set erase_transparent=true to round-trip removed pixels. To compare
+    successive grids, pass the previous palette to keep character assignments.
 
     Args:
         filename: Aseprite file to read (optional; defaults to the session's active file)

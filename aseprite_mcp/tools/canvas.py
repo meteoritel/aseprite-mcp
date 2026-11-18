@@ -15,9 +15,8 @@ async def create_canvas(width: PositiveInt, height: PositiveInt, *, filename: st
     Args:
         width: Width of the canvas in pixels
         height: Height of the canvas in pixels
-        filename: REQUIRED. Absolute path for the output file, e.g.
-            "D:/art/sprites/coin.aseprite". Relative paths are rejected, so
-            the canvas can never silently land in the server's own folder.
+        filename: Absolute project path ending in .aseprite or .ase.
+            An omitted extension becomes .aseprite. The saved project becomes the active file.
         overwrite: Replace an existing native project (default False)
     """
     if width <= 0 or height <= 0:

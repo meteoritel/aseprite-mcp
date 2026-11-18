@@ -62,12 +62,16 @@ def test_complete_discovery_and_contract_failures_without_aseprite(tmp_path, bit
         extension_names = {name for names in EXTENSION_TOOLS.values() for name in names}
         assert definitions.keys() == core_names | extension_names
         for name, definition in definitions.items():
-            Draft202012Validator.check_schema(definition["inputSchema"])
+            input_schema = definition["inputSchema"]
+            Draft202012Validator.check_schema(input_schema)
             Draft202012Validator.check_schema(definition["outputSchema"])
             assert definition["invocation"] == ("direct" if name in core_names else "call_tool")
-            assert definition["inputSchema"]["additionalProperties"] is False
+            assert input_schema["additionalProperties"] is False
+            assert input_schema.get("examples", []) == definition["examples"] == TOOL_EXAMPLES.get(name, [])
+            if name in core_names:
+                assert schemas[name]["inputSchema"] == input_schema
             for example in definition["examples"]:
-                validate(example, definition["inputSchema"])
+                validate(example, input_schema)
         assert definitions["set_slice_center"]["inputSchema"]["properties"]["x"]["description"]
         assert definitions["draw_sprite_maps"]["inputSchema"]["$defs"]["SpriteMapEdit"]["additionalProperties"] is False
         assert all(definitions[name]["examples"] for name in TOOL_EXAMPLES)

@@ -10,7 +10,7 @@ from mcp.server.mcpserver.tools import Tool
 from pydantic import Field, JsonValue
 
 from .core.contracts import ContractModel, ContractTool, ToolOutput
-from .tool_catalog import TOOL_EXAMPLES, TOOL_SEARCH_TERMS
+from .tool_catalog import TOOL_SEARCH_TERMS
 
 
 class ToolDefinition(ContractModel):
@@ -35,10 +35,6 @@ def _words(text: str) -> set[str]:
 
 def create_discovery_tools(extensions: dict[str, tuple[str, Tool]], core: dict[str, tuple[str, Tool]] | None = None) -> list[Tool]:
     catalog = {**(core or {}), **extensions}
-    for name, examples in TOOL_EXAMPLES.items():
-        if name in catalog:
-            for example in examples:
-                catalog[name][1].validate_example(example)
     categories = list(dict.fromkeys(category for category, _ in catalog.values()))
     workflow_terms = set().union(*TOOL_SEARCH_TERMS.values())
 
@@ -80,7 +76,7 @@ def create_discovery_tools(extensions: dict[str, tuple[str, Tool]], core: dict[s
         return ToolDefinition(
             name=name, category=category, invocation="call_tool" if name in extensions else "direct",
             description=tool.description, inputSchema=tool.parameters, outputSchema=tool.output_schema,
-            examples=TOOL_EXAMPLES.get(name, []),
+            examples=tool.parameters.get("examples", []),
         )
 
     async def search_tools(

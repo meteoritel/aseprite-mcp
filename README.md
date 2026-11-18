@@ -10,13 +10,11 @@
 - **导出交付**：输出 PNG、GIF、精灵表，以及 Minecraft Java Edition 纹理和 `.png.mcmeta`。
 - **文字与瓦片**：绘制文字，编辑 tilemap 和 slice。
 
-核心工具可以直接调用；文字、tilemap、slice 等扩展通过 `search_tools` 查找，再由 `call_tool` 执行。完整工具与参数见[工具参考](docs/reference/tools.md)。
-
-多层网格用 `draw_sprite_maps` 一次提交。用 `review_frame` 查看内联 8× PNG，指定图层可获取能直接交给 `draw_sprite_map` 的 cel 网格，传回前次快照可核对修改前后的 RGBA 差异。客户端从 `structuredContent.data` 读取结构化结果。工具发现返回 schema、示例和调用入口。
+核心工具的定义由 MCP `tools/list` 提供。连接后可让助手用 `search_tools` 查阅完整目录、调用入口和参数示例。
 
 ## 安装与配置
 
-需要 Python 3.13+、[uv](https://docs.astral.sh/uv/) 和本机安装的 Aseprite。下载或克隆本项目后，在项目根目录安装依赖：
+需要 Python 3.13+、uv 和本机安装的 Aseprite。在项目根目录安装依赖。 [uv](https://docs.astral.sh/uv/)
 
 ```sh
 uv sync --locked
@@ -24,7 +22,7 @@ uv sync --locked
 
 项目从源码目录运行，请保留根目录的 [SKILL.md](SKILL.md)，服务会读取其中的运行指令。
 
-在支持 `mcpServers` 配置的客户端中添加以下条目，将路径替换为本机的绝对路径：
+在支持 `mcpServers` 的客户端中添加以下配置，将占位路径替换为本机绝对路径。
 
 ```json
 {
@@ -45,14 +43,22 @@ uv sync --locked
 }
 ```
 
-`ASEPRITE_PATH` 指向 Aseprite 可执行文件；已加入 PATH 时可省略。`ASERITE_MCP_WORKSPACE` 指定素材工作目录，用于解析相对路径，变量名按示例保留。macOS 和 Linux 使用对应的本机绝对路径。
+`ASEPRITE_PATH` 指向 Aseprite 可执行文件，已加入 PATH 时可省略。`ASERITE_MCP_WORKSPACE` 指定相对素材路径的基准，变量名按示例保留。
 
-保存配置后重新连接 MCP。Codex、Claude Code 等客户端的配置位置和格式见[客户端配置](docs/development.md#客户端配置)。如果客户端找不到 `uv`，将 `command` 改为 uv 可执行文件的绝对路径。
+Codex 在 `~/.codex/config.toml` 中使用对应的 TOML 配置。
 
-## 详细文档
+```toml
+[mcp_servers.aseprite]
+command = "uv"
+args = ["--directory", "YOUR_ASEPRITE_MCP_PATH", "run", "--locked", "-m", "aseprite_mcp"]
 
-- [使用流程与工程约定](SKILL.md)：创建工程、明确编辑目标、网格回灌与审阅。
-- [工具参考](docs/reference/tools.md)：工具归属、参数和调用方式。
-- [导出与纹理交付](docs/07-output.md)：图像导出、Minecraft 动画时序和审阅图。
-- [本地开发与验证](docs/development.md)：环境变量、启动方式和测试入口。
-- [开发者文档](docs/README.md)：架构、数据流和各领域的实现说明。
+[mcp_servers.aseprite.env]
+ASEPRITE_PATH = "YOUR_ASEPRITE_PATH"
+ASERITE_MCP_WORKSPACE = "YOUR_WORKSPACE_PATH"
+```
+
+保存配置后重新连接 MCP。客户端找不到 `uv` 时，将 `command` 设为 uv 可执行文件的绝对路径。
+
+## 开发
+
+项目结构、执行流程和测试入口见 [开发者文档](docs/README.md)。

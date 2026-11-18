@@ -10,6 +10,7 @@ from typing import Annotated, Literal
 from PIL import Image
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import CallToolResult, ImageContent, TextContent
+from pydantic import Field
 
 from ..core.commands import AsepriteCommand, lua_escape
 from ..core.composite import COMPOSE_FRAME
@@ -28,15 +29,15 @@ REVIEW_SCALE = 8
 class ReviewedCel(ContractModel):
     layer_name: LayerPath
     status: Literal["exact", "missing_cel", "palette_capacity"]
-    edit: SpriteMapEdit | None
+    edit: SpriteMapEdit | None = Field(description="For an exact grid, pass a copy to draw_sprite_map with the original filename. Transparent cells erase pixels in this rectangle.")
 
 
 class FrameReviewSnapshot(ContractModel):
     filename: str
     frame: FrameIndex
     region: Region
-    map: SpriteMap | None
-    cel: ReviewedCel | None = None
+    map: SpriteMap | None = Field(description="Exact visible composite grid. Null when the composite exceeds character capacity.")
+    cel: ReviewedCel | None = Field(default=None, description="Original pixels for the selected image layer, independent of layer visibility. Null when no layer was selected.")
 
 
 class FrameReviewChanges(ContractModel):
@@ -46,8 +47,8 @@ class FrameReviewChanges(ContractModel):
 
 class FrameReview(FrameReviewSnapshot):
     map_unavailable: Literal["palette_capacity"] | None = None
-    changes: FrameReviewChanges | None = None
-    preview_png: str
+    changes: FrameReviewChanges | None = Field(default=None, description="RGBA differences against before, separately for the composite and cel. An entry is null when its exact baseline is unavailable.")
+    preview_png: str = Field(description="Session-local path to the same PNG supplied in the inline image block.")
     preview_scale: int
     preview_lifetime: Literal["session"] = "session"
 
@@ -63,16 +64,18 @@ async def review_frame(
 ) -> Annotated[CallToolResult, ToolOutput[FrameReview]]:
     """Review a frame as an inline 8x PNG and, when colors fit, an exact grid.
 
-    The grid and nearest-neighbor PNG come from one Aseprite composition. Hidden
-    layers/groups are excluded. The source project is never saved by this read.
+    Review the visible composite before editing. Specify an image layer to get
+    cel.edit for draw_sprite_map, preserve the original snapshot, and review the
+    same target with before to confirm which pixels changed. The PNG remains
+    available when the composite exceeds the grid's character capacity.
 
     Args:
         filename: Native project, defaulting to the active file.
         frame_index: Explicit source frame, starting at 1.
         region: Sprite-global pixel rectangle; omitted reads the whole canvas.
         palette: Optional single-character colour mapping to keep characters stable.
-        layer_name: Optional image layer to read as an editable cel in the same region.
-        before: Previous filename, frame, region, map and cel from review_frame, for exact RGBA comparison.
+        layer_name: Optional RGB image layer to read as an editable cel in the same region. Use an exact layer path when names are ambiguous.
+        before: Pass only filename, frame, region, map and cel from the previous structuredContent.data. Use the same project, frame, region and layer as the current review.
     """
     filename = prepare_filename(filename)
     _, error = parse_sprite_map(["."], palette or {}, ".")

@@ -304,9 +304,10 @@ async def export_minecraft_texture(*, filename: str = "", output_filename: str,
                                    frame_index: FrameIndex | None = None, tag_name: str = "") -> ToolOutput[TextureDelivery]:
     """Deliver Java Edition PNG and mcmeta, plus a temporary 8x review PNG.
 
-    PNG stores each selected source frame once. Source frames are 1-based;
-    mcmeta playback indexes are 0-based. A four-frame pingpong plays
-    [0,1,2,3,2,1] without duplicating PNG cells.
+    A single frame yields a canvas-sized PNG and empty mcmeta. Animation uses
+    an unpadded vertical strip at the original resolution, with each source
+    frame stored once. The mcmeta uses zero-based strip indexes and exact
+    game ticks. Animation frame durations must be positive multiples of 50 ms.
 
     Args:
         filename: Source native project (defaults to the active file)

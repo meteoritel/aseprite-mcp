@@ -1,4 +1,4 @@
-"""Stable tool membership and ordering for runtime assembly and documentation."""
+"""Tool membership, search terms and examples for MCP registration."""
 
 DISCOVERY_TOOLS = ("search_tools", "call_tool")
 
@@ -178,8 +178,23 @@ TOOL_SEARCH_TERMS = {
 }
 
 TOOL_EXAMPLES = {
-    "draw_sprite_maps": [{"maps": [{"layer_name": "ink", "frame_index": 1, "rows": ["A."], "palette": {"A": "#FFFFFF"}}]}],
-    "review_frame": [{"frame_index": 1, "layer_name": ["ink"], "region": {"x": 0, "y": 0, "width": 16, "height": 16}}],
+    "create_canvas": [{"width": 16, "height": 16, "filename": "D:/art/coin.aseprite"}],
+    "draw_sprite_maps": [{"maps": [
+        {"layer_name": "base", "frame_index": 1, "x": 6, "y": 6,
+         "rows": [".AA.", "AAAA", ".AA."], "palette": {"A": "#8B5A2B"}},
+        {"layer_name": "shine", "frame_index": 1, "x": 7, "y": 6,
+         "rows": ["BB"], "palette": {"B": "#F2C48D"}},
+    ]}],
+    "draw_sprite_map": [{
+        "layer_name": ["shine"], "frame_index": 1, "x": 7, "y": 6,
+        "rows": ["B."], "palette": {"B": "#F2C48D"},
+        "erase_transparent": True, "create_if_missing": False,
+    }],
+    "review_frame": [{
+        "frame_index": 1, "layer_name": ["shine"],
+        "region": {"x": 7, "y": 6, "width": 2, "height": 1}, "palette": {"B": "#F2C48D"},
+    }],
+    "draw_text": [{"text": "A", "font": "DejaVu Sans", "x": 0, "y": 0, "layer_name": "label", "frame_index": 1}],
     "draw_on_tile": [{"layer_name": "tiles", "tile_index": 1, "pixels": [{"x": 0, "y": 0, "color": "#FFFFFF"}]}],
     "get_tile_at": [{"layer_name": "tiles", "frame_index": 1, "col": 0, "row": 0}],
     "tween_cel_positions": [{"layer_name": "ink", "start_frame": 1, "end_frame": 4, "start_x": 0, "start_y": 0, "end_x": 3, "end_y": 0}],
@@ -189,5 +204,8 @@ TOOL_EXAMPLES = {
     "export_layers": [{"output_directory": "D:/art/layers"}],
     "get_tilemap_info": [{"layer_name": "tiles"}],
     "audit_animation": [{"layer_frame_ranges": [{"layer": ["art", "ink"], "ranges": [[1, 4]]}], "report_cels": True}],
-    "export_minecraft_texture": [{"output_filename": "D:/art/texture.png", "tag_name": "loop"}],
+    "export_minecraft_texture": [
+        {"output_filename": "D:/art/coin.png"},
+        {"output_filename": "D:/art/texture.png", "tag_name": "loop"},
+    ],
 }
