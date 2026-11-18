@@ -95,6 +95,7 @@ CORE_TOOLS = {
     ),
     "fx": (
         "replace_color",
+        "draw_dither_detail",
     ),
     "analysis": (
         "render_onion_skin",
@@ -173,6 +174,10 @@ EXTENSION_TOOLS = {
 TOOL_SEARCH_TERMS = {
     "draw_sprite_map": ("绘制", "修改", "擦除"),
     "draw_sprite_maps": ("绘制", "修改", "批量"),
+    "draw_dither_detail": ("抖动", "纹理", "质感"),
+    "apply_dither_pattern": ("抖动", "纹理", "质感"),
+    "apply_dither_gradient": ("抖动", "渐变", "过渡"),
+    "adjust_hsl": ("色相", "色相偏移", "色相调整"),
     "review_frame": ("审阅", "预览", "复核"),
     "export_minecraft_texture": ("纹理导出", "导出"),
 }
@@ -189,6 +194,10 @@ TOOL_EXAMPLES = {
         "layer_name": ["shine"], "frame_index": 1, "x": 7, "y": 6,
         "rows": ["B."], "palette": {"B": "#F2C48D"},
         "erase_transparent": True, "create_if_missing": False,
+    }],
+    "draw_dither_detail": [{
+        "layer_name": "body", "frame_index": 1, "x": 4, "y": 4,
+        "width": 8, "height": 8, "color": "#F2C48D", "density": 0.5,
     }],
     "review_frame": [{
         "frame_index": 1, "layer_name": ["shine"],

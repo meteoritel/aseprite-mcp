@@ -8,6 +8,15 @@ from ..core.lua import ENSURE_LAYER, FIND_LAYER, HSL, LAYER_NAMES, NORMALIZE_CEL
 from ..core.results import EditReceipt
 from ..core.state import prepare_filename
 
+BAYER_4X4_LUA = """
+local bayer = {
+    { 0,  8,  2, 10},
+    {12,  4, 14,  6},
+    { 3, 11,  1,  9},
+    {15,  7, 13,  5},
+}
+"""
+
 
 def _parse_hex_color(value: str) -> tuple[int, int, int] | None:
     """RGB-only parse (alpha dropped); unified via core.colors.parse_hex_color."""
@@ -290,12 +299,7 @@ async def apply_dither_gradient(filename: str='', *, layer_name: LayerRef, frame
     local target = ensure_layer(spr, {lua_layer_ref(layer_name)} , {create})
     if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first; dither tools auto-create top-level layers when create_if_missing=true.") return end
 
-    local bayer = {{
-        {{ 0,  8,  2, 10}},
-        {{12,  4, 14,  6}},
-        {{ 3, 11,  1,  9}},
-        {{15,  7, 13,  5}},
-    }}
+    {BAYER_4X4_LUA}
 
     app.transaction(function()
         local cel = normalize_cel(spr, target, spr.frames[idx], {create})
@@ -379,12 +383,7 @@ async def apply_dither_pattern(filename: str='', *, layer_name: LayerRef, frame_
     local target = ensure_layer(spr, {lua_layer_ref(layer_name)} , {create})
     if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first; dither tools auto-create top-level layers when create_if_missing=true.") return end
 
-    local bayer = {{
-        {{ 0,  8,  2, 10}},
-        {{12,  4, 14,  6}},
-        {{ 3, 11,  1,  9}},
-        {{15,  7, 13,  5}},
-    }}
+    {BAYER_4X4_LUA}
 
     app.transaction(function()
         local cel = normalize_cel(spr, target, spr.frames[idx], {create})
@@ -412,4 +411,94 @@ async def apply_dither_pattern(filename: str='', *, layer_name: LayerRef, frame_
     return (
         edit_output(f"Dither pattern ({color_a}/{color_b}, density {density}) applied at "
         f"({x},{y}) {width}x{height} on '{layer_name}' frame {frame_index} in {filename}", filename, execution, frame_index)
+    )
+
+
+async def draw_dither_detail(
+    filename: str='',
+    *,
+    layer_name: LayerRef,
+    frame_index: FrameIndex,
+    x: int,
+    y: int,
+    width: PositiveInt,
+    height: PositiveInt,
+    color: str,
+    density: float=0.5,
+) -> ToolOutput[EditReceipt]:
+    """Overlay a Bayer-dithered accent on opaque pixels in an existing cel.
+
+    The pattern follows sprite coordinates. Unselected pixels and
+    transparency stay unchanged, and selected pixels keep their alpha.
+
+    Args:
+        filename: Aseprite file to modify (optional; defaults to the active file)
+        layer_name: Existing image layer to edit
+        frame_index: Frame index starting at 1
+        x: Left edge of the detail region
+        y: Top edge of the detail region
+        width: Region width
+        height: Region height
+        color: Accent color as #RGB or #RRGGBB; existing alpha is retained
+        density: Fraction of opaque pixels to recolor, from 0.0 to 1.0
+    """
+    filename = prepare_filename(filename)
+    if width <= 0 or height <= 0:
+        raise ToolError("Width and height must be > 0")
+    if not (0 <= density <= 1):
+        raise ToolError("density must be between 0.0 and 1.0")
+
+    color_digits = color.strip().removeprefix("#")
+    if len(color_digits) not in (3, 6):
+        raise ToolError("Color must contain 3 or 6 RGB hex digits")
+
+    rgb = _parse_hex_color(color)
+    if rgb is None:
+        raise ToolError("Color must be a valid RGB hex value")
+    r, g, b = rgb
+
+    safe_layer = lua_escape(layer_name)
+    script = f"""
+    {FIND_LAYER}
+    {LAYER_NAMES}
+    {NORMALIZE_CEL}
+    {PSET}
+    local spr = app.activeSprite
+    if not spr then print("ERROR:No active sprite") return end
+
+    local idx = {frame_index}
+    if idx < 1 or idx > #spr.frames then print("ERROR:Frame index {frame_index} out of range (sprite has " .. #spr.frames .. " frame(s), 1-based). Tip: call add_frame first.") return end
+
+    local target = find_layer(spr, {lua_layer_ref(layer_name)})
+    if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
+    if target.isGroup or target.isTilemap then print("ERROR:Layer '{safe_layer}' must be an image layer") return end
+    if not target:cel(spr.frames[idx]) then print("ERROR:No cel on layer '{safe_layer}' at frame {frame_index}") return end
+
+    {BAYER_4X4_LUA}
+    app.transaction(function()
+        local cel = normalize_cel(spr, target, spr.frames[idx], false)
+        local img = cel.image
+        for py = {y}, {y} + {height} - 1 do
+            for px = {x}, {x} + {width} - 1 do
+                if px >= 0 and py >= 0 and px < img.width and py < img.height then
+                    local source = img:getPixel(px, py)
+                    local alpha = app.pixelColor.rgbaA(source)
+                    local threshold = (bayer[(py % 4) + 1][(px % 4) + 1] + 0.5) / 16
+                    if alpha > 0 and {density} > threshold then
+                        pset(img, px, py, app.pixelColor.rgba({r}, {g}, {b}, alpha))
+                    end
+                end
+            end
+        end
+    end)
+
+    save_project(spr)
+    print("OK")
+    """
+
+    execution = await execute_edit_script(script, filename)
+    return edit_output(
+        f"Dither detail {color} at ({x},{y}) {width}x{height}, density {density} "
+        f"on '{layer_name}' frame {frame_index} in {filename}",
+        filename, execution, frame_index,
     )

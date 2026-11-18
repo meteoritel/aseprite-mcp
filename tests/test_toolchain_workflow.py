@@ -75,7 +75,14 @@ def test_complete_discovery_and_contract_failures_without_aseprite(tmp_path, bit
         assert definitions["set_slice_center"]["inputSchema"]["properties"]["x"]["description"]
         assert definitions["draw_sprite_maps"]["inputSchema"]["$defs"]["SpriteMapEdit"]["additionalProperties"] is False
         assert all(definitions[name]["examples"] for name in TOOL_EXAMPLES)
-        for query, expected in [("draw_sprite_maps", "draw_sprite_maps"), ("get_scene_info", "get_sprite_info"), ("quality", "ensure_layers_present")]:
+        for query, expected in [
+            ("draw_sprite_maps", "draw_sprite_maps"),
+            ("get_scene_info", "get_sprite_info"),
+            ("quality", "ensure_layers_present"),
+            ("抖动", "draw_dither_detail"),
+            ("质感", "draw_dither_detail"),
+            ("色相", "adjust_hsl"),
+        ]:
             result = call(send, receive, "search_tools", {"query": query})["structuredContent"]["data"]
             assert expected in [tool["name"] for tool in result["tools"]], result
         bad = [
@@ -97,6 +104,36 @@ def test_complete_discovery_and_contract_failures_without_aseprite(tmp_path, bit
         assert measured["structuredContent"] == json.loads(measured["content"][0]["text"])
         send("tools/list", {}, 21)
         assert receive(21) == initial
+
+
+def test_dither_detail_is_directly_callable_over_stdio(new_sprite):
+    filename = new_sprite(4, 4)
+    run(drawing.draw_rectangle_at(
+        filename=filename, layer_name="ink", frame_index=1,
+        x=0, y=0, width=4, height=4, color="#123456", fill=True,
+    ))
+
+    with connected_server() as (send, receive):
+        send("tools/list", {}, 30)
+        schemas = {
+            tool["name"]: tool["outputSchema"]
+            for tool in receive(30)["tools"]
+        }
+        assert "draw_dither_detail" in schemas
+
+        result = call(send, receive, "draw_dither_detail", {
+            "filename": filename, "layer_name": "ink", "frame_index": 1,
+            "x": 0, "y": 0, "width": 4, "height": 4,
+            "color": "#00ff00", "density": 1,
+        }, request_id=31)
+        assert result["isError"] is False, result
+        validate(result["structuredContent"], schemas["draw_dither_detail"])
+
+        pixel = call(send, receive, "get_pixel_color", {
+            "filename": filename, "layer_name": "ink", "frame_index": 1,
+            "x": 2, "y": 2,
+        }, request_id=32)
+        assert pixel["structuredContent"]["data"]["hex"] == "#00ff00"
 
 
 def test_ordered_batch_uses_one_process_and_commit_and_preserves_on_failure(new_sprite, tmp_path, monkeypatch):
