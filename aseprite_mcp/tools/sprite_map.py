@@ -1,36 +1,20 @@
 """Compact character-grid editing and readback."""
 
 import json
-from typing import Annotated, Dict, List
+from typing import Annotated, List
 
 from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import Field, ValidationError
 
 from ..core.commands import AsepriteCommand, lua_escape
 from ..core.composite import COMPOSE_FRAME
-from ..core.contracts import Byte, Character, ContractModel, FrameIndex, LayerRef, NonnegativeInt, Palette, PositiveInt, ToolOutput
+from ..core.contracts import Byte, Character, FrameIndex, LayerRef, NonnegativeInt, Palette, PositiveInt, Region, SpriteMapEdit, ToolOutput
 from ..core.editing import edit_output, execute_edit_script
-from ..core.lua import EDIT_TARGET, FIND_LAYER, LAYER_NAMES, NORMALIZE_CEL, lua_layer_ref
+from ..core.lua import EDIT_TARGET, NORMALIZE_CEL, lua_layer_ref
+from ..core.region_read import EMIT_REGION_PIXELS, FIND_REGION_CEL, lua_region, read_region_pixels
 from ..core.results import EditReceipt, SpriteMap
 from ..core.sprite_grid import compile_sprite_map, encode_sprite_map, parse_sprite_map
 from ..core.state import prepare_filename
-
-_TILEMAP_REFUSAL = "is a tilemap layer: its cel stores tile indexes, not pixels"
-
-
-class SpriteMapEdit(ContractModel):
-    layer_name: LayerRef
-    frame_index: FrameIndex
-    rows: Annotated[list[str], Field(min_length=1, description="Equal-width pixel rows, top to bottom.")]
-    palette: Annotated[Palette, Field(description="Single-character keys mapped to RGB/RGBA hex colours; transparent is reserved.")]
-    x: int = Field(default=0, description="Sprite-global x of the grid origin; may be negative for clipping.")
-    y: int = Field(default=0, description="Sprite-global y of the grid origin; may be negative for clipping.")
-    transparent: Character = "."
-    mirror_x: bool = False
-    mirror_y: bool = False
-    erase_transparent: bool = False
-    create_if_missing: bool = True
-
 
 async def draw_sprite_maps(*, filename: str = "", maps: Annotated[list[SpriteMapEdit], Field(min_length=1)]) -> ToolOutput[EditReceipt]:
     """Draw ordered maps across layers/frames with one all-or-nothing project commit.
@@ -222,75 +206,40 @@ async def get_sprite_map(
     if error:
         raise ToolError(error)
 
-    safe_layer = lua_escape(layer_name)
-
+    region = Region(x=x, y=y, width=width, height=height)
     if composite:
-        # Visible layers only — see COMPOSE_FRAME for why flattening a
-        # clone beats Sprite:flatten() directly.
+        prelude = COMPOSE_FRAME
         reader = f"""
-        {COMPOSE_FRAME}
-        local img = compose_frame(spr, idx, nil)
-        local ox, oy = 0, 0
+        emit_region_pixels(compose_frame(spr, idx, nil), Point(0, 0), {lua_region(region)})
         """
     else:
+        prelude = FIND_REGION_CEL
         reader = f"""
-        if spr.colorMode ~= ColorMode.RGB then print("ERROR:Sprite maps require RGB mode. Tip: use set_color_mode(mode='rgb') first.") return end
-        local cel = nil
-        {FIND_LAYER}
-        {LAYER_NAMES}
-        local target = find_layer(spr, {lua_layer_ref(layer_name)})
-        if not target then print("ERROR:Layer '{safe_layer}' not found. Existing layers: [" .. layer_names(spr) .. "]. Tip: call add_layer first or check get_sprite_info.") return end
-        if target.isTilemap then print("ERROR:Layer '{safe_layer}' {_TILEMAP_REFUSAL}. Tip: use get_composite_rect for the rendered colour.") return end
-        print("LAYER_PATH:" .. json.encode(layer_path(target)))
-        cel = target:cel(spr.frames[idx])
-        if not cel then print("ERROR:No cel on layer '{safe_layer}' at frame {frame_index} (sprite has " .. #spr.frames .. " frame(s), 1-based). Tip: call add_frame first, or draw on this layer/frame.") return end
-        local img = cel.image
-        local ox = cel.position.x
-        local oy = cel.position.y
+        local path, cel = find_region_cel(spr, {lua_layer_ref(layer_name)}, spr.frames[idx])
+        if not cel then
+            error("No cel on layer " .. json.encode(path) .. " at frame " .. idx
+                .. ". Tip: draw on this layer/frame.")
+        end
+        print("LAYER_PATH:" .. json.encode(path))
+        emit_region_pixels(cel.image, cel.position, {lua_region(region)})
         """
 
-    script = f"""
+    script = prelude + EMIT_REGION_PIXELS + f"""
     local spr = app.activeSprite
-    if not spr then print("ERROR:No active sprite") return end
-
+    if not spr then error("No active sprite") end
     local idx = {frame_index}
-    if idx < 1 or idx > #spr.frames then print("ERROR:Frame index {frame_index} out of range (sprite has " .. #spr.frames .. " frame(s), 1-based). Tip: call add_frame first.") return end
-    {reader}
-
-    local iw, ih = img.width, img.height
-    for py = {y}, {y + height - 1} do
-        for px = {x}, {x + width - 1} do
-            local cx = px - ox
-            local cy = py - oy
-            local r, g, b, a = 0, 0, 0, 0
-            if cx >= 0 and cy >= 0 and cx < iw and cy < ih then
-                local pv = img:getPixel(cx, cy)
-                r = app.pixelColor.rgbaR(pv)
-                g = app.pixelColor.rgbaG(pv)
-                b = app.pixelColor.rgbaB(pv)
-                a = app.pixelColor.rgbaA(pv)
-            end
-            print(string.format("PIXEL:%d,%d,%d,%d,%d,%d", px, py, r, g, b, a))
-        end
+    if idx < 1 or idx > #spr.frames then
+        error("Frame index " .. idx .. " out of range (sprite has " .. #spr.frames .. " frames, 1-based). Tip: call add_frame first.")
     end
+    {reader}
     """
 
-    output = await AsepriteCommand.execute_lua_script(script, filename)
-
+    output = await AsepriteCommand.execute_lua_script_checked(script, filename)
     resolved_path = None
-    cells: Dict[tuple[int, int], tuple[int, int, int, int]] = {}
-    for line in output.splitlines():
-        if line.startswith("LAYER_PATH:"):
-            resolved_path = json.loads(line.removeprefix("LAYER_PATH:"))
-        if line.startswith("ERROR:"):
-            raise ToolError(f"Failed to read sprite map: {line[6:]}")
-        if line.startswith("PIXEL:"):
-            px, py, r, g, b, a = (int(value) for value in line[6:].split(","))
-            cells[(px - x, py - y)] = (r, g, b, a)
-
-    if len(cells) != width * height:
-        raise ToolError("Failed to read sprite map: incomplete pixel data returned")
-
+    if not composite:
+        resolved_path = next(json.loads(line.removeprefix("LAYER_PATH:"))
+                             for line in output.splitlines() if line.startswith("LAYER_PATH:"))
+    cells = read_region_pixels(output, region)
     result = encode_sprite_map(cells, frame_index=frame_index, x=x, y=y, width=width, height=height,
                                palette=palette, max_colors=max_colors, alpha_threshold=alpha_threshold,
                                transparent=transparent, source="composite" if composite else "cel",

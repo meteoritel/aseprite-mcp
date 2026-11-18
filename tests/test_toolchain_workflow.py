@@ -230,14 +230,71 @@ def test_review_matches_independent_render_and_cleans_failed_artifacts(new_sprit
     assert not preview.exists()
 
 
-def test_review_color_capacity_failure_removes_source_and_preview(new_sprite):
+def test_review_delivers_preview_when_exact_grid_exceeds_capacity(new_sprite, tmp_path):
     filename = new_sprite(8, 8)
+    run(canvas.add_layer(filename=filename, layer_name="ink"))
+    request = dict(filename=filename, frame_index=1, layer_name=["ink"])
+    first = payload(run(review.review_frame(**request)))
+    assert first["cel"]["status"] == "missing_cel"
+    snapshot = {key: first[key] for key in ("filename", "frame", "region", "map", "cel")}
     run(drawing.draw_pixels_at(filename=filename, layer_name="ink", frame_index=1,
                                pixels=[{"x": i % 8, "y": i // 8, "color": f"#{i:02x}1234"} for i in range(64)]))
     before = digest(filename)
-    assert "shrink region" in failure(review.review_frame(filename=filename, frame_index=1))
-    assert not list(Path(state.get_review_directory()).iterdir())
+    result = payload(run(review.review_frame(**request, before=snapshot)))
+    assert result["map"] is None and result["map_unavailable"] == "palette_capacity"
+    assert result["region"] == {"x": 0, "y": 0, "width": 8, "height": 8}
+    assert result["cel"] == {"layer_name": ["ink"], "status": "palette_capacity", "edit": None}
+    delta = {"changed_pixels": 64, "changed_bounds": result["region"]}
+    assert result["changes"] == {"composite": delta, "cel": delta}
+    preview = Path(result["preview_png"])
+    assert set(preview.parent.iterdir()) == {Path(first["preview_png"]), preview}
+    expected = frame_image(filename, 1, tmp_path).resize((64, 64), Image.Resampling.NEAREST)
+    with Image.open(preview) as image:
+        assert image.convert("RGBA").tobytes() == expected.tobytes()
     assert digest(filename) == before
+
+
+def test_review_compares_hidden_cel_by_rgba_in_one_batch(new_sprite, monkeypatch):
+    filename = new_sprite(32, 32)
+    run(canvas.add_group(filename=filename, group_name="art"))
+    run(canvas.add_layer(filename=filename, layer_name="ink", group=["art"]))
+    run(canvas.add_layer(filename=filename, layer_name="ink"))
+    run(canvas.add_layer(filename=filename, layer_name="empty"))
+    run(sprite_map.draw_sprite_map(filename=filename, layer_name=["art", "ink"], frame_index=1,
+                                   rows=["AB"], palette={"A": "#1234567f", "B": "#ff0000"}))
+    run(animation.set_cel_position(filename=filename, layer_name=["art", "ink"], frame_index=1, x=7, y=8))
+    run(animation.set_layer_visibility(filename=filename, layer_name=["art"], visible=False))
+    region = {"x": 6, "y": 8, "width": 4, "height": 1}
+    request = dict(filename=filename, frame_index=1, layer_name=["art", "ink"], region=region)
+    before = payload(run(review.review_frame(**request, palette={"A": "#1234567f", "B": "#ff0000"})))
+    original = before["cel"]["edit"]
+    assert original["rows"] == [".AB."]
+    assert original["layer_name"] == ["art", "ink"]
+    assert original["erase_transparent"] is True and original["create_if_missing"] is False
+    snapshot = {key: before[key] for key in ("filename", "frame", "region", "map", "cel")}
+    unchanged = {"changed_pixels": 0, "changed_bounds": None}
+    new_palette = {"K": "#1234567f", "L": "#ff0000"}
+    assert payload(run(review.review_frame(**request, before=snapshot, palette=new_palette)))["changes"] == {
+        "composite": unchanged, "cel": unchanged,
+    }
+    run(sprite_map.draw_sprite_map(filename=filename, **(original | {"rows": ["...."]})))
+    saved = digest(filename)
+    observed = observe_execution(monkeypatch, filename)
+    result = payload(run(review.review_frame(**request, before=snapshot)))
+    assert result["changes"] == {
+        "composite": unchanged,
+        "cel": {"changed_pixels": 2, "changed_bounds": {"x": 7, "y": 8, "width": 2, "height": 1}},
+    }
+    assert result["cel"]["edit"]["rows"] == ["...."]
+    assert observed == {"processes": 1, "saves": 0, "commits": 0}
+    assert digest(filename) == saved
+    assert "same absolute filename" in failure(review.review_frame(**request, before=snapshot | {"filename": "other"}))
+    assert "same region" in failure(review.review_frame(**request, before=snapshot | {"region": region | {"x": 0}}))
+    assert "same layer path" in failure(review.review_frame(**(request | {"layer_name": ["ink"]}), before=snapshot))
+    assert "exact composite" in failure(review.review_frame(**request, before=snapshot | {"map": before["map"] | {"lossy": True}}))
+    empty = payload(run(review.review_frame(**(request | {"layer_name": ["empty"]}))))
+    assert empty["cel"] == {"layer_name": ["empty"], "status": "missing_cel", "edit": None}
+    assert "is a group" in failure(review.review_frame(**(request | {"layer_name": ["art"]})))
 
 
 def test_text_stamp_preserves_holes_alpha_and_clips_at_canvas(new_sprite, bitmap_font):

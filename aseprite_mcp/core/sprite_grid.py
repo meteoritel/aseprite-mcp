@@ -3,8 +3,41 @@
 from typing import Any, Dict, List
 from mcp.server.mcpserver.exceptions import ToolError
 from .colors import parse_hex_color
+from .contracts import Region
+from .results import PixelChanges
 
 _AUTO_ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+
+class SpriteMapCapacityError(ToolError):
+    """Exact colors do not fit the available character slots."""
+
+
+def decode_sprite_map(rows, palette, transparent, region: Region):
+    parsed, error = parse_sprite_map(rows, palette, transparent)
+    if error:
+        raise ToolError(f"Invalid before grid: {error}")
+    width, height, cells = parsed
+    if (width, height) != (region.width, region.height):
+        raise ToolError("Before grid dimensions must match the review region")
+    return {(x, y): rgba for x, y, rgba in cells if rgba[3] != 0}
+
+
+def compare_region_pixels(before, after, region: Region) -> PixelChanges:
+    # A missing pixel and any fully transparent RGBA have the same appearance.
+    after = {position: rgba for position, rgba in after.items() if rgba[3] != 0}
+    changed = [position for position in before.keys() | after.keys()
+               if before.get(position) != after.get(position)]
+    if not changed:
+        return {"changed_pixels": 0, "changed_bounds": None}
+    xs, ys = zip(*changed)
+    left, top = min(xs), min(ys)
+    return {
+        "changed_pixels": len(changed),
+        "changed_bounds": {"x": region.x + left, "y": region.y + top,
+                           "width": max(xs) - left + 1, "height": max(ys) - top + 1},
+    }
+
 
 def parse_sprite_map(
     rows: List[str], palette: Dict[str, str], transparent: str
@@ -158,7 +191,7 @@ def encode_sprite_map(cells, *, frame_index, x, y, width, height, palette=None,
     free = [c for c in _AUTO_ALPHABET if c != transparent and c not in char_to_rgba]
     extra = sorted(colour for colour in counts if colour not in rgba_to_char)
     if len(extra) > len(free):
-        raise ToolError(f"Invalid colour count: the region uses {len(counts)} distinct "
+        raise SpriteMapCapacityError(f"Invalid colour count: the region uses {len(counts)} distinct "
             f"colour(s) but only {len(char_to_rgba) + len(free)} "
             f"single-character slot(s) are available — pass max_colors to "
             f"quantise, or a palette covering the colours you care about")

@@ -27,9 +27,9 @@ flowchart LR
 
 一次编辑先校验类型化参数、解析文件，再生成 Lua，在临时原生文件保存成功后替换目标。进程层判断执行状态，编辑层和导出层分别验证工程和图像。工具成功返回 `ToolOutput[T]`：`summary` 描述结果，`data` 是领域载荷；SDK 生成对应 outputSchema，structuredContent 可直接消费。预期失败抛 `ToolError`，SDK 转为 `isError=true`。
 
-`core/contracts.py` 定义共享输入与 Tool 构造规则，拒绝未定义字段；`core/results.py` 定义领域输出。`core/sprite_grid.py` 集中网格解析、镜像与 RGBA 编码；`core/composite.py` 提供可见合成。`draw_sprite_maps` 将有序图层/帧编辑合并为一次进程、保存与提交；`review_frame` 从一次合成的 RGBA 生成精确网格和 8× 预览。
+`core/contracts.py` 定义共享输入与 Tool 构造规则，`core/results.py` 定义领域输出。`core/sprite_grid.py` 集中网格解析、镜像、RGBA 编码和区域差异，`core/composite.py` 提供可见合成，`core/region_read.py` 提供 cel 定位及区域采样。`draw_sprite_maps` 按序执行图层/帧编辑并一次提交。`review_frame` 用一次运行取得合成和选中的 cel，再生成预览、网格及可选复核差异。
 
-图像通过磁盘路径交付。Java Edition 工具另外返回会话临时的 8× PNG 路径，lifespan 在会话退出时清理它。
+帧审阅在 MCP 结果中内联 PNG，同时返回会话预览路径。Java Edition 交付返回原尺寸文件和会话临时的 8× PNG 路径。lifespan 在会话退出时清理临时预览。
 
 ## 注册与新增工具
 

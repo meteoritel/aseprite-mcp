@@ -73,7 +73,7 @@ ASERITE_MCP_WORKSPACE = "/absolute/path/to/art-project"
 
 连接后直接调用核心工具；扩展通过 `search_tools` 读取完整 schema，再使用 `call_tool(name=目标名称, arguments=参数对象)`。已知名称时可直接代理调用。搜索结果是普通工具输出，各客户端均使用标准 MCP `tools/list`／`tools/call`。客户端针对代理入口配置工具策略，逐目标独立策略由同一入口承载。
 
-成功结果统一消费 `structuredContent.data`；text content 是相同 `{summary,data}` 对象的 JSON。搜索覆盖核心与扩展，每条定义的 `invocation` 指明 direct 或 call_tool，同时提供输入/输出 schema 与已校验示例。更新服务后重启 stdio 会话并重新读取 schema。
+成功结果从 `structuredContent.data` 读取。首个文本块是同一 `{summary,data}` JSON，帧审阅另附 `image/png` 图像块。搜索覆盖核心与扩展，每条定义的 `invocation` 指明 direct 或 call_tool，同时提供输入/输出 schema 与已校验示例。更新服务后重启 stdio 会话并重新读取 schema。
 
 ## 环境变量与源码运行
 
@@ -136,4 +136,4 @@ call_tool {"name":"measure_text","arguments":{"text":"A","font":"missing-for-cli
 
 成功项从 structuredContent.data 读取：核心返回调色板预设，搜索包含 inputSchema/outputSchema/examples/invocation，代理返回卷积矩阵名称；最后一次调用显示包含 measure_text 上下文的工具失败。调用前后公开列表保持一致。
 
-生产闭环使用 `create_canvas`／`add_group`／`add_layer` → `draw_sprite_maps` → `review_frame` 并打开返回 PNG → `copy_frame` 与局部修改 → 设置时长/tag → `export_minecraft_texture` 并打开交付预览。所有单 cel 目标显式指定 layer/frame；复用元数据的 path 数组定位嵌套层。
+纹理闭环用 `create_canvas` → `draw_sprite_maps` → `review_frame` → `draw_sprite_map` → `review_frame(before=…)` → `export_minecraft_texture`。按根 [SKILL](../SKILL.md) 的双层示例检查，审阅图要能进入模型上下文，复核的合成与 cel 差异要符合实际修改。动画可用 `copy_frame` 和时长/tag 工具，再核对 JE 输出。

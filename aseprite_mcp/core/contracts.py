@@ -61,6 +61,20 @@ class Region(ContractModel):
     height: PositiveInt
 
 
+class SpriteMapEdit(ContractModel):
+    layer_name: LayerRef
+    frame_index: FrameIndex
+    rows: Annotated[list[str], Field(min_length=1, description="Equal-width pixel rows, top to bottom.")]
+    palette: Annotated[Palette, Field(description="Single-character keys mapped to RGB/RGBA hex colours; transparent is reserved.")]
+    x: int = Field(default=0, description="Sprite-global x of the grid origin; may be negative for clipping.")
+    y: int = Field(default=0, description="Sprite-global y of the grid origin; may be negative for clipping.")
+    transparent: Character = "."
+    mirror_x: bool = False
+    mirror_y: bool = False
+    erase_transparent: bool = False
+    create_if_missing: bool = True
+
+
 class ContractTool(Tool):
     """Keep SDK execution while rejecting fields the published schema does not accept."""
 

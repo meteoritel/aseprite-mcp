@@ -10,7 +10,7 @@ from mcp.server.mcpserver.tools import Tool
 from pydantic import Field, JsonValue
 
 from .core.contracts import ContractModel, ContractTool, ToolOutput
-from .tool_catalog import TOOL_EXAMPLES
+from .tool_catalog import TOOL_EXAMPLES, TOOL_SEARCH_TERMS
 
 
 class ToolDefinition(ContractModel):
@@ -40,9 +40,13 @@ def create_discovery_tools(extensions: dict[str, tuple[str, Tool]], core: dict[s
             for example in examples:
                 catalog[name][1].validate_example(example)
     categories = list(dict.fromkeys(category for category, _ in catalog.values()))
+    workflow_terms = set().union(*TOOL_SEARCH_TERMS.values())
 
     def ranked(query, category=""):
         tokens = _words(query)
+        terms = {term for term in workflow_terms if term in query}
+        if terms:
+            tokens = {token for token in tokens if token.isascii()}
         matches = []
         for index, (name, (tool_category, tool)) in enumerate(catalog.items()):
             if category and category != tool_category:
@@ -55,7 +59,11 @@ def create_discovery_tools(extensions: dict[str, tuple[str, Tool]], core: dict[s
             exact = name.casefold() == query.casefold().strip()
             if tokens and not exact and not tokens <= all_words:
                 continue
+            term_matches = terms.intersection(TOOL_SEARCH_TERMS.get(name, ()))
+            if terms and not term_matches:
+                continue
             score = (1000 if exact else 0) + 100 * len(tokens & name_words) + 80 * len(tokens & category_words) + 10 * len(tokens & short_words)
+            score += 100 * len(term_matches)
             matches.append((-score, index, name, tool_category, tool))
         return sorted(matches)
 
@@ -84,7 +92,7 @@ def create_discovery_tools(extensions: dict[str, tuple[str, Tool]], core: dict[s
         """Find core and extension tools, schemas, examples and the correct invocation.
 
         Args:
-            query: Words from tool names, categories, purposes or parameters. Empty browses.
+            query: Tool names, categories, purpose words or Chinese workflow terms such as 审阅 and 复核. Empty browses.
             category: Exact category, such as text, tilemap or quality. Empty searches all.
             limit: Page size, from 1 to 20.
             offset: Nonnegative position; use next_offset to continue.

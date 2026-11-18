@@ -170,9 +170,16 @@ EXTENSION_TOOLS = {
     ),
 }
 
+TOOL_SEARCH_TERMS = {
+    "draw_sprite_map": ("绘制", "修改", "擦除"),
+    "draw_sprite_maps": ("绘制", "修改", "批量"),
+    "review_frame": ("审阅", "预览", "复核"),
+    "export_minecraft_texture": ("纹理导出", "导出"),
+}
+
 TOOL_EXAMPLES = {
     "draw_sprite_maps": [{"maps": [{"layer_name": "ink", "frame_index": 1, "rows": ["A."], "palette": {"A": "#FFFFFF"}}]}],
-    "review_frame": [{"frame_index": 1, "region": {"x": 0, "y": 0, "width": 16, "height": 16}}],
+    "review_frame": [{"frame_index": 1, "layer_name": ["ink"], "region": {"x": 0, "y": 0, "width": 16, "height": 16}}],
     "draw_on_tile": [{"layer_name": "tiles", "tile_index": 1, "pixels": [{"x": 0, "y": 0, "color": "#FFFFFF"}]}],
     "get_tile_at": [{"layer_name": "tiles", "frame_index": 1, "col": 0, "row": 0}],
     "tween_cel_positions": [{"layer_name": "ink", "start_frame": 1, "end_frame": 4, "start_x": 0, "start_y": 0, "end_x": 3, "end_y": 0}],

@@ -72,6 +72,11 @@ class ChangedBounds(TypedDict):
     height: int
 
 
+class PixelChanges(TypedDict):
+    changed_pixels: int
+    changed_bounds: ChangedBounds | None
+
+
 class FrameDifference(TypedDict):
     frame_a: int
     frame_b: int

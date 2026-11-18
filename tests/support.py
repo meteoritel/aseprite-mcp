@@ -16,6 +16,7 @@ import time
 import pytest
 from PIL import Image
 from mcp.server.mcpserver.exceptions import ToolError
+from mcp.types import CallToolResult
 
 REPO_ROOT = str(Path(__file__).resolve().parent.parent)
 RESPONSE_TIMEOUT_SECONDS = 10
@@ -144,4 +145,6 @@ def paint(filename, layer="ink", frame=1):
 
 def payload(output):
     """Consume the same successful result data used by protocol clients."""
+    if isinstance(output, CallToolResult):
+        return output.structured_content["data"]
     return output.model_dump(mode="json")["data"]

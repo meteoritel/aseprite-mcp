@@ -1254,7 +1254,7 @@ draw_sprite_map(*, filename: str = '', layer_name: LayerRef, frame_index: FrameI
 
 调用方式：**直接调用**。
 
-源码：[`aseprite_mcp/tools/sprite_map.py:112`](../../aseprite_mcp/tools/sprite_map.py#L112)
+源码：[`aseprite_mcp/tools/sprite_map.py:96`](../../aseprite_mcp/tools/sprite_map.py#L96)
 
 Draw a whole region from a compact character-grid map. `rows` is a list of equal-length strings, one per pixel row, top to bottom; `palette` maps each character to a colour. This is the compact alternative to draw_pixels_at's {x, y, color} lists: draw_sprite_map( layer_name="hero", frame_index=1, rows=["..1111..", ".122221.", "12233221"], palette={"1": "#3b2a1e", "2": "#8b5a2b", "3": "#f2c48d"}, ) Characters equal to `transparent` ("." by default) are skipped, so whatever is already on the layer shows through. Pass erase_transparent=true to clear them instead — that is what makes a map round-trip exactly after pixels are deleted in an edit.
 
@@ -1281,7 +1281,7 @@ draw_sprite_maps(*, filename: str = '', maps: Annotated[list[SpriteMapEdit], Fie
 
 调用方式：**直接调用**。
 
-源码：[`aseprite_mcp/tools/sprite_map.py:35`](../../aseprite_mcp/tools/sprite_map.py#L35)
+源码：[`aseprite_mcp/tools/sprite_map.py:19`](../../aseprite_mcp/tools/sprite_map.py#L19)
 
 Draw ordered maps across layers/frames with one all-or-nothing project commit.
 
@@ -1319,7 +1319,7 @@ get_sprite_map(*, filename: str = '', layer_name: LayerRef = '', frame_index: Fr
 
 调用方式：**直接调用**。
 
-源码：[`aseprite_mcp/tools/sprite_map.py:159`](../../aseprite_mcp/tools/sprite_map.py#L159)
+源码：[`aseprite_mcp/tools/sprite_map.py:143`](../../aseprite_mcp/tools/sprite_map.py#L143)
 
 Read a rectangular region back as a compact character-grid map. Returns JSON whose `rows`, `palette` and `transparent` are shaped exactly like draw_sprite_map's arguments, so a read/edit/write loop needs no reformatting: {"layer": "hero", "frame": 1, "x": 0, "y": 0, "width": 16, "height": 16, "transparent": ".", "columns": "0123456789abcdef", "palette": {"0": "#3b2a1e", "1": "#8b5a2b"}, "rows": ["....0011........", ...]} `columns` labels each column's x offset, so a character's position can be read off without counting. Against get_pixels_rect's per-pixel JSON a 16x16 region goes from ~256 objects to 16 short strings — and unlike judging an exported PNG by eye, the hex values are exact. Auto-assigned characters follow ascending colour order. Pass `palette` (e.g. a previous result's) to pin the assignment: characters then stay stable across edits, so two maps can be diffed character by character.
 
@@ -1345,14 +1345,14 @@ Read a rectangular region back as a compact character-grid map. Returns JSON who
 ### `review_frame`
 
 ```text
-review_frame(*, filename: str = '', frame_index: FrameIndex, region: Region | None = None, palette: Palette | None = None) -> ToolOutput[FrameReview]
+review_frame(*, filename: str = '', frame_index: FrameIndex, region: Region | None = None, palette: Palette | None = None, layer_name: LayerRef | None = None, before: FrameReviewSnapshot | None = None) -> Annotated[CallToolResult, ToolOutput[FrameReview]]
 ```
 
 调用方式：**直接调用**。
 
-源码：[`aseprite_mcp/tools/review.py:30`](../../aseprite_mcp/tools/review.py#L30)
+源码：[`aseprite_mcp/tools/review.py:55`](../../aseprite_mcp/tools/review.py#L55)
 
-Read exact visible RGBA as a character grid and a temporary 8x preview. The grid and nearest-neighbor PNG come from one Aseprite composition. Hidden layers/groups are excluded. The source project is never saved by this read.
+Review a frame as an inline 8x PNG and, when colors fit, an exact grid. The grid and nearest-neighbor PNG come from one Aseprite composition. Hidden layers/groups are excluded. The source project is never saved by this read.
 
 最小调用参数（运行时装配按目标参数模型校验）：
 
@@ -1360,6 +1360,9 @@ Read exact visible RGBA as a character grid and a temporary 8x preview. The grid
 [
   {
     "frame_index": 1,
+    "layer_name": [
+      "ink"
+    ],
     "region": {
       "x": 0,
       "y": 0,
@@ -1376,6 +1379,8 @@ Read exact visible RGBA as a character grid and a temporary 8x preview. The grid
 | `frame_index` | `FrameIndex` | **必填** | Explicit source frame, starting at 1. |
 | `region` | `Region \| None` | `None` | Sprite-global pixel rectangle; omitted reads the whole canvas. |
 | `palette` | `Palette \| None` | `None` | Optional single-character colour mapping to keep characters stable. |
+| `layer_name` | `LayerRef \| None` | `None` | Optional image layer to read as an editable cel in the same region. |
+| `before` | `FrameReviewSnapshot \| None` | `None` | Previous filename, frame, region, map and cel from review_frame, for exact RGBA comparison. |
 
 ## `transform.py`
 
@@ -2573,13 +2578,13 @@ search_tools(query: str = '', category: str = '', limit: Annotated[int, Field(ge
 
 调用方式：**直接调用**。
 
-源码：[`aseprite_mcp/tool_discovery.py:78`](../../aseprite_mcp/tool_discovery.py#L78)
+源码：[`aseprite_mcp/tool_discovery.py:86`](../../aseprite_mcp/tool_discovery.py#L86)
 
 Find core and extension tools, schemas, examples and the correct invocation.
 
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
-| `query` | `str` | `''` | Words from tool names, categories, purposes or parameters. Empty browses. |
+| `query` | `str` | `''` | Tool names, categories, purpose words or Chinese workflow terms such as 审阅 and 复核. Empty browses. |
 | `category` | `str` | `''` | Exact category, such as text, tilemap or quality. Empty searches all. |
 | `limit` | `Annotated[int, Field(ge=1, le=20)]` | `5` | Page size, from 1 to 20. |
 | `offset` | `Annotated[int, Field(ge=0)]` | `0` | Nonnegative position; use next_offset to continue. |
@@ -2592,7 +2597,7 @@ call_tool(name: str, arguments: dict[str, Any]) -> ToolOutput[JsonValue]
 
 调用方式：**直接调用**。
 
-源码：[`aseprite_mcp/tool_discovery.py:108`](../../aseprite_mcp/tool_discovery.py#L108)
+源码：[`aseprite_mcp/tool_discovery.py:116`](../../aseprite_mcp/tool_discovery.py#L116)
 
 Execute an extension using its discovered inputSchema; core tools are called directly.
 
@@ -2652,6 +2657,19 @@ class Region(ContractModel):
     y: int = 0
     width: PositiveInt
     height: PositiveInt
+
+class SpriteMapEdit(ContractModel):
+    layer_name: LayerRef
+    frame_index: FrameIndex
+    rows: Annotated[list[str], Field(min_length=1, description='Equal-width pixel rows, top to bottom.')]
+    palette: Annotated[Palette, Field(description='Single-character keys mapped to RGB/RGBA hex colours; transparent is reserved.')]
+    x: int = Field(default=0, description='Sprite-global x of the grid origin; may be negative for clipping.')
+    y: int = Field(default=0, description='Sprite-global y of the grid origin; may be negative for clipping.')
+    transparent: Character = '.'
+    mirror_x: bool = False
+    mirror_y: bool = False
+    erase_transparent: bool = False
+    create_if_missing: bool = True
 ```
 
 ### `core/results.py`
@@ -2713,6 +2731,10 @@ class ChangedBounds(TypedDict):
     y: int
     width: int
     height: int
+
+class PixelChanges(TypedDict):
+    changed_pixels: int
+    changed_bounds: ChangedBounds | None
 
 class FrameDifference(TypedDict):
     frame_a: int
@@ -2878,30 +2900,28 @@ class SanitizeReport(ContractModel):
     overlap_samples: list[LayerOverlap] = Field(default_factory=list)
 ```
 
-### `tools/sprite_map.py`
-
-```python
-class SpriteMapEdit(ContractModel):
-    layer_name: LayerRef
-    frame_index: FrameIndex
-    rows: Annotated[list[str], Field(min_length=1, description='Equal-width pixel rows, top to bottom.')]
-    palette: Annotated[Palette, Field(description='Single-character keys mapped to RGB/RGBA hex colours; transparent is reserved.')]
-    x: int = Field(default=0, description='Sprite-global x of the grid origin; may be negative for clipping.')
-    y: int = Field(default=0, description='Sprite-global y of the grid origin; may be negative for clipping.')
-    transparent: Character = '.'
-    mirror_x: bool = False
-    mirror_y: bool = False
-    erase_transparent: bool = False
-    create_if_missing: bool = True
-```
-
 ### `tools/review.py`
 
 ```python
-class FrameReview(ContractModel):
+class ReviewedCel(ContractModel):
+    layer_name: LayerPath
+    status: Literal['exact', 'missing_cel', 'palette_capacity']
+    edit: SpriteMapEdit | None
+
+class FrameReviewSnapshot(ContractModel):
     filename: str
-    frame: int
-    map: SpriteMap
+    frame: FrameIndex
+    region: Region
+    map: SpriteMap | None
+    cel: ReviewedCel | None = None
+
+class FrameReviewChanges(ContractModel):
+    composite: PixelChanges | None
+    cel: PixelChanges | None
+
+class FrameReview(FrameReviewSnapshot):
+    map_unavailable: Literal['palette_capacity'] | None = None
+    changes: FrameReviewChanges | None = None
     preview_png: str
     preview_scale: int
     preview_lifetime: Literal['session'] = 'session'

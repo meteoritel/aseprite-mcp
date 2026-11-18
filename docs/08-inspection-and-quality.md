@@ -11,7 +11,7 @@
 | `get_composite_pixel` | 指定帧的可见合成像素 | 像素对象 |
 | `get_composite_rect` | 可见合成矩形 | 像素对象数组 |
 | `get_sprite_map` | 单 cel，或 `composite=true` 的可见合成 | 精确字符网格及来源 |
-| `review_frame` | 指定帧的可见合成，可选区域 | 同源网格与会话临时 8× PNG |
+| `review_frame` | 指定帧的可见合成，可选区域和目标 cel | 内联 8× PNG、精确网格、可编辑 cel 和可选 RGBA 差异 |
 
 坐标以画布左上角为原点。单 cel 读取先减去 cel 偏移；读取区域落在图像外的像素返回透明黑，尺寸保持请求值。单 cel 定位接受旧字符串与精确路径数组，规则见[画布与图层](04-layers-and-canvas.md)。
 
@@ -25,13 +25,12 @@ tilemap cel 保存瓦片索引，单 cel 像素读取会拒绝该目标并提示
 
 ## 同源帧审阅
 
-`review_frame(filename="", frame_index=…, region=None, palette=None)` 只启动一次 Aseprite。该进程输出指定帧的可见合成 PNG，Python 从相同 RGBA 生成精确字符网格和 8× nearest-neighbor PNG。
+`review_frame(frame_index=…, region=…, layer_name=…, before=…)` 只启动一次 Aseprite。Aseprite 生成可见合成并按需回读目标 cel 的原始 RGBA。省略 `region` 时读取整张画布，区域可包含画布外的坐标。
 
-返回 `data.filename`、`frame`、`map`、`preview_png`、`preview_scale=8`、`preview_lifetime="session"`。`map` 包含实际区域的 `x/y/width/height`、`rows/palette/transparent` 与 `lossy=false`。region 省略时覆盖整张画布；传入时宽高为正像素尺寸，支持画布外透明区域。palette 可复用上一轮映射，保持字符稳定。
-
-打开 `preview_png` 检查形状，用 `map` 检查精确颜色。分层修改继续提交各层网格。颜色超出单字符容量时，缩小 region，或用 `get_sprite_map(max_colors=…)` 显式量化读取。
-
-原始合成中间图在调用结束时删除；结果尚未完整形成即失败时清理本次预览。成功交付的预览由会话 lifespan 统一清理，须在会话退出前完成审阅。
+- `data.map` 是可见合成的精确网格，`lossy=false`。超出字符容量时返回 `map=null` 和 `map_unavailable="palette_capacity"`，仍可查看内联 PNG 或缩小区域重读。
+- `content` 的首项是 `{summary,data}` JSON 文本，随后是 8× 最近邻 PNG，字节与 `data.preview_png` 相同。源合成图在调用结束时清理，成功的预览路径保留到会话退出。
+- 指定 `layer_name` 时，`data.cel.edit` 提供 `draw_sprite_map` 的参数。传原工程 `filename`，修改该参数对象的副本并提交。回灌矩形内的透明字符会擦除原像素。`data.cel.status` 为 `missing_cel` 或 `palette_capacity` 时，`edit` 为空。
+- 复核指定相同文件、帧、区域和图层，并将前次 `data` 的 `filename/frame/region/map/cel` 作为 `before`。`data.changes.composite` 和 `data.changes.cel` 各返回 `changed_pixels` 与画布坐标的 `changed_bounds`。无精确基线时该项为空，已比较且无差异时变化数为零。比较实际 RGBA，palette 的字符变化与全透明 RGB 差异不计入。
 
 ## 图像分析
 

@@ -1,12 +1,14 @@
 # Aseprite MCP — AI 助手使用指南
 
-核心纹理流程：创建原生工程与层结构 → 用 `draw_sprite_maps` 一次提交各层网格 → 用 `review_frame` 取得精确网格与同源预览并打开预览 → 按需继续编辑 → 复制并修改动画帧 → 设置时长与 tag → 导出原尺寸 PNG、mcmeta 并审阅返回的 8× PNG。
+核心纹理流程：创建原生工程 → 用 `draw_sprite_maps` 一次提交各层网格 → 用 `review_frame` 看内联图并读取目标 cel → 提交局部修改 → 用同一工具复核 RGBA 差异 → 导出原尺寸 PNG 和 mcmeta。动画需要时复制帧、设置时长与 tag。
+
+受托用本项目绘制 Minecraft 纹理时，直接调用这些 MCP 工具，在原生工程里完成绘制和修订。已有外部素材用 `import_image_as_layer` 导入指定图层。
 
 ## 工具调用
 
 `tools/list` 固定公开核心工具及 `search_tools`／`call_tool`。`search_tools` 查询完整核心与扩展目录，返回 `inputSchema`、`outputSchema`、`examples`、类别和 `invocation`；`direct` 表示直接调用，`call_tool` 表示通过代理执行。按 schema 构造参数，输入对象中的未定义字段会报错。
 
-所有成功调用都返回 `{summary, data}`：客户端直接读取 `structuredContent.data`，text content 是同一对象的 JSON。编辑回执含 `filename`、实际 `layer_paths` 和适用的 `frame`；导出路径在 `data.files`，JE 交付有专用载荷。`run_lua_script` 的原始 stdout 在 `data.stdout`，保留换行。失败使用 `isError=true`。
+所有成功调用都返回 `{summary, data}`。客户端读取 `structuredContent.data`，第一个文本块是同一对象的 JSON，`review_frame` 还附一张 PNG 图像。编辑回执含 `filename`、实际 `layer_paths` 和适用的 `frame`。导出路径在 `data.files`，JE 交付有专用载荷。`run_lua_script` 的原始 stdout 在 `data.stdout`，保留换行。失败使用 `isError=true`。
 
 ```python
 search_tools(query="draw_text", category="text")
@@ -43,7 +45,9 @@ call_tool(name="draw_text", arguments={
 
 ## 读取与审阅
 
-- `review_frame(frame_index=…, region=可选矩形, palette=可选映射)` 一次执行生成同源的 `data.map` 和 `data.preview_png`。打开返回的 8× nearest-neighbor PNG，结合网格检查形状与颜色；预览寿命为当前会话。颜色超出单字符容量时缩小 region，或使用 `get_sprite_map(max_colors=…)` 显式量化读取。
+- `review_frame(frame_index=…, region=可选矩形, layer_name=可选目标层)` 一次读取可见合成和指定 cel。查看内联 8× PNG，本机客户端也可打开 `data.preview_png`。颜色超出字符容量时仍可看图，合成的 `map` 为空。缩小 region 可重新取得精确网格。
+- `data.cel.edit` 可直接交给 `draw_sprite_map`，并附原工程的 `filename`。它替换整个返回矩形，透明格会擦除旧像素，区域内其余格保持原字符。修改副本以保留复核基线。
+- 复核时传回前次 `data` 的 `filename/frame/region/map/cel` 作为 `before`，指定同一帧、区域和图层。`data.changes` 分别报告可见合成和目标 cel 的变化数及画布坐标范围。
 - `get_pixel_color`／`get_pixels_rect`／默认的 `get_sprite_map` 读取明确 layer/frame 的单 cel，忽略图层可见性。
 - `get_composite_pixel`／`get_composite_rect`／`get_sprite_map(composite=true)`／`get_color_stats`／`compare_frames` 读取实际可见合成。隐藏层和隐藏组被排除；合成网格适合审阅。
 - tilemap 的 cel 保存索引；通过代理调用扩展 `get_tile_at` 读瓦片，用核心合成读取查看渲染色。
@@ -64,11 +68,20 @@ call_tool(name="draw_text", arguments={
 - `data` 包含 `png`、`mcmeta`、`preview_png`、`preview_scale` 和源帧映射。`preview_png` 是最终游戏 PNG 的 8× nearest-neighbor 审阅图，随 stdio 会话退出删除；审阅须在会话结束前完成。
 - 用原生工程持续编辑，PNG 和 mcmeta 放入游戏纹理目录。此工具交付纹理及 metadata，资源包 manifest 由目标游戏版本决定。
 
-```python
-create_canvas(16, 16, filename="D:/art/coin.aseprite")
-draw_sprite_map(layer_name="coin", frame_index=1,
-                rows=[".AA.", "ABBA", ".AA."],
-                palette={"A": "#8B5A2B", "B": "#F2C48D"})
-get_sprite_map(layer_name="coin", frame_index=1, x=0, y=0, width=4, height=3)
-export_minecraft_texture(output_filename="D:/art/coin.png")
+下面是双层硬币的连续 MCP 调用。示例使用当前活跃工程。
+
+```text
+create_canvas {"width":16,"height":16,"filename":"D:/art/coin.aseprite"}
+draw_sprite_maps {"maps":[
+  {"layer_name":"base","frame_index":1,"x":6,"y":6,
+   "rows":[".AA.","AAAA",".AA."],"palette":{"A":"#8B5A2B"}},
+  {"layer_name":"shine","frame_index":1,"x":7,"y":6,
+   "rows":["BB"],"palette":{"B":"#F2C48D"}}
+]}
+review_frame {"frame_index":1,"layer_name":["shine"],
+              "region":{"x":7,"y":6,"width":2,"height":1},"palette":{"B":"#F2C48D"}}
 ```
+
+1. 查看内联图像。从这次 `data` 取 `cel.edit` 的副本，将 `rows` 改为 `["B."]`，附原工程 `filename`，直接调用 `draw_sprite_map`。
+2. 用同样的帧、区域和图层再次调用 `review_frame`。把原始 `data` 的 `filename/frame/region/map/cel` 作为 `before`，确认合成和 cel 各变化一个像素，坐标为 (8, 6)。
+3. 调用 `export_minecraft_texture {"output_filename":"D:/art/coin.png"}` 交付纹理。

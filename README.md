@@ -12,7 +12,7 @@
 
 核心工具可以直接调用；文字、tilemap、slice 等扩展通过 `search_tools` 查找，再由 `call_tool` 执行。完整工具与参数见[工具参考](docs/reference/tools.md)。
 
-多层像素网格用 `draw_sprite_maps` 一次提交，再用 `review_frame` 取得同源精确网格和 8× 临时预览。所有成功结果统一为 `{summary,data}`，客户端读取 `structuredContent.data`；工具发现覆盖完整目录，并返回 schema、示例和调用入口。
+多层网格用 `draw_sprite_maps` 一次提交。用 `review_frame` 查看内联 8× PNG，指定图层可获取能直接交给 `draw_sprite_map` 的 cel 网格，传回前次快照可核对修改前后的 RGBA 差异。客户端从 `structuredContent.data` 读取结构化结果。工具发现返回 schema、示例和调用入口。
 
 ## 安装与配置
 

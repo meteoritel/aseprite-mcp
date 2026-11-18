@@ -1,4 +1,6 @@
 """Discover tools, author a project and deliver its pixels through real MCP."""
+from base64 import b64decode
+from io import BytesIO
 import json
 import os
 from pathlib import Path
@@ -10,7 +12,7 @@ import threading
 from PIL import Image
 from jsonschema import validate
 
-from support import FIXTURE_GLYPHS, REPO_ROOT, RESPONSE_TIMEOUT_SECONDS, call, connected_server
+from support import FIXTURE_GLYPHS, REPO_ROOT, RESPONSE_TIMEOUT_SECONDS, call, connected_server, frame_image
 
 PROTOCOL_VERSION_META_KEY = "io.modelcontextprotocol/protocolVersion"
 CLIENT_INFO_META_KEY = "io.modelcontextprotocol/clientInfo"
@@ -174,6 +176,70 @@ def test_core_je_delivery_and_extension_edit_in_one_session(tmp_path, bitmap_fon
     assert not preview.exists()
     assert not frame_preview.exists()
     assert source.exists() and output.exists() and Path(artifacts["mcmeta"]).exists()
+
+
+def test_native_texture_review_edit_and_recheck(tmp_path):
+    source = str(tmp_path / "texture.aseprite")
+    output = str(tmp_path / "texture.png")
+    with connected_server() as (send, receive):
+        send("tools/list", {}, 10)
+        schemas = {tool["name"]: tool["outputSchema"] for tool in receive(10)["tools"]}
+
+        def invoke(name, **arguments):
+            reply = call(send, receive, name, arguments)
+            assert not reply["isError"], reply
+            validate(reply["structuredContent"], schemas[name])
+            assert json.loads(reply["content"][0]["text"]) == reply["structuredContent"]
+            return reply
+
+        for query, expected in [
+            ("审阅", {"review_frame"}),
+            ("找一个绘制工具", {"draw_sprite_map", "draw_sprite_maps"}),
+            ("修改", {"draw_sprite_map", "draw_sprite_maps"}),
+            ("复核", {"review_frame"}),
+            ("绘制 审阅 修改 复核", {"draw_sprite_map", "draw_sprite_maps", "review_frame"}),
+        ]:
+            results = invoke("search_tools", query=query)["structuredContent"]["data"]["tools"]
+            assert {tool["name"] for tool in results} == expected
+
+        invoke("create_canvas", filename=source, width=16, height=16)
+        invoke("draw_sprite_maps", maps=[
+            {"layer_name": "base", "frame_index": 1, "x": 4, "y": 5,
+             "rows": ["AAA", "AAA"], "palette": {"A": "#553322"}},
+            {"layer_name": ["top/ink"], "frame_index": 1, "x": 4, "y": 5,
+             "rows": ["BB", ".B"], "palette": {"B": "#ffddaa"}},
+        ])
+        request = {"filename": source, "frame_index": 1, "layer_name": ["top/ink"],
+                   "region": {"x": 5, "y": 5, "width": 2, "height": 2}}
+        baseline_reply = invoke("review_frame", **request)
+        baseline = baseline_reply["structuredContent"]["data"]
+        image_block, = baseline_reply["content"][1:]
+        assert image_block["type"] == "image" and image_block["mimeType"] == "image/png"
+        inline_png = b64decode(image_block["data"], validate=True)
+        first_preview = Path(baseline["preview_png"])
+        assert inline_png == first_preview.read_bytes()
+        with Image.open(BytesIO(inline_png)) as image:
+            assert image.size == (16, 16)
+            assert image.convert("RGBA").getpixel((0, 0)) == (255, 221, 170, 255)
+
+        snapshot = {key: baseline[key] for key in ("filename", "frame", "region", "map", "cel")}
+        edit = baseline["cel"]["edit"] | {"filename": source}
+        edit["rows"] = ["..", edit["rows"][1]]
+        invoke("draw_sprite_map", **edit)
+        saved = Path(source).read_bytes()
+        checked = invoke("review_frame", before=snapshot, **request)["structuredContent"]["data"]
+        assert Path(source).read_bytes() == saved
+        delta = {"changed_pixels": 1, "changed_bounds": {"x": 5, "y": 5, "width": 1, "height": 1}}
+        assert checked["changes"] == {"composite": delta, "cel": delta}
+        delivery = invoke("export_minecraft_texture", output_filename=output)["structuredContent"]["data"]
+        expected = Image.new("RGBA", (16, 16))
+        expected.paste((85, 51, 34, 255), (4, 5, 7, 7))
+        expected.putpixel((4, 5), (255, 221, 170, 255))
+        expected.putpixel((5, 6), (255, 221, 170, 255))
+        assert frame_image(source, 1, tmp_path).tobytes() == expected.tobytes()
+        with Image.open(delivery["png"]) as image:
+            assert image.convert("RGBA").tobytes() == expected.tobytes()
+    assert not first_preview.exists() and not Path(checked["preview_png"]).exists()
 
 
 def test_discover_and_execute_extensions_without_aseprite(bitmap_font):
