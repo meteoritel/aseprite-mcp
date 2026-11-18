@@ -1,3 +1,8 @@
+<!-- 下面是项目agent提示词 -->
+## 项目背景
+
+本项目是用于绘制 minecraft 纹理贴图的 aseprite mcp 工具。
+
 ## Agent skills
 
 ### Issue tracker
@@ -11,3 +16,6 @@
 ### Domain docs
 
 探索代码前，按 `docs/agents/domain.md` 读取相关领域文档；布局为 single-context。
+
+
+<!-- 项目agent提示词到此结束 -->
