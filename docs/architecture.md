@@ -29,9 +29,9 @@ sprite 包含画布、图层树和时间线。cel 是图层与帧交点的图像
 
 ## 编辑、审阅与交付
 
-- **编辑**先把修改保存到暂存工程，验证原生格式后替换目标。批量网格编辑按输入顺序执行并统一提交。 [原生提交](../aseprite_mcp/core/editing.py)
+- **编辑**先把修改保存到暂存工程，验证原生格式后发布。批量网格编辑按输入顺序执行，批次色板在本次调用内解析。分层创建把复合网格展开为各层像素，在同一次批处理中初始化图层、绘制和保存。 [网格绘制](../aseprite_mcp/tools/sprite_map.py) · [原生提交](../aseprite_mcp/core/editing.py)
 - **审阅**读取可见合成和指定 cel。合成用于检查画面，cel 用于精确修改。修改前后可以按区域比较 RGBA，帧预览作为 MCP 图像块随结构化结果返回。 [帧审阅](../aseprite_mcp/tools/review.py)
-- **交付**在发布前校验图像及元数据。发布多个文件时，发生 I/O 错误会尝试恢复已替换的目标。Minecraft Java Edition 的 PNG 保存源帧像素，`.png.mcmeta` 表达播放顺序与时长。 [导出](../aseprite_mcp/tools/export.py)
+- **交付**在发布前校验图像及元数据。发布多个文件时，发生 I/O 错误会尝试恢复已替换的目标。Minecraft Java Edition 动画的 `.png.mcmeta` 表达播放顺序与时长。单帧切片从同一张原生渲染快照裁切各区域，为每张 PNG 写入静态 `.png.mcmeta`。 [导出](../aseprite_mcp/tools/export.py)
 
 ## 会话与失败
 

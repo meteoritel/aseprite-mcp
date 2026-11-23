@@ -121,6 +121,12 @@ class TextureDelivery(TypedDict):
     frames: list[TextureFrame]
 
 
+class SliceTextureDelivery(TypedDict):
+    slice_name: str
+    png: str
+    mcmeta: str
+
+
 class TextMetrics(TypedDict):
     width: int
     height: int

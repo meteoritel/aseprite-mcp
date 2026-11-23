@@ -111,9 +111,13 @@ CORE_TOOLS = {
 }
 
 EXTENSION_TOOLS = {
+    "sprite_map": (
+        "create_layered_sprite",
+    ),
     "export": (
         "export_spritesheet",
         "export_layers",
+        "export_slices_to_minecraft",
     ),
     "animation": (
         "tween_cel_positions",
@@ -174,22 +178,37 @@ EXTENSION_TOOLS = {
 TOOL_SEARCH_TERMS = {
     "draw_sprite_map": ("绘制", "修改", "擦除"),
     "draw_sprite_maps": ("绘制", "修改", "批量"),
+    "create_layered_sprite": ("复合网格", "分层绘制", "分层创建"),
     "draw_dither_detail": ("抖动", "纹理", "质感"),
     "apply_dither_pattern": ("抖动", "纹理", "质感"),
     "apply_dither_gradient": ("抖动", "渐变", "过渡"),
     "adjust_hsl": ("色相", "色相偏移", "色相调整"),
     "review_frame": ("审阅", "预览", "复核"),
     "export_minecraft_texture": ("纹理导出", "导出"),
+    "export_slices_to_minecraft": ("切片导出", "套装纹理"),
 }
 
 TOOL_EXAMPLES = {
-    "create_canvas": [{"width": 16, "height": 16, "filename": "D:/art/coin.aseprite"}],
-    "draw_sprite_maps": [{"maps": [
-        {"layer_name": "base", "frame_index": 1, "x": 6, "y": 6,
-         "rows": [".AA.", "AAAA", ".AA."], "palette": {"A": "#8B5A2B"}},
-        {"layer_name": "shine", "frame_index": 1, "x": 7, "y": 6,
-         "rows": ["BB"], "palette": {"B": "#F2C48D"}},
-    ]}],
+    "create_canvas": [{
+        "width": 16, "height": 16, "filename": "D:/art/coin.aseprite", "initial_layers": ["base", "shine"],
+    }],
+    "draw_sprite_maps": [{
+        "palette": {"A": "#8B5A2B", "B": "#F2C48D"},
+        "maps": [
+            {"layer_name": "base", "frame_index": 1, "x": 6, "y": 6, "rows": [".AA.", "AAAA", ".AA."]},
+            {"layer_name": "shine", "frame_index": 1, "x": 7, "y": 6, "rows": ["BB"]},
+        ],
+    }],
+    "create_layered_sprite": [{
+        "filename": "D:/art/coin.aseprite",
+        "rows": [".SS.", "SBB.", ".OO."],
+        "palette": {"B": "#8B5A2B", "S": "#F2C48D", "O": "#2A1810"},
+        "layers": [
+            {"name": "base", "mapping": {"B": "B", "S": "B"}},
+            {"name": "shine", "mapping": {"S": "S"}},
+            {"name": "outline", "mapping": {"O": "O"}},
+        ],
+    }],
     "draw_sprite_map": [{
         "layer_name": ["shine"], "frame_index": 1, "x": 7, "y": 6,
         "rows": ["B."], "palette": {"B": "#F2C48D"},
@@ -217,4 +236,9 @@ TOOL_EXAMPLES = {
         {"output_filename": "D:/art/coin.png"},
         {"output_filename": "D:/art/texture.png", "tag_name": "loop"},
     ],
+    "export_slices_to_minecraft": [{
+        "filename": "D:/art/armor.aseprite",
+        "output_directory": "D:/art/textures/item",
+        "slice_names": ["cat_helmet", "cat_chestplate", "cat_leggings", "cat_boots"],
+    }],
 }

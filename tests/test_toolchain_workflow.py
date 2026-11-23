@@ -73,7 +73,11 @@ def test_complete_discovery_and_contract_failures_without_aseprite(tmp_path, bit
             for example in definition["examples"]:
                 validate(example, input_schema)
         assert definitions["set_slice_center"]["inputSchema"]["properties"]["x"]["description"]
-        assert definitions["draw_sprite_maps"]["inputSchema"]["$defs"]["SpriteMapEdit"]["additionalProperties"] is False
+        batch_map = definitions["draw_sprite_maps"]["inputSchema"]["$defs"]["BatchSpriteMapEdit"]
+        assert batch_map["additionalProperties"] is False
+        assert "palette" not in batch_map["required"]
+        assert "palette" in definitions["draw_sprite_map"]["inputSchema"]["required"]
+        assert "palette" in definitions["review_frame"]["outputSchema"]["$defs"]["SpriteMapEdit"]["required"]
         assert all(definitions[name]["examples"] for name in TOOL_EXAMPLES)
         for query, expected in [
             ("draw_sprite_maps", "draw_sprite_maps"),
@@ -106,6 +110,61 @@ def test_complete_discovery_and_contract_failures_without_aseprite(tmp_path, bit
         assert receive(21) == initial
 
 
+def test_initialized_canvas_and_request_palette_over_stdio(tmp_path):
+    first = tmp_path / "shared.aseprite"
+    second = tmp_path / "local.aseprite"
+    named_layers = ["base", '上色/亮"点']
+    palette = {"A": "#f00", "B": "#0f0"}
+    maps = [
+        {"layer_name": ["base"], "frame_index": 1, "rows": ["AB"]},
+        {"layer_name": [named_layers[1]], "frame_index": 1, "rows": [".A"], "palette": {"A": "#00f"}},
+        {"layer_name": ["base"], "frame_index": 1, "rows": [".."], "palette": {}},
+    ]
+    with connected_server() as (send, receive):
+        def invoke(tool, **arguments):
+            result = call(send, receive, tool, arguments)
+            assert result["isError"] is False, result
+            return result["structuredContent"]["data"]
+
+        for filename, arguments in [
+            (first, {"maps": maps, "palette": palette}),
+            (second, {"maps": [maps[0] | {"palette": palette}, *maps[1:]]}),
+        ]:
+            invoke("create_canvas", filename=str(filename), width=2, height=1, initial_layers=named_layers)
+            invoke("draw_sprite_maps", **arguments)
+            info = invoke("get_sprite_info")
+            assert [layer["path"] for layer in info["layers"]] == [[name] for name in named_layers]
+
+        before = digest(second)
+        original_first = digest(first)
+        for invalid_maps, fields, fragments in [
+            (maps[:1], {}, ("maps[0].palette",)),
+            ([maps[0] | {"palette": {}}], {"palette": palette}, ("row 0, column 0",)),
+            ([maps[0] | {"transparent": "B"}], {"palette": palette}, ("transparent character 'B'",)),
+            ([maps[0], maps[0] | {"rows": ["AB", "ABA"]}], {"palette": palette},
+             ("maps[1]", "rows[0] has 2", "rows[1] has 3", '"ABA"', "column 2 (grid right boundary")),
+            ([maps[0] | {"rows": ["ABA", "AB"]}], {"palette": palette},
+             ("rows[0] has 3", "rows[1] has 2", '"AB"', "column 2 (first missing cell")),
+        ]:
+            bad = call(send, receive, "draw_sprite_maps", {"maps": invalid_maps, **fields})
+            assert bad["isError"] is True, bad
+            assert all(fragment in bad["content"][0]["text"] for fragment in fragments), bad
+            assert digest(second) == before
+
+        for initial_layers in ([], [""], ["same", "same"]):
+            bad = call(send, receive, "create_canvas", {
+                "filename": str(first), "width": 4, "height": 3, "overwrite": True, "initial_layers": initial_layers,
+            })
+            assert bad["isError"] is True, bad
+            assert digest(first) == original_first
+            active = invoke("review_frame", frame_index=1)
+            assert Path(active["filename"]) == second
+
+    original = frame_image(first.as_posix(), 1, tmp_path)
+    assert original.tobytes() == frame_image(second.as_posix(), 1, tmp_path).tobytes()
+    assert tuple(original.getpixel((x, 0)) for x in range(2)) == ((255, 0, 0, 255), (0, 0, 255, 255))
+
+
 def test_dither_detail_is_directly_callable_over_stdio(new_sprite):
     filename = new_sprite(4, 4)
     run(drawing.draw_rectangle_at(
@@ -134,6 +193,70 @@ def test_dither_detail_is_directly_callable_over_stdio(new_sprite):
             "x": 2, "y": 2,
         }, request_id=32)
         assert pixel["structuredContent"]["data"]["hex"] == "#00ff00"
+
+
+def test_create_layered_sprite_keeps_editable_underpaint_over_stdio(tmp_path):
+    target = tmp_path / "new.aseprite"
+    other = tmp_path / "other.ase"
+    palette = {"A": "#a41", "B": "#fc8", "O": "#234"}
+    rules = [
+        {"name": "base", "mapping": {"A": "A", "B": "A"}},
+        {"name": "shade", "mapping": {"B": "B"}},
+        {"name": "outline", "mapping": {"O": "O"}},
+        {"name": "notes", "mapping": {}},
+    ]
+    arguments = {"filename": str(target.with_suffix("")), "rows": ["AB.", ".O."], "palette": palette, "layers": rules}
+    with connected_server() as (send, receive):
+        def invoke(tool, **values):
+            result = call(send, receive, tool, values)
+            assert result["isError"] is False, result
+            return result["structuredContent"]["data"]
+
+        definition, = invoke("search_tools", query="分层绘制", limit=1)["tools"]
+        assert definition["name"] == "create_layered_sprite" and definition["invocation"] == "call_tool"
+        created = call(send, receive, "call_tool", {"name": definition["name"], "arguments": arguments})
+        assert created["isError"] is False, created
+        validate(created["structuredContent"], definition["outputSchema"])
+        receipt = created["structuredContent"]["data"]
+        assert receipt["layer_paths"] == [[rule["name"]] for rule in rules]
+        assert Path(receipt["filename"]) == target
+        info = invoke("get_sprite_info")
+        assert (info["width"], info["height"], info["frames"], info["color_mode"]) == (3, 2, 1, "rgb")
+        assert [layer["path"] for layer in info["layers"]] == receipt["layer_paths"]
+
+        base = invoke("get_sprite_map", layer_name=["base"], x=0, y=0, width=3, height=2, palette=palette)
+        assert base["rows"] == ["AA.", "..."]
+        expected = ((170, 68, 17, 255), (255, 204, 136, 255), (0, 0, 0, 0),
+                    (0, 0, 0, 0), (34, 51, 68, 255), (0, 0, 0, 0))
+        assert frame_image(str(target), 1, tmp_path).tobytes() == bytes(value for pixel in expected for value in pixel)
+
+        invoke("set_layer_visibility", layer_name=["shade"], visible=False)
+        assert frame_image(str(target), 1, tmp_path).getpixel((1, 0)) == expected[0]
+        invoke("set_layer_visibility", layer_name=["shade"], visible=True)
+        invoke("set_layer_visibility", layer_name=["base"], visible=False)
+        image = frame_image(str(target), 1, tmp_path)
+        assert (image.getpixel((0, 0)), image.getpixel((1, 0))) == (expected[2], expected[1])
+
+        original = digest(target)
+        for changes, message in [
+            ({}, "already exists"),
+            ({"filename": str(other), "layers": rules[:1]}, "Top layer mapping"),
+            ({"filename": str(other), "layers": rules[:2]}, "No layer mapping for 'O'"),
+            ({"filename": str(other), "layers": [{"name": "base", "mapping": {"A": "Z"}}]}, "'Z'"),
+            ({"filename": str(other), "palette": palette | {"A": "#a418"}}, "must be opaque"),
+            ({"filename": str(other), "layers": [rules[0], rules[0], *rules[1:]]}, "unique"),
+        ]:
+            failed = call(send, receive, "call_tool", {"name": definition["name"], "arguments": arguments | changes})
+            assert failed["isError"] is True, failed
+            assert message in failed["content"][0]["text"], failed
+            assert not other.exists() and digest(target) == original
+        assert Path(invoke("review_frame", frame_index=1)["filename"]) == target
+
+        invoke("call_tool", name=definition["name"], arguments={
+            "filename": str(other), "rows": [".."], "palette": {},
+            "layers": [{"name": "sketch", "mapping": {}}],
+        })
+        assert frame_image(str(other), 1, tmp_path).getbbox() is None
 
 
 def test_ordered_batch_uses_one_process_and_commit_and_preserves_on_failure(new_sprite, tmp_path, monkeypatch):

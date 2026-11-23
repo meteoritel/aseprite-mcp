@@ -39,6 +39,7 @@ def create_discovery_tools(extensions: dict[str, tuple[str, Tool]], core: dict[s
     workflow_terms = set().union(*TOOL_SEARCH_TERMS.values())
 
     def ranked(query, category=""):
+        exact_query = query.casefold().strip()
         tokens = _words(query)
         terms = {term for term in workflow_terms if term in query}
         if terms:
@@ -52,7 +53,7 @@ def create_discovery_tools(extensions: dict[str, tuple[str, Tool]], core: dict[s
             category_words = _words(tool_category)
             short_words = _words(description)
             all_words = _words(" ".join((name, tool_category, tool.description, *tool.parameters.get("properties", {}))))
-            exact = name.casefold() == query.casefold().strip()
+            exact = name.casefold() == exact_query
             if tokens and not exact and not tokens <= all_words:
                 continue
             term_matches = terms.intersection(TOOL_SEARCH_TERMS.get(name, ()))
@@ -60,6 +61,8 @@ def create_discovery_tools(extensions: dict[str, tuple[str, Tool]], core: dict[s
                 continue
             score = (1000 if exact else 0) + 100 * len(tokens & name_words) + 80 * len(tokens & category_words) + 10 * len(tokens & short_words)
             score += 100 * len(term_matches)
+            if exact_query in term_matches:
+                score += 100
             matches.append((-score, index, name, tool_category, tool))
         return sorted(matches)
 

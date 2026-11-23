@@ -1,6 +1,7 @@
 """Compact character-grid editing and readback."""
 
 import json
+from pathlib import Path
 from typing import Annotated, List
 
 from mcp.server.mcpserver.exceptions import ToolError
@@ -8,36 +9,59 @@ from pydantic import Field, ValidationError
 
 from ..core.commands import AsepriteCommand, lua_escape
 from ..core.composite import COMPOSE_FRAME
-from ..core.contracts import Byte, Character, FrameIndex, LayerRef, NonnegativeInt, Palette, PositiveInt, Region, SpriteMapEdit, ToolOutput
-from ..core.editing import edit_output, execute_edit_script
+from ..core.contracts import BatchSpriteMapEdit, Byte, Character, FrameIndex, LayerRef, NonnegativeInt, Palette, PositiveInt, Region, SpriteLayerRule, SpriteMapEdit, ToolOutput
+from ..core.editing import edit_output, execute_edit_script, new_canvas_lua, new_project_path
 from ..core.lua import EDIT_TARGET, NORMALIZE_CEL, lua_layer_ref
 from ..core.region_read import EMIT_REGION_PIXELS, FIND_REGION_CEL, lua_region, read_region_pixels
 from ..core.results import EditReceipt, SpriteMap
-from ..core.sprite_grid import compile_sprite_map, encode_sprite_map, parse_sprite_map
-from ..core.state import prepare_filename
+from ..core.sprite_grid import compile_layered_sprite, compile_sprite_map, encode_sprite_map, parse_sprite_map
+from ..core.state import prepare_filename, set_active_file
 
-async def draw_sprite_maps(*, filename: str = "", maps: Annotated[list[SpriteMapEdit], Field(min_length=1)]) -> ToolOutput[EditReceipt]:
+async def draw_sprite_maps(
+    *,
+    filename: str = "",
+    maps: Annotated[list[BatchSpriteMapEdit], Field(min_length=1)],
+    palette: Palette | None = None,
+) -> ToolOutput[EditReceipt]:
     """Draw ordered maps across layers/frames with one all-or-nothing project commit.
 
     Args:
         filename: Project, defaulting to the active file.
         maps: Ordered grid edits. All frames must exist. New top-level layers follow first occurrence order.
+        palette: Shared character palette for this call. An explicit map palette replaces it for that map.
     """
     filename = prepare_filename(filename)
     if not maps:
         raise ToolError("maps must contain at least one map")
     compiled = []
     for index, item in enumerate(maps):
+        if not isinstance(item, (BatchSpriteMapEdit, SpriteMapEdit)):
+            try:
+                item = BatchSpriteMapEdit.model_validate(item)
+            except ValidationError as exc:
+                raise ToolError(f"maps[{index}]: {exc}") from exc
+        effective_palette = item.palette if item.palette is not None else palette
+        if effective_palette is None:
+            raise ToolError(f"maps[{index}].palette is required without a shared palette")
         try:
-            item = item if isinstance(item, SpriteMapEdit) else SpriteMapEdit.model_validate(item)
-            _, _, pixels = compile_sprite_map(item.rows, item.palette, item.transparent,
+            _, _, pixels = compile_sprite_map(item.rows, effective_palette, item.transparent,
                                               item.mirror_x, item.mirror_y, item.erase_transparent)
-        except (ToolError, ValidationError) as exc:
+        except ToolError as exc:
             raise ToolError(f"maps[{index}]: {exc}") from exc
         compiled.append(dict(layer=item.layer_name, frame=item.frame_index, create=item.create_if_missing,
                              pixels=[[item.x+x, item.y+y, *rgba] for (x,y),rgba in sorted(pixels.items())]))
-    script = EDIT_TARGET + NORMALIZE_CEL + '\nlocal edits = json.decode("' + lua_escape(json.dumps(compiled, ensure_ascii=False)) + '")\n' + r'''
+    script = _sprite_map_writer_lua(compiled) + '''
     local spr = app.activeSprite
+    if apply_sprite_maps(spr, edits) then save_project(spr) else print("PROJECT_UNCHANGED") end
+    '''
+    execution = await execute_edit_script(script, filename)
+    return edit_output("Sprite maps applied in order", filename, execution)
+
+
+def _sprite_map_writer_lua(compiled: list[dict]) -> str:
+    edits = lua_escape(json.dumps(compiled, ensure_ascii=False))
+    return EDIT_TARGET + NORMALIZE_CEL + f'\nlocal edits = json.decode("{edits}")\n' + r'''
+local function apply_sprite_maps(spr, edits)
     if not spr then error("No active sprite") end
     if spr.colorMode ~= ColorMode.RGB then error("Sprite maps require RGB mode. Tip: use set_color_mode(mode='rgb') first.") end
     local planned_layers, planned_cels, bindings = {}, {}, {}
@@ -87,10 +111,48 @@ async def draw_sprite_maps(*, filename: str = "", maps: Annotated[list[SpriteMap
             if not ok then error("maps[" .. (index-1) .. "]: " .. message) end
         end
     end)
-    if changed then save_project(spr) else print("PROJECT_UNCHANGED") end
+    return changed
+end
     '''
-    execution = await execute_edit_script(script, filename)
-    return edit_output("Sprite maps applied in order", filename, execution)
+
+
+async def create_layered_sprite(
+    *,
+    filename: str,
+    rows: Annotated[list[str], Field(min_length=1)],
+    palette: Palette,
+    layers: Annotated[list[SpriteLayerRule], Field(min_length=1)],
+    transparent: Character = ".",
+) -> ToolOutput[EditReceipt]:
+    """Create one RGB frame with editable layers expanded from a composite grid.
+
+    Args:
+        filename: Absolute path to a new .aseprite or .ase project. An omitted extension becomes .aseprite.
+        rows: Equal-width composite rows, top to bottom. The rows set the canvas size.
+        palette: Character-to-hex palette for composite and layer colors. Mapped colors must be opaque.
+        layers: Rules listed bottom to top, each with a unique name and character mapping. A symbol may paint on several layers; its topmost mapped color must match the composite.
+        transparent: Grid character to leave clear on all layers.
+    """
+    filename = new_project_path(filename)
+    target = Path(filename)
+    if target.exists() or target.is_symlink():
+        raise ToolError(f"Project already exists: {filename}; choose a new project filename")
+    rules = [layer if isinstance(layer, SpriteLayerRule) else SpriteLayerRule.model_validate(layer) for layer in layers]
+    width, height, pixels_by_layer = compile_layered_sprite(rows, palette, rules, transparent)
+    creation = new_canvas_lua(width, height, [rule.name for rule in rules])
+    compiled = [
+        dict(layer=[rule.name], frame=1, create=True, pixels=pixels)
+        for rule, pixels in zip(rules, pixels_by_layer)
+    ]
+    script = _sprite_map_writer_lua(compiled) + creation + '''
+    apply_sprite_maps(spr, edits)
+    _aseprite_edit_targets = {}
+    for _, layer in ipairs(spr.layers) do remember_target(layer) end
+    save_project(spr)
+    '''
+    execution = await execute_edit_script(script, output_filename=filename)
+    set_active_file(filename)
+    return edit_output("Layered sprite created", filename, execution, frame=1)
 
 
 async def draw_sprite_map(*, filename: str='', layer_name: LayerRef, frame_index: FrameIndex, rows: List[str], palette: Palette, x: int=0, y: int=0, transparent: Character='.', mirror_x: bool=False, mirror_y: bool=False, erase_transparent: bool=False, create_if_missing: bool=True) -> ToolOutput[EditReceipt]:

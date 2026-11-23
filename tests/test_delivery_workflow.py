@@ -1,17 +1,17 @@
 """Decode delivered images and metadata, preserving projects and previous outputs on failure."""
 
-from support import payload
 import json
 from pathlib import Path
 
 import pytest
+from jsonschema import validate
 from PIL import Image
 from mcp.server.mcpserver.exceptions import ToolError
 
 from aseprite_mcp.core.commands import AsepriteCommand
-from aseprite_mcp.core import state
-from aseprite_mcp.tools import animation, canvas, drawing, export, sprite_map
-from support import digest, run
+from aseprite_mcp.core import editing, state
+from aseprite_mcp.tools import animation, canvas, drawing, export, slices, sprite_map
+from support import call, connected_server, digest, frame_image, payload, run
 
 
 def animated_project(new_sprite):
@@ -131,6 +131,122 @@ def test_publish_failure_restores_existing_pair(new_sprite, tmp_path, monkeypatc
         run(export.export_minecraft_texture(filename=filename, output_filename=str(target)))
     assert target.read_bytes() == b"old image"
     assert sidecar.read_bytes() == b"old metadata"
+
+
+def test_named_indexed_slices_export_in_requested_order_over_stdio(tmp_path):
+    source = tmp_path / "indexed.aseprite"
+    run(editing.execute_edit_script("""
+        local spr = Sprite(4, 1, ColorMode.INDEXED)
+        local palette = Palette(3)
+        palette:setColor(0, Color{r=0, g=0, b=0, a=0})
+        palette:setColor(1, Color{r=255, g=153, b=34})
+        palette:setColor(2, Color{r=1, g=2, b=3})
+        spr:setPalette(palette)
+        local image = Image(4, 1, ColorMode.INDEXED)
+        image:putPixel(0, 0, 1)
+        image:putPixel(2, 0, 2)
+        spr:newCel(spr.layers[1], 1, image, Point(0, 0))
+        local hidden = spr:newLayer()
+        local upper = image:clone()
+        upper:putPixel(0, 0, 2)
+        spr:newCel(hidden, 1, upper, Point(0, 0))
+        hidden.isVisible = false
+        spr:newSlice(Rectangle(0, 0, 2, 1)).name = "left"
+        spr:newSlice(Rectangle(2, 0, 2, 1)).name = "right"
+        spr:newSlice(Rectangle(3, 0, 2, 1)).name = "outside"
+        save_project(spr)
+    """, output_filename=str(source)))
+    expected = frame_image(str(source), 1, tmp_path)
+    assert expected.getpixel((0, 0)) == (255, 153, 34, 255)
+    assert expected.getpixel((2, 0)) == (1, 2, 3, 255)
+    original = digest(source)
+
+    with connected_server(env={"ASERITE_MCP_WORKSPACE": str(tmp_path)}) as (send, receive):
+        discovery = call(send, receive, "search_tools", {"query": "套装纹理", "limit": 1})
+        definition, = discovery["structuredContent"]["data"]["tools"]
+        assert definition["name"] == "export_slices_to_minecraft" and definition["invocation"] == "call_tool"
+        by_export = call(send, receive, "search_tools", {"query": "切片导出", "limit": 1})
+        assert by_export["structuredContent"]["data"]["tools"][0]["name"] == definition["name"]
+
+        def export_slices(names, directory):
+            return call(send, receive, "call_tool", {"name": definition["name"], "arguments": {
+                "filename": source.name, "slice_names": names, "output_directory": directory,
+            }})
+
+        result = export_slices(["right", "left"], "textures")
+        assert result["isError"] is False, result
+        validate(result["structuredContent"], definition["outputSchema"])
+        deliveries = result["structuredContent"]["data"]
+        assert [entry["slice_name"] for entry in deliveries] == ["right", "left"]
+        for entry, offset in zip(deliveries, (2, 0)):
+            assert Path(entry["png"]) == tmp_path / "textures" / f"{entry['slice_name']}.png"
+            with Image.open(entry["png"]) as image:
+                assert image.size == (2, 1)
+                assert image.convert("RGBA").tobytes() == expected.crop((offset, 0, offset + 2, 1)).tobytes()
+            assert json.loads(Path(entry["mcmeta"]).read_text(encoding="utf-8")) == {}
+
+        result = export_slices(["left"], "subset")
+        assert result["isError"] is False, result
+        assert sorted(path.name for path in (tmp_path / "subset").iterdir()) == ["left.png", "left.png.mcmeta"]
+
+        for names, message in [
+            (["left", "missing"], "Slice not found: missing"),
+            (["left", "outside"], "Slice outside the canvas: outside"),
+            (["right", "right"], "unique"),
+            (["left", "../escape"], "Invalid slice name"),
+            (["con"], "Invalid slice name"),
+        ]:
+            failed = export_slices(names, "rejected")
+            assert failed["isError"] is True, failed
+            assert message in failed["content"][0]["text"], failed
+            assert not (tmp_path / "rejected").exists()
+        assert digest(source) == original
+
+        assert call(send, receive, "add_frame", {"filename": source.name})["isError"] is False
+        failed = export_slices(["left"], "animated")
+        assert failed["isError"] is True, failed
+        assert "single-frame" in failed["content"][0]["text"], failed
+        assert not (tmp_path / "animated").exists()
+
+
+def test_slice_batch_preserves_outputs_on_collision_and_publish_failure(new_sprite, tmp_path, monkeypatch):
+    source = new_sprite(2, 1)
+    run(slices.create_slice(filename=source, name="fresh", x=0, y=0, width=1, height=1))
+    run(slices.create_slice(filename=source, name="saved", x=1, y=0, width=1, height=1))
+    original = digest(source)
+    saved_png, saved_metadata = tmp_path / "saved.png", tmp_path / "saved.png.mcmeta"
+    saved_png.write_bytes(b"previous image")
+    saved_metadata.write_bytes(b"previous metadata")
+    fresh_png = tmp_path / "fresh.png"
+
+    def export_batch():
+        return run(export.export_slices_to_minecraft(
+            filename=source, output_directory=str(tmp_path), slice_names=["fresh", "saved"],
+        ))
+
+    resolve = Path.resolve
+    with monkeypatch.context() as patch:
+        def resolve_alias(path, *args, **kwargs):
+            return resolve(saved_png if path == fresh_png else path, *args, **kwargs)
+
+        patch.setattr(Path, "resolve", resolve_alias)
+        with pytest.raises(ToolError, match="distinct paths"):
+            export_batch()
+
+    replace = export.os.replace
+
+    def fail_last_replacement(source_path, destination):
+        if Path(destination) == saved_metadata:
+            raise OSError("metadata destination locked")
+        return replace(source_path, destination)
+
+    monkeypatch.setattr(export.os, "replace", fail_last_replacement)
+    with pytest.raises(ToolError, match="Could not publish"):
+        export_batch()
+    assert saved_png.read_bytes() == b"previous image"
+    assert saved_metadata.read_bytes() == b"previous metadata"
+    assert not fresh_png.exists() and not (tmp_path / "fresh.png.mcmeta").exists()
+    assert digest(source) == original
 
 
 @pytest.mark.parametrize("corruption", ["png", "json", "layout"])

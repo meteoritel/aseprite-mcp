@@ -2,10 +2,10 @@
 
 受托绘制 Minecraft 纹理时，直接用 Aseprite MCP 工具在原生工程中绘制和修订。已有外部素材可导入指定图层。
 
-1. 用 `create_canvas` 建立原生工程。用 `draw_sprite_maps` 批量绘制各层网格，按任务需要保持图层可独立编辑。
+1. 各层已有独立网格时，用 `create_canvas(initial_layers=[…])` 按从底到顶的顺序建立图层，再用 `draw_sprite_maps` 批量绘制。多层共用调色板时在批次顶层传一次 `palette`，单层可传自己的完整色板。只有一张复合网格时，查找 `create_layered_sprite`，用显式字符映射一次创建分层工程。同一字符可同时映射到底色和上层。
 2. 用 `review_frame` 查看可见合成。局部修改时指定目标图层，保留本次审阅结果，从可编辑 cel 网格的副本制作改动。
 3. 用 `draw_sprite_map` 提交局部修改。再次调用 `review_frame`，使用上次快照核对同一帧和区域。结合内联图、合成差异与目标 cel 差异确认结果。
-4. 用 `export_minecraft_texture` 交付 Java Edition 纹理。动画先安排帧、时长和播放范围。保留原生工程供后续编辑。
+4. 单件或动画用 `export_minecraft_texture` 交付 Java Edition 纹理。套装排在同一个单帧工程时，查找 `create_slice` 创建命名切片，调用 `export_slices_to_minecraft` 批量交付原尺寸 PNG 和静态 `.png.mcmeta`。保留原生工程供后续编辑。需要持久放大图时，另用 `export_frame(scale=8)` 输出展示 PNG。
 
 ## 工具发现与扩展调用
 

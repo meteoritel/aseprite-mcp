@@ -7,18 +7,20 @@ import shutil
 import tempfile
 import uuid
 from contextlib import contextmanager
+from ntpath import isreserved
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 from PIL import Image
 from mcp.server.mcpserver.exceptions import ToolError
+from pydantic import Field
 
 from ..core.commands import AsepriteCommand, lua_escape
 from ..core.contracts import FrameIndex, LayerRef, ToolOutput
 from ..core.editing import edit_output, execute_edit_script, native_project_path, validate_native_project
 from ..core.inspection import read_sprite_info
 from ..core.lua import EDIT_TARGET, NORMALIZE_CEL, lua_layer_ref
-from ..core.results import EditReceipt, ExportReceipt, TextureDelivery
+from ..core.results import EditReceipt, ExportReceipt, SliceTextureDelivery, TextureDelivery
 from ..core.state import get_review_directory, prepare_filename
 
 REVIEW_SCALE = 8
@@ -63,11 +65,15 @@ def _generated_images(directory: Path, requested: Path) -> list[Path]:
     return sorted(produced, key=lambda path: int(pattern.fullmatch(path.name).group(1) or 0))
 
 
+def _require_distinct_paths(paths: list[Path]) -> None:
+    canonical = {os.path.normcase(str(path.resolve())) for path in paths}
+    if len(canonical) != len(paths):
+        raise ToolError("Export outputs must have distinct paths")
+
+
 def _publish_files(files: list[tuple[Path, Path]]) -> None:
     """Prepare each file beside its target and restore ordinary failed publishes."""
-    targets = [os.path.normcase(str(target.resolve())) for _, target in files]
-    if len(set(targets)) != len(targets):
-        raise ToolError("Export outputs must have distinct paths")
+    _require_distinct_paths([target for _, target in files])
     prepared, applied, retained = [], [], set()
     try:
         for source, target in files:
@@ -372,6 +378,100 @@ async def export_minecraft_texture(*, filename: str = "", output_filename: str,
             preview.unlink(missing_ok=True)
         raise
     return ToolOutput(summary='Export minecraft texture completed', data={'png': str(target), 'mcmeta': str(sidecar), 'preview_png': str(preview), 'preview_scale': REVIEW_SCALE, 'frames': [{'source_frame': source, 'index': index, 'duration_ms': duration} for index, (source, duration) in enumerate(zip(frames, durations))], 'preview_lifetime':'session'})
+
+
+async def _snapshot_slices(filename: str, names: list[str], image: Path):
+    requested = lua_escape(json.dumps(names))
+    staged = lua_escape(image.as_posix())
+    script = f'''
+    local spr = app.activeSprite
+    if not spr then error("No active sprite") end
+    if #spr.frames ~= 1 then error("Slice texture export requires a single-frame project") end
+    local requested = json.decode("{requested}")
+    local slices, duplicate_names = {{}}, {{}}
+    for _, slice in ipairs(spr.slices) do
+        local name = slice.name
+        if slices[name] then duplicate_names[name] = true end
+        slices[name] = slice
+    end
+    local regions = {{}}
+    for _, name in ipairs(requested) do
+        if duplicate_names[name] then error("Ambiguous slice name: " .. name) end
+        local slice = slices[name]
+        if not slice then error("Slice not found: " .. name) end
+        local bounds = slice.bounds
+        if not bounds or bounds.x < 0 or bounds.y < 0
+           or bounds.width < 1 or bounds.height < 1
+           or bounds.x + bounds.width > spr.width or bounds.y + bounds.height > spr.height then
+            error("Slice outside the canvas: " .. name)
+        end
+        table.insert(regions, {{bounds.x, bounds.y, bounds.x + bounds.width, bounds.y + bounds.height}})
+    end
+    spr:saveCopyAs("{staged}")
+    print(json.encode({{size={{spr.width, spr.height}}, regions=regions}}))
+    '''
+    result = await AsepriteCommand.execute_lua_script_checked(script, filename)
+    try:
+        return json.loads(result)
+    except ValueError as exc:
+        raise ToolError("Aseprite returned invalid slice metadata") from exc
+
+
+async def export_slices_to_minecraft(
+    *,
+    filename: str = "",
+    output_directory: str,
+    slice_names: Annotated[list[str], Field(min_length=1)],
+) -> ToolOutput[list[SliceTextureDelivery]]:
+    """Deliver static Minecraft Java Edition textures from named native slices.
+
+    Each slice yields an original-size PNG and an empty .png.mcmeta. The
+    source must have one frame, and output records follow the requested order.
+
+    Args:
+        filename: Source native project, defaulting to the active file.
+        output_directory: Destination directory. Relative paths use the workspace.
+        slice_names: Unique slice names usable as Java Edition resource file names.
+    """
+    if not slice_names:
+        raise ToolError("Specify at least one slice name")
+    if len(set(slice_names)) != len(slice_names):
+        raise ToolError("Slice names must be unique")
+    output_root = _output_path(output_directory)
+    outputs = []
+    for name in slice_names:
+        if not re.fullmatch(r"[a-z0-9._-]+", name) or name in (".", "..") or isreserved(f"{name}.png"):
+            raise ToolError(f"Invalid slice name for a Minecraft texture file: {name!r}")
+        outputs.append((output_root / f"{name}.png", output_root / f"{name}.png.mcmeta"))
+    filename = prepare_filename(filename)
+    _require_distinct_paths([Path(filename), *(path for pair in outputs for path in pair)])
+
+    deliveries = []
+    try:
+        with tempfile.TemporaryDirectory(prefix="aseprite-slice-export-") as directory:
+            staging = Path(directory)
+            snapshot = staging / "frame.png"
+            metadata = await _snapshot_slices(filename, slice_names, snapshot)
+            with Image.open(snapshot) as image:
+                frame = image.convert("RGBA")
+            regions = metadata["regions"]
+            if list(frame.size) != metadata["size"] or len(regions) != len(outputs):
+                raise ToolError("Aseprite returned an invalid slice snapshot")
+            files = []
+            for index, (name, (png, mcmeta), box) in enumerate(zip(slice_names, outputs, regions, strict=True)):
+                staged_png = staging / f"slice-{index}.png"
+                staged_mcmeta = staged_png.with_suffix(".png.mcmeta")
+                cropped = frame.crop(tuple(box))
+                cropped.save(staged_png)
+                if _image_size(staged_png) != cropped.size:
+                    raise ToolError(f"Invalid PNG dimensions for slice {name!r}")
+                staged_mcmeta.write_text("{}\n", encoding="utf-8")
+                files.extend([(staged_png, png), (staged_mcmeta, mcmeta)])
+                deliveries.append({"slice_name": name, "png": str(png), "mcmeta": str(mcmeta)})
+            _publish_files(files)
+    except OSError as exc:
+        raise ToolError(f"Could not export slices to '{output_root}': {exc}") from exc
+    return ToolOutput(summary="Exported Minecraft textures from slices", data=deliveries)
 
 
 async def import_image_as_layer(*, filename: str = "", image_path: str, layer_name: LayerRef,

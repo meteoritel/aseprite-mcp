@@ -12,6 +12,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from .commands import AsepriteCommand, lua_escape
 from .contracts import ToolOutput
 from .results import EditReceipt
+from .state import prepare_filename
 
 NATIVE_EXTENSIONS = {".ase", ".aseprite"}
 ASEPRITE_MAGIC = 0xA5E0
@@ -47,6 +48,30 @@ def native_project_path(filename: str) -> str:
     if path.suffix.lower() not in NATIVE_EXTENSIONS:
         raise ToolError("Use .aseprite or .ase for an editable project; use export tools for images")
     return str(path)
+
+
+def new_project_path(filename: str) -> str:
+    if not os.path.isabs(filename):
+        raise ToolError(f"Specify an ABSOLUTE project filename, e.g. 'D:/art/sprites/coin.aseprite'. Got: {filename!r}")
+    return native_project_path(prepare_filename(filename, must_exist=False, anchor=False))
+
+
+def new_canvas_lua(width: int, height: int, layer_names: list[str] | None = None) -> str:
+    script = f"local spr = Sprite({width}, {height})\n"
+    if layer_names is None:
+        return script
+    if not layer_names or any(not name.strip() for name in layer_names):
+        raise ToolError("Provide at least one non-blank layer name")
+    if len(set(layer_names)) != len(layer_names):
+        raise ToolError("Layer names must be unique")
+    names = lua_escape(json.dumps(layer_names, ensure_ascii=False))
+    return script + f'''
+    local initial_layers = json.decode("{names}")
+    spr.layers[1].name = initial_layers[1]
+    for index = 2, #initial_layers do
+        spr:newLayer().name = initial_layers[index]
+    end
+    '''
 
 
 def validate_native_project(filename: str) -> None:

@@ -1,15 +1,24 @@
 import os
+from typing import Annotated
 
 from mcp.server.mcpserver.exceptions import ToolError
+from pydantic import Field
 
 from ..core.commands import lua_escape
 from ..core.contracts import FrameIndex, LayerRef, PositiveInt, ToolOutput
-from ..core.editing import edit_output, execute_edit_script, native_project_path
+from ..core.editing import edit_output, execute_edit_script, new_canvas_lua, new_project_path
 from ..core.lua import FIND_LAYER, LAYER_NAMES, lua_layer_ref
 from ..core.results import EditReceipt
 from ..core.state import prepare_filename, set_active_file
 
-async def create_canvas(width: PositiveInt, height: PositiveInt, *, filename: str, overwrite: bool = False) -> ToolOutput[EditReceipt]:
+async def create_canvas(
+    width: PositiveInt,
+    height: PositiveInt,
+    *,
+    filename: str,
+    overwrite: bool = False,
+    initial_layers: Annotated[list[str], Field(min_length=1)] | None = None,
+) -> ToolOutput[EditReceipt]:
     """Create a new Aseprite canvas with specified dimensions.
 
     Args:
@@ -18,28 +27,14 @@ async def create_canvas(width: PositiveInt, height: PositiveInt, *, filename: st
         filename: Absolute project path ending in .aseprite or .ase.
             An omitted extension becomes .aseprite. The saved project becomes the active file.
         overwrite: Replace an existing native project (default False)
+        initial_layers: Unique top-level layer names, listed bottom to top. Omit to use Aseprite's default layer.
     """
     if width <= 0 or height <= 0:
         raise ToolError("Width and height must be > 0")
-    # Hard requirement: an absolute path. A relative path would resolve
-    # against the server's workspace (its own folder), silently dropping
-    # the canvas somewhere the caller never intended.
-    if not os.path.isabs(filename):
-        raise ToolError(
-            "create_canvas requires an ABSOLUTE filename, e.g. "
-            f"'D:/art/sprites/coin.aseprite'. Got: '{filename}'"
-        )
-    # anchor=False: only anchor after the canvas actually exists on disk,
-    # so a failed create does not point the active file at a missing file.
-    filename = prepare_filename(filename, must_exist=False, anchor=False)
-    filename = native_project_path(filename)
+    filename = new_project_path(filename)
     if os.path.exists(filename) and not overwrite:
         raise ToolError(f"Project already exists: {filename}; pass overwrite=true to replace it")
-    script = f"""
-    local spr = Sprite({width}, {height})
-    save_project(spr)
-    print("OK")
-    """
+    script = new_canvas_lua(width, height, initial_layers) + "\nsave_project(spr)\n"
 
     execution = await execute_edit_script(script, output_filename=filename)
 

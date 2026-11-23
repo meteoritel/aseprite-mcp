@@ -1,9 +1,10 @@
 """Pure character-grid parsing, mirrored painting and exact RGBA encoding."""
 
+import json
 from typing import Any, Dict, List
 from mcp.server.mcpserver.exceptions import ToolError
 from .colors import parse_hex_color
-from .contracts import Region
+from .contracts import Region, SpriteLayerRule
 from .results import PixelChanges
 
 _AUTO_ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -81,9 +82,16 @@ def parse_sprite_map(
         if not isinstance(row, str):
             return None, f"rows[{index}] must be a string, got {type(row).__name__}"
         if len(row) != width:
+            column = min(width, len(row))
+            start, stop = max(0, column - 24), min(len(row), column + 24)
+            label = f"rows[{index}][{start}:{stop}] = "
+            excerpt = json.dumps(row[start:stop])
+            caret = " " * (len(label) + len(json.dumps(row[start:column])) - 1)
+            position = "first missing cell" if len(row) < width else "grid right boundary"
             return None, (
                 f"rows must form a rectangle: rows[0] has {width} character(s) "
-                f"but rows[{index}] has {len(row)}"
+                f"but rows[{index}] has {len(row)}\n"
+                f"{label}{excerpt}\n{caret}^ column {column} ({position}, zero-based)"
             )
 
 
@@ -102,6 +110,37 @@ def parse_sprite_map(
             cells.append((col_index, row_index, rgba))
 
     return (width, len(rows), cells), None
+
+
+def compile_layered_sprite(rows: list[str], palette: dict[str, str], layers: list[SpriteLayerRule], transparent: str):
+    parsed, error = parse_sprite_map(rows, palette, transparent)
+    if error:
+        raise ToolError(f"Invalid sprite map: {error}")
+    width, height, cells = parsed
+    stacks = {}
+    for index, layer in enumerate(layers):
+        for source, target in layer.mapping.items():
+            if source not in palette or target not in palette:
+                raise ToolError(f"layers[{index}].mapping[{source!r}] = {target!r}: both must be palette characters distinct from {transparent!r}")
+            rgba = parse_hex_color(palette[target])
+            if rgba[3] != 255:
+                raise ToolError(f"layers[{index}].mapping[{source!r}]: palette[{target!r}] must be opaque")
+            stacks.setdefault(source, []).append((index, rgba))
+
+    pixels_by_layer = [[] for _ in layers]
+    for x, y, rgba in cells:
+        symbol = rows[y][x]
+        stack = stacks.get(symbol)
+        if not stack:
+            raise ToolError(f"No layer mapping for {symbol!r} at row {y}, column {x}")
+        if rgba[3] != 255:
+            raise ToolError(f"palette[{symbol!r}] at row {y}, column {x} must be opaque")
+        if stack[-1][1] != rgba:
+            raise ToolError(f"Top layer mapping for {symbol!r} at row {y}, column {x} must preserve its palette colour")
+        for index, colour in stack:
+            pixels_by_layer[index].append([x, y, *colour])
+    return width, height, pixels_by_layer
+
 
 def _hex_of(rgba: tuple[int, int, int, int]) -> str:
     """#RRGGBB for opaque colours, #RRGGBBAA when alpha is partial."""

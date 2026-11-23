@@ -61,11 +61,10 @@ class Region(ContractModel):
     height: PositiveInt
 
 
-class SpriteMapEdit(ContractModel):
+class SpriteMapFields(ContractModel):
     layer_name: LayerRef
     frame_index: FrameIndex
     rows: Annotated[list[str], Field(min_length=1, description="Equal-width pixel rows, top to bottom.")]
-    palette: Annotated[Palette, Field(description="Single-character keys mapped to #RGB, #RGBA, #RRGGBB or #RRGGBBAA. The transparent character is reserved.")]
     x: int = Field(default=0, description="Sprite-global x of the grid origin; may be negative for clipping.")
     y: int = Field(default=0, description="Sprite-global y of the grid origin; may be negative for clipping.")
     transparent: Character = Field(default=".", description="Character for cells to skip or erase.")
@@ -73,6 +72,19 @@ class SpriteMapEdit(ContractModel):
     mirror_y: bool = Field(default=False, description="Reflect within the grid height. Different colors at the same reflected position are an error.")
     erase_transparent: bool = Field(default=False, description="Erase transparent cells. By default they leave the current pixels in place.")
     create_if_missing: bool = Field(default=True, description="Create a missing top-level image layer or cel. Nested layers and target frames must already exist.")
+
+
+class SpriteMapEdit(SpriteMapFields):
+    palette: Annotated[Palette, Field(description="Single-character keys mapped to #RGB, #RGBA, #RRGGBB or #RRGGBBAA. The transparent character is reserved.")]
+
+
+class BatchSpriteMapEdit(SpriteMapFields):
+    palette: Palette | None = Field(default=None, description="Palette for this map. When omitted, use the batch palette. An explicit palette replaces it entirely.")
+
+
+class SpriteLayerRule(ContractModel):
+    name: str = Field(min_length=1, description="Name of the top-level image layer.")
+    mapping: dict[Character, Character] = Field(description="Source grid character to palette character painted on this layer.")
 
 
 class ContractTool(Tool):
