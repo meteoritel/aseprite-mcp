@@ -26,9 +26,10 @@ def _load_skill_instructions() -> str:
 
 @asynccontextmanager
 async def _lifespan(server):
+    from .core.review_snapshots import ReviewSnapshots
     from .core.state import cleanup_review_directory
     try:
-        yield None
+        yield ReviewSnapshots()
     finally:
         cleanup_review_directory()
 

@@ -306,11 +306,32 @@ def _playback_indices(count: int, direction: str) -> list[int]:
     return order
 
 
-async def export_minecraft_texture(*, filename: str = "", output_filename: str,
-                                   frame_index: FrameIndex | None = None, tag_name: str = "") -> ToolOutput[TextureDelivery]:
-    """Deliver Java Edition PNG and mcmeta, plus a temporary 8x review PNG.
+def _check_static_sidecar(sidecar: Path) -> None:
+    advice = "Choose a new output filename, or use emit_mcmeta='always' to replace the metadata."
+    try:
+        content = sidecar.read_text(encoding="utf-8")
+    except FileNotFoundError as exc:
+        if not sidecar.is_symlink():
+            return
+        raise ToolError(f"Could not read existing metadata '{sidecar}'. {advice}") from exc
+    except (OSError, UnicodeError) as exc:
+        raise ToolError(f"Could not read existing metadata '{sidecar}': {exc}. {advice}") from exc
+    try:
+        metadata = json.loads(content)
+    except ValueError as exc:
+        raise ToolError(f"Invalid JSON metadata in '{sidecar}': {exc}. {advice}") from exc
+    if not isinstance(metadata, dict):
+        raise ToolError(f"Expected a JSON object in '{sidecar}'. {advice}")
+    if "animation" in metadata:
+        raise ToolError(f"Static PNG conflicts with existing animation metadata in '{sidecar}'. {advice}")
 
-    A single frame yields a canvas-sized PNG and empty mcmeta. Animation uses
+
+async def export_minecraft_texture(*, filename: str = "", output_filename: str,
+                                   frame_index: FrameIndex | None = None, tag_name: str = "",
+                                   emit_mcmeta: Literal["auto", "always"] = "auto") -> ToolOutput[TextureDelivery]:
+    """Deliver a Java Edition texture and a temporary 8x review PNG.
+
+    A single frame yields a canvas-sized PNG. Animation uses
     an unpadded vertical strip at the original resolution, with each source
     frame stored once. The mcmeta uses zero-based strip indexes and exact
     game ticks. Animation frame durations must be positive multiples of 50 ms.
@@ -320,9 +341,11 @@ async def export_minecraft_texture(*, filename: str = "", output_filename: str,
         output_filename: Original-resolution game PNG path
         frame_index: Optional single frame, 1-based; mutually exclusive with tag_name
         tag_name: Optional animation tag; otherwise exports the complete timeline
+        emit_mcmeta: Auto publishes metadata for animations and preserves existing non-animation metadata for a static PNG. Always also writes empty metadata for a single frame.
 
     Returns:
-        JSON with png, mcmeta, preview_png, preview_scale and source-frame mapping.
+        JSON with png, the mcmeta path published by this call (or null),
+        preview_png, preview_scale and source-frame mapping.
         The review PNG expires when this stdio session ends. Animation durations
         must be positive multiples of 50 ms; no timing is silently rounded.
     """
@@ -342,6 +365,9 @@ async def export_minecraft_texture(*, filename: str = "", output_filename: str,
         }}
     target = _output_path(output_filename, ".png")
     sidecar = Path(str(target) + ".mcmeta")
+    publish_mcmeta = len(frames) > 1 or emit_mcmeta == "always"
+    if not publish_mcmeta:
+        _check_static_sidecar(sidecar)
     preview = None
     try:
         with _export_directory(target) as directory:
@@ -363,8 +389,11 @@ async def export_minecraft_texture(*, filename: str = "", output_filename: str,
                         or frame.get("duration") != durations[index]
                         or frame.get("rotated") is not False or frame.get("trimmed") is not False):
                     raise ToolError("Aseprite returned an invalid Minecraft frame layout or duration")
-            staged_sidecar = directory / "texture.png.mcmeta"
-            staged_sidecar.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
+            files = [(staged, target)]
+            if publish_mcmeta:
+                staged_sidecar = directory / "texture.png.mcmeta"
+                staged_sidecar.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
+                files.append((staged_sidecar, sidecar))
             preview = Path(get_review_directory()) / f"{target.stem}-{uuid.uuid4().hex}-8x.png"
             with Image.open(staged) as image:
                 image.convert("RGBA").resize(
@@ -372,12 +401,17 @@ async def export_minecraft_texture(*, filename: str = "", output_filename: str,
                     Image.Resampling.NEAREST,
                 ).save(preview)
             _image_size(preview)
-            _publish_files([(staged, target), (staged_sidecar, sidecar)])
+            _publish_files(files)
     except BaseException:
         if preview is not None:
             preview.unlink(missing_ok=True)
         raise
-    return ToolOutput(summary='Export minecraft texture completed', data={'png': str(target), 'mcmeta': str(sidecar), 'preview_png': str(preview), 'preview_scale': REVIEW_SCALE, 'frames': [{'source_frame': source, 'index': index, 'duration_ms': duration} for index, (source, duration) in enumerate(zip(frames, durations))], 'preview_lifetime':'session'})
+    return ToolOutput(summary="Export minecraft texture completed", data=TextureDelivery(
+        png=str(target), mcmeta=str(sidecar) if publish_mcmeta else None,
+        preview_png=str(preview), preview_scale=REVIEW_SCALE, preview_lifetime="session",
+        frames=[{"source_frame": source, "index": index, "duration_ms": duration}
+                for index, (source, duration) in enumerate(zip(frames, durations, strict=True))],
+    ))
 
 
 async def _snapshot_slices(filename: str, names: list[str], image: Path):

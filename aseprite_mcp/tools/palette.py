@@ -54,7 +54,9 @@ def _parse_hex_color(value: str) -> tuple[int, int, int] | None:
     return rgba[:3] if rgba else None
 
 async def get_palette(filename: str = "") -> ToolOutput[list[str]]:
-    """Get the active sprite palette as a JSON array of hex colors.
+    """Read the sprite's stored palette in slot order as hex colors.
+
+    For the colors actually used in a visible frame, call get_color_stats.
 
     Args:
         filename: Aseprite file to read (optional; defaults to the
@@ -85,7 +87,8 @@ async def get_palette(filename: str = "") -> ToolOutput[list[str]]:
     """
 
     output = await AsepriteCommand.execute_lua_script_checked(script, filename)
-    return ToolOutput(summary='Get palette completed', data=json.loads(output))
+    return ToolOutput(summary="Stored sprite palette. Use get_color_stats for colors in the visible frame.",
+                      data=json.loads(output))
 
 async def set_palette(filename: str = "", *, colors: List[str]) -> ToolOutput[EditReceipt]:
     """Set the active sprite palette using a list of hex colors.

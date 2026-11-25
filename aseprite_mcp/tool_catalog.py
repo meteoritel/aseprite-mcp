@@ -218,10 +218,11 @@ TOOL_EXAMPLES = {
         "layer_name": "body", "frame_index": 1, "x": 4, "y": 4,
         "width": 8, "height": 8, "color": "#F2C48D", "density": 0.5,
     }],
-    "review_frame": [{
-        "frame_index": 1, "layer_name": ["shine"],
-        "region": {"x": 7, "y": 6, "width": 2, "height": 1}, "palette": {"B": "#F2C48D"},
-    }],
+    "review_frame": [
+        {"frame_index": 1, "layer_name": ["shine"],
+         "region": {"x": 7, "y": 6, "width": 2, "height": 1}, "palette": {"B": "#F2C48D"}},
+        {"frame_index": 1, "layer_names": [["wood_body"], ["outline"]], "preview_mode": "both"},
+    ],
     "draw_text": [{"text": "A", "font": "DejaVu Sans", "x": 0, "y": 0, "layer_name": "label", "frame_index": 1}],
     "draw_on_tile": [{"layer_name": "tiles", "tile_index": 1, "pixels": [{"x": 0, "y": 0, "color": "#FFFFFF"}]}],
     "get_tile_at": [{"layer_name": "tiles", "frame_index": 1, "col": 0, "row": 0}],
@@ -234,6 +235,7 @@ TOOL_EXAMPLES = {
     "audit_animation": [{"layer_frame_ranges": [{"layer": ["art", "ink"], "ranges": [[1, 4]]}], "report_cels": True}],
     "export_minecraft_texture": [
         {"output_filename": "D:/art/coin.png"},
+        {"output_filename": "D:/art/coin.png", "emit_mcmeta": "always"},
         {"output_filename": "D:/art/texture.png", "tag_name": "loop"},
     ],
     "export_slices_to_minecraft": [{

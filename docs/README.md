@@ -9,4 +9,4 @@ Aseprite MCP 将绘制、审阅和导出请求转换为本机 Aseprite 批处理
 
 ## 工具契约
 
-`tools/list` 返回核心工具的说明与 schema。`search_tools` 查询完整目录，返回匹配工具的说明、输入与输出 schema、示例及调用入口。
+`tools/list` 返回核心工具的说明与 schema。`search_tools` 查询工具目录，默认返回摘要、必填参数名和调用入口。用工具名和 `detail="full", limit=1` 查输入与输出 schema 及示例。

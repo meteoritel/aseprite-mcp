@@ -1,8 +1,11 @@
 """Typed discovery, exact targets, atomic grids and same-image review through public tools."""
 
+from base64 import b64decode
 import json
+import os
 from pathlib import Path
 
+import pytest
 from jsonschema import Draft202012Validator, validate
 from PIL import Image
 
@@ -53,9 +56,23 @@ def test_complete_discovery_and_contract_failures_without_aseprite(tmp_path, bit
         schemas = {tool["name"]: tool for tool in initial["tools"]}
         definitions, offset = {}, 0
         while offset is not None:
-            result = call(send, receive, "search_tools", {"limit": 20, "offset": offset})
+            result = call(send, receive, "search_tools", {"limit": 20, "offset": offset, "detail": "full"})
             validate(result["structuredContent"], schemas["search_tools"]["outputSchema"])
             page = result["structuredContent"]["data"]
+            brief_result = call(send, receive, "search_tools", {"limit": 20, "offset": offset})
+            validate(brief_result["structuredContent"], schemas["search_tools"]["outputSchema"])
+            brief = brief_result["structuredContent"]["data"]
+            assert brief["next_offset"] == page["next_offset"]
+            assert brief["available_categories"] == page["available_categories"]
+            assert brief["tools"] == [
+                {"name": tool["name"], "category": tool["category"], "invocation": tool["invocation"],
+                 "description": tool["description"].splitlines()[0], "required": tool["inputSchema"].get("required", [])}
+                for tool in page["tools"]
+            ]
+            if offset == 0:
+                full_bytes = len(json.dumps(result, ensure_ascii=False).encode("utf-8"))
+                brief_bytes = len(json.dumps(brief_result, ensure_ascii=False).encode("utf-8"))
+                assert brief_bytes * 4 <= full_bytes
             definitions.update((tool["name"], tool) for tool in page["tools"])
             offset = page["next_offset"]
         core_names = {name for names in CORE_TOOLS.values() for name in names}
@@ -79,6 +96,14 @@ def test_complete_discovery_and_contract_failures_without_aseprite(tmp_path, bit
         assert "palette" in definitions["draw_sprite_map"]["inputSchema"]["required"]
         assert "palette" in definitions["review_frame"]["outputSchema"]["$defs"]["SpriteMapEdit"]["required"]
         assert all(definitions[name]["examples"] for name in TOOL_EXAMPLES)
+        exact = call(send, receive, "search_tools", {"query": "draw_text", "detail": "full", "limit": 1})
+        assert exact["structuredContent"]["data"]["tools"] == [definitions["draw_text"]]
+        for detail in ("brief", "full"):
+            suggested = call(send, receive, "search_tools", {"query": "drawtexttt", "detail": detail})
+            validate(suggested["structuredContent"], schemas["search_tools"]["outputSchema"])
+            assert "suggested" in suggested["structuredContent"]["summary"]
+            assert all(("inputSchema" in item) == (detail == "full") for item in suggested["structuredContent"]["data"]["tools"])
+        assert call(send, receive, "search_tools", {"detail": "verbose"})["isError"]
         for query, expected in [
             ("draw_sprite_maps", "draw_sprite_maps"),
             ("get_scene_info", "get_sprite_info"),
@@ -139,17 +164,26 @@ def test_initialized_canvas_and_request_palette_over_stdio(tmp_path):
         original_first = digest(first)
         for invalid_maps, fields, fragments in [
             (maps[:1], {}, ("maps[0].palette",)),
-            ([maps[0] | {"palette": {}}], {"palette": palette}, ("row 0, column 0",)),
+            ([maps[0] | {"palette": {}}], {"palette": palette}, ('layer_name=["base"]', "Unknown character 'A'", "row 0, column 0")),
             ([maps[0] | {"transparent": "B"}], {"palette": palette}, ("transparent character 'B'",)),
             ([maps[0], maps[0] | {"rows": ["AB", "ABA"]}], {"palette": palette},
              ("maps[1]", "rows[0] has 2", "rows[1] has 3", '"ABA"', "column 2 (grid right boundary")),
-            ([maps[0] | {"rows": ["ABA", "AB"]}], {"palette": palette},
-             ("rows[0] has 3", "rows[1] has 2", '"AB"', "column 2 (first missing cell")),
+            ([maps[0], maps[1] | {"rows": ["A" * 16, "A" * 15]}], {"palette": palette},
+             ("maps[1]", f"layer_name={json.dumps([named_layers[1]], ensure_ascii=False)}",
+              "rows[0] has 16", "rows[1] has 15", "rows[1][0:15]", "column 15 (first missing cell")),
+            ([maps[0] | {"rows": ["A" * 100, "A" * 99]}], {"palette": palette},
+             ('rows[1][75:99] = "' + "A" * 24 + '"', "column 99 (first missing cell")),
         ]:
             bad = call(send, receive, "draw_sprite_maps", {"maps": invalid_maps, **fields})
             assert bad["isError"] is True, bad
             assert all(fragment in bad["content"][0]["text"] for fragment in fragments), bad
             assert digest(second) == before
+
+        bad = call(send, receive, "draw_sprite_map", {**maps[0], "rows": ["AZ"], "palette": palette})
+        assert bad["isError"] and all(fragment in bad["content"][0]["text"] for fragment in (
+            'layer_name=["base"]', "Unknown character 'Z'", "row 0, column 1",
+        ))
+        assert digest(second) == before
 
         for initial_layers in ([], [""], ["same", "same"]):
             bad = call(send, receive, "create_canvas", {
@@ -212,7 +246,7 @@ def test_create_layered_sprite_keeps_editable_underpaint_over_stdio(tmp_path):
             assert result["isError"] is False, result
             return result["structuredContent"]["data"]
 
-        definition, = invoke("search_tools", query="分层绘制", limit=1)["tools"]
+        definition, = invoke("search_tools", query="分层绘制", detail="full", limit=1)["tools"]
         assert definition["name"] == "create_layered_sprite" and definition["invocation"] == "call_tool"
         created = call(send, receive, "call_tool", {"name": definition["name"], "arguments": arguments})
         assert created["isError"] is False, created
@@ -276,6 +310,12 @@ def test_ordered_batch_uses_one_process_and_commit_and_preserves_on_failure(new_
     info = payload(run(animation.get_sprite_info(filename=filename)))
     assert [entry["name"] for entry in info["layers"]][-2:] == ["base", "top"]
     before = digest(filename)
+    execution_before = observed.copy()
+    invalid_widths = maps[:1] + [maps[1] | {"rows": ["BB", "B"]}]
+    diagnostic = failure(sprite_map.draw_sprite_maps(filename=filename, maps=invalid_widths))
+    assert 'maps[1] (layer_name="top")' in diagnostic
+    assert observed == execution_before
+    assert digest(filename) == before
     for invalid, diagnostic in [
         (maps[:1] + [{"layer_name": "top", "frame_index": 99, "rows": ["A"], "palette": {"A": "#fff"}}], "maps[1]"),
         (maps[:1] + [{"layer_name": "missing/child", "frame_index": 1, "rows": ["A"], "palette": {"A": "#fff"}}], "maps[1]"),
@@ -357,6 +397,28 @@ def test_batch_keeps_preflight_targets_when_a_new_name_shadows_a_nested_layer(ne
         assert list(grid["palette"].values()) == [expected]
 
 
+@pytest.mark.skipif(os.name != "nt", reason="Windows path spellings")
+def test_review_snapshot_accepts_windows_path_variants(new_sprite, tmp_path):
+    project = Path(new_sprite())
+    other = new_sprite()
+    run(sprite_map.draw_sprite_map(filename=str(project), layer_name="ink", frame_index=1,
+                                   rows=["A"], palette={"A": "#f00"}))
+    with connected_server(env={"ASERITE_MCP_WORKSPACE": str(tmp_path)}) as (send, receive):
+        target = {"frame_index": 1, "layer_name": ["ink"]}
+        first = call(send, receive, "review_frame", target | {"filename": str(project)})
+        snapshot = first["structuredContent"]["data"]
+        before = {key: snapshot[key] for key in ("filename", "frame", "region", "map", "cel")}
+        assert "\\" in before["filename"]
+        variant = project.as_posix()
+        variant = variant[0].swapcase() + variant[1:]
+        unchanged = {"changed_pixels": 0, "changed_bounds": None}
+        for path in (variant, project.name, ""):
+            result = call(send, receive, "review_frame", target | {"filename": path, "before": before})
+            assert result["structuredContent"]["data"]["changes"] == {"composite": unchanged, "cel": unchanged}
+        mismatch = call(send, receive, "review_frame", target | {"filename": other, "before": before})
+        assert mismatch["isError"] and "same absolute filename" in mismatch["content"][0]["text"]
+
+
 def test_review_matches_independent_render_and_cleans_failed_artifacts(new_sprite, tmp_path, monkeypatch):
     filename = new_sprite(8, 8)
     run(canvas.add_group(filename=filename, group_name="visible"))
@@ -394,6 +456,71 @@ def test_review_matches_independent_render_and_cleans_failed_artifacts(new_sprit
     assert not preview.exists()
 
 
+def test_layer_review_previews_match_raw_cels_and_keep_request_order(new_sprite, tmp_path, monkeypatch):
+    filename = new_sprite()
+    run(canvas.add_group(filename=filename, group_name="art"))
+    run(canvas.add_layer(filename=filename, layer_name="ink", group=["art"]))
+    run(canvas.add_layer(filename=filename, layer_name="empty"))
+    run(sprite_map.draw_sprite_maps(filename=filename, palette={"A": "#f00", "B": "#1234567f"}, maps=[
+        {"layer_name": "base", "frame_index": 1, "rows": ["A"]},
+        {"layer_name": ["art", "ink"], "frame_index": 1, "rows": ["B"], "x": 1, "y": 1},
+    ]))
+    run(animation.set_layer_visibility(filename=filename, layer_name=["art"], visible=False))
+    before = digest(filename)
+    observed = observe_execution(monkeypatch, filename)
+    request = {"filename": filename, "frame_index": 1, "layer_names": [["art", "ink"], "base", "empty"],
+               "region": {"x": -1, "y": 0, "width": 4, "height": 3}}
+    result = run(review.review_frame(**request, preview_mode="both"))
+    data = payload(result)
+    assert observed == {"processes": 1, "saves": 0, "commits": 0}
+    assert data["cel"] is None
+    expected_layers = [["art", "ink"], ["base"], ["empty"]]
+    assert [cel["layer_name"] for cel in data["cels"]] == expected_layers
+    assert [cel["status"] for cel in data["cels"]] == ["exact", "exact", "missing_cel"]
+    assert data["preview_png"] == data["previews"][0]["png"]
+    assert [preview["kind"] for preview in data["previews"]] == ["composite", "layer", "layer", "layer"]
+    assert [preview["layer_name"] for preview in data["previews"]] == [None, *expected_layers]
+    expected = frame_image(filename, 1, tmp_path).crop((-1, 0, 3, 3))
+    hidden = Image.new("RGBA", (4, 3))
+    hidden.putpixel((2, 1), (18, 52, 86, 127))
+    for preview, block, image in zip(data["previews"], result.content[1:],
+                                      [expected, hidden, expected, Image.new("RGBA", (4, 3))], strict=True):
+        assert b64decode(block.data) == Path(preview["png"]).read_bytes()
+        with Image.open(preview["png"]) as png:
+            assert png.size == (32, 24)
+            assert png.tobytes() == image.resize((32, 24), Image.Resampling.NEAREST).tobytes()
+
+    selected = payload(run(review.review_frame(**request, preview_mode="layer")))
+    assert [preview["layer_name"] for preview in selected["previews"]] == expected_layers
+    assert selected["preview_png"] == selected["previews"][0]["png"]
+    default = payload(run(review.review_frame(**request)))
+    assert [preview["kind"] for preview in default["previews"]] == ["composite"]
+    for overrides, message in [
+        ({"layer_name": "base"}, "either layer_name or layer_names"),
+        ({"layer_names": ["base", ["base"]]}, "Duplicate review layer"),
+        ({"layer_names": None, "preview_mode": "both"}, "require layer_name"),
+        ({"region": {"width": 257, "height": 257}}, "pixel budget"),
+        ({"layer_names": [["art"]]}, "is a group"),
+    ]:
+        assert message in failure(review.review_frame(**(request | overrides)))
+    assert digest(filename) == before
+
+    directory = Path(data["preview_png"]).parent
+    retained = set(directory.iterdir())
+    save = Image.Image.save
+
+    def fail_second_preview(image, path, *args, **kwargs):
+        if Path(path).name.endswith("-1-8x.png"):
+            Path(path).write_bytes(b"incomplete")
+            raise OSError("preview write failed")
+        return save(image, path, *args, **kwargs)
+
+    monkeypatch.setattr(Image.Image, "save", fail_second_preview)
+    with pytest.raises(OSError, match="preview write failed"):
+        run(review.review_frame(**request, preview_mode="both"))
+    assert set(directory.iterdir()) == retained
+
+
 def test_review_delivers_preview_when_exact_grid_exceeds_capacity(new_sprite, tmp_path):
     filename = new_sprite(8, 8)
     run(canvas.add_layer(filename=filename, layer_name="ink"))
@@ -404,17 +531,20 @@ def test_review_delivers_preview_when_exact_grid_exceeds_capacity(new_sprite, tm
     run(drawing.draw_pixels_at(filename=filename, layer_name="ink", frame_index=1,
                                pixels=[{"x": i % 8, "y": i // 8, "color": f"#{i:02x}1234"} for i in range(64)]))
     before = digest(filename)
-    result = payload(run(review.review_frame(**request, before=snapshot)))
+    result = payload(run(review.review_frame(**request, before=snapshot, preview_mode="both")))
     assert result["map"] is None and result["map_unavailable"] == "palette_capacity"
     assert result["region"] == {"x": 0, "y": 0, "width": 8, "height": 8}
     assert result["cel"] == {"layer_name": ["ink"], "status": "palette_capacity", "edit": None}
     delta = {"changed_pixels": 64, "changed_bounds": result["region"]}
     assert result["changes"] == {"composite": delta, "cel": delta}
     preview = Path(result["preview_png"])
-    assert set(preview.parent.iterdir()) == {Path(first["preview_png"]), preview}
+    isolated = Path(result["previews"][1]["png"])
+    assert set(preview.parent.iterdir()) == {Path(first["preview_png"]), preview, isolated}
     expected = frame_image(filename, 1, tmp_path).resize((64, 64), Image.Resampling.NEAREST)
     with Image.open(preview) as image:
         assert image.convert("RGBA").tobytes() == expected.tobytes()
+    with Image.open(isolated) as image:
+        assert image.tobytes() == expected.tobytes()
     assert digest(filename) == before
 
 
@@ -459,6 +589,69 @@ def test_review_compares_hidden_cel_by_rgba_in_one_batch(new_sprite, monkeypatch
     empty = payload(run(review.review_frame(**(request | {"layer_name": ["empty"]}))))
     assert empty["cel"] == {"layer_name": ["empty"], "status": "missing_cel", "edit": None}
     assert "is a group" in failure(review.review_frame(**(request | {"layer_name": ["art"]})))
+
+
+def test_snapshot_id_matches_inline_grid_and_compares_over_capacity(new_sprite):
+    filename = new_sprite(8, 8)
+    with connected_server() as (send, receive):
+        def invoke(tool, **arguments):
+            response = call(send, receive, tool, {"filename": filename, **arguments})
+            assert not response["isError"], response
+            return response["structuredContent"]["data"]
+
+        target = {"frame_index": 1, "layer_name": ["ink"]}
+        invoke("draw_sprite_map", **target, rows=["A"], palette={"A": "#f00"})
+        first = invoke("review_frame", **target)
+        baseline = {key: first[key] for key in ("filename", "frame", "region", "map", "cel")}
+        assert first["snapshot_id"]
+        invoke("draw_sprite_map", **target, rows=["A"], palette={"A": "#0f0"})
+        delta = {"changed_pixels": 1, "changed_bounds": {"x": 0, "y": 0, "width": 1, "height": 1}}
+        assert invoke("review_frame", **target, before=baseline)["changes"] == {"composite": delta, "cel": delta}
+        assert invoke("review_frame", **target, before_id=first["snapshot_id"])["changes"] == {"composite": delta, "cel": delta}
+        incompatible = call(send, receive, "review_frame", {
+            **target, "before": baseline, "before_id": first["snapshot_id"],
+        })
+        assert incompatible["isError"] and "either before or before_id" in incompatible["content"][0]["text"]
+
+        invoke("draw_pixels_at", **target,
+               pixels=[{"x": i % 8, "y": i // 8, "color": f"#{i:02x}1234"} for i in range(64)])
+        over_capacity = invoke("review_frame", **target)
+        assert over_capacity["map"] is None and over_capacity["cel"]["status"] == "palette_capacity"
+        invoke("draw_sprite_map", **target, rows=["A"], palette={"A": "#fff"})
+        assert invoke("review_frame", **target, before_id=over_capacity["snapshot_id"])["changes"] == {"composite": delta, "cel": delta}
+        invoke("set_layer_visibility", layer_name=["ink"], visible=False)
+        hidden = invoke("review_frame", **target)
+        invoke("draw_sprite_map", **target, rows=["A"], palette={"A": "#f00"})
+        assert invoke("review_frame", **target, before_id=hidden["snapshot_id"])["changes"] == {
+            "composite": {"changed_pixels": 0, "changed_bounds": None}, "cel": delta,
+        }
+
+
+@pytest.mark.parametrize("max_records,max_bytes", [(2, 40), (32, 20)])
+def test_snapshot_budget_keeps_only_recent_baselines_over_stdio(new_sprite, max_records, max_bytes):
+    filename = new_sprite()
+    code = f"""
+from aseprite_mcp import create_server
+from aseprite_mcp.core import review_snapshots
+review_snapshots.MAX_REVIEW_SNAPSHOTS = {max_records}
+review_snapshots.MAX_REVIEW_SNAPSHOT_BYTES = {max_bytes}
+create_server().run(transport='stdio')
+"""
+    with connected_server(code=code) as (send, receive):
+        request = {"filename": filename, "frame_index": 1, "region": {"width": 2, "height": 1}}
+
+        def review_data(**overrides):
+            result = call(send, receive, "review_frame", request | overrides)
+            assert not result["isError"], result
+            return result["structuredContent"]["data"]
+
+        ids = [review_data()["snapshot_id"] for _ in range(3)]
+        assert None not in ids and len(set(ids)) == 3
+        assert review_data(region={"width": max_bytes // 4 + 1, "height": 1})["snapshot_id"] is None
+        expired = call(send, receive, "review_frame", request | {"before_id": ids[0]})
+        assert expired["isError"] and "Review the same target again" in expired["content"][0]["text"]
+        assert review_data(before_id=ids[1])["changes"]["composite"]["changed_pixels"] == 0
+        assert review_data(before_id=ids[2])["changes"]["composite"]["changed_pixels"] == 0
 
 
 def test_text_stamp_preserves_holes_alpha_and_clips_at_canvas(new_sprite, bitmap_font):

@@ -29,6 +29,108 @@ def _read_response(server: subprocess.Popen[str]) -> dict:
     return json.loads(line)
 
 
+def test_specimen_box_layer_review_edit_and_static_delivery(tmp_path):
+    project = tmp_path / "specimen_box.aseprite"
+    resources = tmp_path / "resources"
+    finished = resources / "specimen_box.png"
+    layers = ["wood_body", "brass_hardware", "cat_clasp", "outline"]
+    request = {"filename": str(project), "frame_index": 1, "layer_names": [[name] for name in layers]}
+    with connected_server() as (send, receive):
+        send("tools/list", {}, 20)
+        schemas = {tool["name"]: tool["outputSchema"] for tool in receive(20)["tools"]}
+
+        def invoke(tool, **arguments):
+            result = call(send, receive, tool, arguments)
+            assert not result["isError"], result
+            data = result["structuredContent"]
+            validate(data, schemas[tool])
+            assert data == json.loads(result["content"][0]["text"])
+            return data["data"], result["content"][1:]
+
+        listing, _ = invoke("search_tools", query="审阅")
+        assert listing["tools"][0]["name"] == "review_frame"
+        definition, _ = invoke("search_tools", query="review_frame", detail="full", limit=1)
+        assert "layer_names" in definition["tools"][0]["inputSchema"]["properties"]
+        invoke("create_canvas", filename=str(project), width=16, height=16, initial_layers=layers)
+        invoke("draw_sprite_maps", palette={"W": "#854c30", "B": "#fabc66", "C": "#f4f4f4", "O": "#201517"}, maps=[
+            {"layer_name": [layers[0]], "frame_index": 1, "x": 4, "y": 4, "rows": ["WW"]},
+            {"layer_name": [layers[1]], "frame_index": 1, "x": 4, "y": 4, "rows": ["B"]},
+            {"layer_name": [layers[2]], "frame_index": 1, "x": 7, "y": 7, "rows": ["C"]},
+            {"layer_name": [layers[3]], "frame_index": 1, "x": 1, "y": 1, "rows": ["O"]},
+        ])
+        stats, _ = invoke("get_color_stats", frame_index=1)
+        assert stats["unique_colors"] == 4
+        first, blocks = invoke("review_frame", **request, preview_mode="both")
+        assert [entry["layer_name"] for entry in first["cels"]] == request["layer_names"]
+        assert first["cel"] is None and first["changes"] is None and first["snapshot_id"]
+        assert len(blocks) == len(first["previews"]) == len(layers) + 1
+        for item, block in zip(first["previews"], blocks, strict=True):
+            assert b64decode(block["data"]) == Path(item["png"]).read_bytes()
+        edits = []
+        for index, colour in ((0, "#af6f45"), (2, "#e0b0af")):
+            edit = first["cels"][index]["edit"]
+            character, = edit["palette"]
+            edits.append(edit | {"palette": {character: colour}})
+        invoke("draw_sprite_maps", maps=edits)
+        baseline = {"before_id": first["snapshot_id"]}
+        for overrides, message in [
+            ({"frame_index": 2}, "same absolute filename and frame"),
+            ({"region": {"width": 4, "height": 4}}, "same region"),
+            ({"layer_names": request["layer_names"][::-1]}, "same layer path"),
+        ]:
+            rejected = call(send, receive, "review_frame", request | baseline | overrides)
+            assert rejected["isError"] and message in rejected["content"][0]["text"]
+        changed, _ = invoke("review_frame", **request, **baseline)
+        unchanged = {"changed_pixels": 0, "changed_bounds": None}
+        assert changed["changes"] == {
+            "composite": {"changed_pixels": 2, "changed_bounds": {"x": 5, "y": 4, "width": 3, "height": 4}},
+            "cel": None,
+            "cels": [
+                {"layer_name": [layers[0]], "change": {"changed_pixels": 2, "changed_bounds": {"x": 4, "y": 4, "width": 2, "height": 1}}},
+                {"layer_name": [layers[1]], "change": unchanged},
+                {"layer_name": [layers[2]], "change": {"changed_pixels": 1, "changed_bounds": {"x": 7, "y": 7, "width": 1, "height": 1}}},
+                {"layer_name": [layers[3]], "change": unchanged},
+            ],
+        }
+        assert invoke("review_frame", **request, **baseline)[0]["changes"] == changed["changes"]
+        delivery, _ = invoke("export_minecraft_texture", output_filename=str(finished))
+        assert delivery["mcmeta"] is None and list(resources.iterdir()) == [finished]
+        with Image.open(finished) as image:
+            assert image.size == (16, 16)
+            assert image.convert("RGBA").tobytes() == frame_image(str(project), 1, tmp_path).tobytes()
+    assert not any(Path(item["png"]).exists() for item in first["previews"] + changed["previews"])
+    assert not Path(delivery["preview_png"]).exists()
+
+    with connected_server() as (send, receive):
+        expired = call(send, receive, "review_frame", request | baseline)
+        assert expired["isError"] and "Review the same target again" in expired["content"][0]["text"]
+
+
+def test_stored_palette_and_visible_rgb_usage_over_stdio(tmp_path):
+    project = tmp_path / "colors.aseprite"
+    with connected_server() as (send, receive):
+        def invoke(tool, **arguments):
+            result = call(send, receive, tool, arguments)
+            assert not result["isError"], result
+            return result["structuredContent"]
+
+        invoke("create_canvas", filename=str(project), width=16, height=16, initial_layers=["ink"])
+        invoke("draw_sprite_map", layer_name="ink", frame_index=1, rows=["ABC"],
+               palette={"A": "#000", "B": "#abc8", "C": "#f80"})
+        original = project.read_bytes()
+        stored = invoke("get_palette")
+        assert stored["data"] == ["#000000"] and "get_color_stats" in stored["summary"]
+        stats = invoke("get_color_stats", top=3)["data"]
+        assert stats["unique_colors"] == stats["opaque_pixels"] == 3
+        assert {entry["color"]: entry["count"] for entry in stats["top_colors"]} == {
+            "#000000": 1, "#AABBCC": 1, "#FF8800": 1,
+        }
+        assert project.read_bytes() == original
+        ordered = ["#ABCDEF", "#012345", "#000000"]
+        invoke("set_palette", colors=ordered)
+        assert invoke("get_palette")["data"] == ordered
+
+
 def test_server_discover_then_tools_list_over_stdio():
     client_meta = {
         PROTOCOL_VERSION_META_KEY: "2026-07-28",
@@ -114,7 +216,7 @@ def test_core_je_delivery_and_extension_edit_in_one_session(tmp_path, bitmap_fon
         assert first["rows"] == ["AB.", "..A"]
         assert first["lossy"] is False
         assert first["palette"]["A"].lower() == "#1234567f"
-        invoke("search_tools", query="validate_scene")
+        invoke("search_tools", query="validate_scene", detail="full", limit=1)
         validation = invoke("call_tool", name="validate_scene", arguments={"required_layers": [["art", "ink"]]})
         assert validation["missing_layers"] == [] and validation["missing_cels"] == []
         invoke("set_layer_visibility", layer_name="hidden", visible=False)
@@ -133,7 +235,7 @@ def test_core_je_delivery_and_extension_edit_in_one_session(tmp_path, bitmap_fon
         hidden = invoke("get_pixels_rect", layer_name="hidden", frame_index=2, x=15, y=15, width=1, height=1)
         assert (hidden[0]["r"], hidden[0]["b"], hidden[0]["a"]) == (255, 255, 255)
 
-        definition = invoke("search_tools", query="draw_text", category="text")["tools"][0]
+        definition = invoke("search_tools", query="draw_text", category="text", detail="full", limit=1)["tools"][0]
         assert definition["name"] == "draw_text"
         invoke("call_tool", name="draw_text", arguments={
             "text": "A", "font": bitmap_font, "x": 8, "y": 1,
@@ -259,7 +361,7 @@ def test_discover_and_execute_extensions_without_aseprite(bitmap_font):
         assert measured["structuredContent"] == json.loads(measured["content"][0]["text"])
         assert call(send, receive, "measure_text", {"text": "A", "font": bitmap_font})["isError"] is True
 
-        result = call(send, receive, "search_tools", {"query": "DRAW_TEXT frame_index", "category": "text"})
+        result = call(send, receive, "search_tools", {"query": "DRAW_TEXT frame_index", "category": "text", "detail": "full"})
         definition = result["structuredContent"]["data"]["tools"][0]
         assert definition["name"] == "draw_text"
         schema = definition["inputSchema"]

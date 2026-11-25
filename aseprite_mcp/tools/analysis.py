@@ -190,10 +190,8 @@ async def compare_frames(filename: str = "", *, frame_a: FrameIndex, frame_b: Fr
 async def get_color_stats(filename: str = "", frame_index: FrameIndex = 1, top: PositiveInt = 16) -> ToolOutput[ColorStats]:
     """Report the colors used in a frame and how often each appears.
 
-    Composites the *visible* layers (non-destructively) and histograms the
-    frame — hidden layers are excluded, so the counts match what a player
-    sees. Use to check palette discipline: too many near-duplicate colors
-    is a common pixel-art mistake.
+    Composites the visible layers and counts pixels with alpha above zero,
+    grouped by RGB. Use get_palette to inspect the sprite's stored palette.
 
     Args:
         filename: Aseprite file to read (optional; defaults to the session's active file)
@@ -201,8 +199,8 @@ async def get_color_stats(filename: str = "", frame_index: FrameIndex = 1, top: 
         top: How many of the most-used colors to list (default 16)
 
     Returns:
-        JSON with unique color count, opaque pixel count, and the top
-        colors with usage counts.
+        JSON with unique RGB count, opaque_pixels (including partial alpha),
+        and the top colors with usage counts.
     """
     filename = prepare_filename(filename)
     if top < 1:

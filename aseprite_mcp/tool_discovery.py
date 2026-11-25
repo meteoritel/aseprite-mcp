@@ -13,18 +13,25 @@ from .core.contracts import ContractModel, ContractTool, ToolOutput
 from .tool_catalog import TOOL_SEARCH_TERMS
 
 
-class ToolDefinition(ContractModel):
+class ToolMatch(ContractModel):
     name: str
     category: str
     invocation: Literal["direct", "call_tool"]
     description: str
+
+
+class BriefToolDefinition(ToolMatch):
+    required: list[str]
+
+
+class ToolDefinition(ToolMatch):
     inputSchema: dict[str, Any]
     outputSchema: dict[str, Any] | None = None
     examples: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class SearchResults(ContractModel):
-    tools: list[ToolDefinition]
+    tools: list[BriefToolDefinition] | list[ToolDefinition]
     available_categories: list[str]
     next_offset: int | None
 
@@ -75,9 +82,15 @@ def create_discovery_tools(extensions: dict[str, tuple[str, Tool]], core: dict[s
             scored.append((-score, key, category, tool))
         return sorted(scored)[:3]
 
-    def definition(name, category, tool):
+    def definition(name, category, tool, detail):
+        invocation = "call_tool" if name in extensions else "direct"
+        if detail == "brief":
+            return BriefToolDefinition(
+                name=name, category=category, invocation=invocation,
+                description=tool.description.partition("\n")[0], required=tool.parameters.get("required", []),
+            )
         return ToolDefinition(
-            name=name, category=category, invocation="call_tool" if name in extensions else "direct",
+            name=name, category=category, invocation=invocation,
             description=tool.description, inputSchema=tool.parameters, outputSchema=tool.output_schema,
             examples=tool.parameters.get("examples", []),
         )
@@ -87,22 +100,24 @@ def create_discovery_tools(extensions: dict[str, tuple[str, Tool]], core: dict[s
         category: str = "",
         limit: Annotated[int, Field(ge=1, le=20)] = 5,
         offset: Annotated[int, Field(ge=0)] = 0,
+        detail: Literal["brief", "full"] = "brief",
     ) -> ToolOutput[SearchResults]:
-        """Find core and extension tools, schemas, examples and the correct invocation.
+        """Find tools and their invocation. Request full detail for schemas and examples.
 
         Args:
             query: Tool names, categories, purpose words or Chinese workflow terms such as 审阅 and 复核. Empty browses.
             category: Exact category, such as text, tilemap or quality. Empty searches all.
             limit: Page size, from 1 to 20.
             offset: Nonnegative position; use next_offset to continue.
+            detail: Brief returns a summary and required argument names. Use an exact tool name with detail='full' and limit=1 for its complete contract.
         """
         if category and category not in categories:
             raise ToolError(f"Unknown category '{category}'. Available categories: {', '.join(categories)}")
         matches = ranked(query, category)
         selected = matches[offset:offset + limit]
-        tools = [definition(name, category, tool) for _, _, name, category, tool in selected]
+        tools = [definition(name, cat, tool, detail) for _, _, name, cat, tool in selected]
         if not matches and query and offset == 0:
-            suggested = [definition(name, cat, tool) for _, name, cat, tool in candidates(query)
+            suggested = [definition(name, cat, tool, detail) for _, name, cat, tool in candidates(query)
                          if not category or cat == category]
             return ToolOutput(summary="No exact capability match; inspect these suggested tools before calling.",
                               data=SearchResults(tools=suggested[:limit], available_categories=categories, next_offset=None))

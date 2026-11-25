@@ -66,7 +66,8 @@ def test_static_delivery_and_review_lifetime(new_sprite, tmp_path, size):
     result = payload(run(export.export_minecraft_texture(
         filename=filename, output_filename=str(tmp_path / "static.png"),
     )))
-    assert json.loads(Path(result["mcmeta"]).read_text()) == {}
+    assert result["mcmeta"] is None
+    assert not (tmp_path / "static.png.mcmeta").exists()
     with Image.open(result["png"]) as image:
         assert image.size == (size, size)
         assert image.convert("RGBA").getpixel((0, 0)) == (18, 52, 86, 127)
@@ -77,7 +78,48 @@ def test_static_delivery_and_review_lifetime(new_sprite, tmp_path, size):
     state.cleanup_review_directory()
     assert not Path(result["preview_png"]).exists()
     assert Path(result["png"]).exists()
-    assert Path(result["mcmeta"]).exists()
+
+
+def test_selected_static_delivery_and_sidecar_policy_over_stdio(new_sprite, tmp_path):
+    filename = new_sprite()
+    run(canvas.add_frame(filename=filename))
+    run(animation.set_tag(filename=filename, name="still", from_frame=2, to_frame=2))
+    target, sidecar = tmp_path / "selected.png", tmp_path / "selected.png.mcmeta"
+    with connected_server() as (send, receive):
+        send("tools/list", {}, 20)
+        schema = next(tool for tool in receive(20)["tools"] if tool["name"] == "export_minecraft_texture")
+
+        def deliver(**arguments):
+            result = call(send, receive, "export_minecraft_texture", {
+                "filename": filename, "output_filename": str(target), **arguments,
+            })
+            assert not result["isError"], result
+            validate(result["structuredContent"], schema["outputSchema"])
+            data = result["structuredContent"]["data"]
+            assert [frame["source_frame"] for frame in data["frames"]] == [2]
+            assert Path(data["preview_png"]).is_file()
+            return data
+
+        assert deliver(frame_index=2)["mcmeta"] is None
+        assert deliver(tag_name="still")["mcmeta"] is None
+        assert not sidecar.exists()
+        for existing in (b"{}\r\n", b'{"texture": {"blur": true}}\n'):
+            sidecar.write_bytes(existing)
+            assert deliver(tag_name="still")["mcmeta"] is None
+            assert sidecar.read_bytes() == existing
+        target_image = target.read_bytes()
+        for existing in (b'{"animation": {}}', b"{bad", b"[]", b"\xff"):
+            sidecar.write_bytes(existing)
+            bad = call(send, receive, "export_minecraft_texture", {
+                "filename": filename, "output_filename": str(target), "frame_index": 2,
+            })
+            assert bad["isError"], bad
+            assert sidecar.name in bad["content"][0]["text"] and "emit_mcmeta='always'" in bad["content"][0]["text"]
+            assert target.read_bytes() == target_image and sidecar.read_bytes() == existing
+        for _ in range(2):
+            data = deliver(frame_index=2, emit_mcmeta="always")
+            assert Path(data["mcmeta"]) == sidecar and json.loads(sidecar.read_bytes()) == {}
+    assert not Path(data["preview_png"]).exists()
 
 
 def test_unrepresentable_timing_preserves_existing_outputs(new_sprite, tmp_path):
@@ -128,7 +170,7 @@ def test_publish_failure_restores_existing_pair(new_sprite, tmp_path, monkeypatc
 
     monkeypatch.setattr(export.os, "replace", fail_metadata)
     with pytest.raises(ToolError, match="Could not publish"):
-        run(export.export_minecraft_texture(filename=filename, output_filename=str(target)))
+        run(export.export_minecraft_texture(filename=filename, output_filename=str(target), emit_mcmeta="always"))
     assert target.read_bytes() == b"old image"
     assert sidecar.read_bytes() == b"old metadata"
 
@@ -162,7 +204,7 @@ def test_named_indexed_slices_export_in_requested_order_over_stdio(tmp_path):
     original = digest(source)
 
     with connected_server(env={"ASERITE_MCP_WORKSPACE": str(tmp_path)}) as (send, receive):
-        discovery = call(send, receive, "search_tools", {"query": "套装纹理", "limit": 1})
+        discovery = call(send, receive, "search_tools", {"query": "套装纹理", "limit": 1, "detail": "full"})
         definition, = discovery["structuredContent"]["data"]["tools"]
         assert definition["name"] == "export_slices_to_minecraft" and definition["invocation"] == "call_tool"
         by_export = call(send, receive, "search_tools", {"query": "切片导出", "limit": 1})
@@ -271,7 +313,7 @@ def test_corrupt_delivery_is_rejected_before_publication(new_sprite, tmp_path, m
         return output
     monkeypatch.setattr(AsepriteCommand, "run_command", corrupt_output)
     with pytest.raises(ToolError):
-        run(export.export_minecraft_texture(filename=filename, output_filename=str(target)))
+        run(export.export_minecraft_texture(filename=filename, output_filename=str(target), emit_mcmeta="always"))
     assert target.read_bytes() == b"old image"
     assert sidecar.read_bytes() == b"old metadata"
     assert not list(tmp_path.glob(".aseprite-*-*"))

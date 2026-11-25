@@ -47,7 +47,8 @@ async def draw_sprite_maps(
             _, _, pixels = compile_sprite_map(item.rows, effective_palette, item.transparent,
                                               item.mirror_x, item.mirror_y, item.erase_transparent)
         except ToolError as exc:
-            raise ToolError(f"maps[{index}]: {exc}") from exc
+            layer_name = json.dumps(item.layer_name, ensure_ascii=False)
+            raise ToolError(f"maps[{index}] (layer_name={layer_name}): {exc}") from exc
         compiled.append(dict(layer=item.layer_name, frame=item.frame_index, create=item.create_if_missing,
                              pixels=[[item.x+x, item.y+y, *rgba] for (x,y),rgba in sorted(pixels.items())]))
     script = _sprite_map_writer_lua(compiled) + '''

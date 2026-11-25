@@ -114,7 +114,7 @@ class TextureFrame(TypedDict):
 
 class TextureDelivery(TypedDict):
     png: str
-    mcmeta: str
+    mcmeta: str | None
     preview_png: str
     preview_scale: int
     preview_lifetime: Literal["session"]

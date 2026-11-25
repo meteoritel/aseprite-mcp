@@ -14,29 +14,40 @@ class SpriteMapCapacityError(ToolError):
     """Exact colors do not fit the available character slots."""
 
 
-def decode_sprite_map(rows, palette, transparent, region: Region):
+def decode_sprite_map(rows, palette, transparent, region: Region) -> bytes:
     parsed, error = parse_sprite_map(rows, palette, transparent)
     if error:
         raise ToolError(f"Invalid before grid: {error}")
     width, height, cells = parsed
     if (width, height) != (region.width, region.height):
         raise ToolError("Before grid dimensions must match the review region")
-    return {(x, y): rgba for x, y, rgba in cells if rgba[3] != 0}
+    pixels = bytearray(width * height * 4)
+    for x, y, rgba in cells:
+        start = (y * width + x) * 4
+        pixels[start:start + 4] = bytes(rgba)
+    return bytes(pixels)
 
 
-def compare_region_pixels(before, after, region: Region) -> PixelChanges:
-    # A missing pixel and any fully transparent RGBA have the same appearance.
-    after = {position: rgba for position, rgba in after.items() if rgba[3] != 0}
-    changed = [position for position in before.keys() | after.keys()
-               if before.get(position) != after.get(position)]
-    if not changed:
+def compare_region_pixels(before: bytes, after: bytes, region: Region) -> PixelChanges:
+    if before == after:
         return {"changed_pixels": 0, "changed_bounds": None}
-    xs, ys = zip(*changed)
-    left, top = min(xs), min(ys)
+    count = 0
+    left, top, right, bottom = region.width, region.height, -1, -1
+    for start in range(0, max(len(before), len(after)), 4):
+        old, new = before[start:start + 4], after[start:start + 4]
+        # An absent cel and a fully transparent pixel have the same appearance.
+        if old == new or not ((old and old[3]) or (new and new[3])):
+            continue
+        y, x = divmod(start // 4, region.width)
+        count += 1
+        left, top = min(left, x), min(top, y)
+        right, bottom = max(right, x), max(bottom, y)
+    if not count:
+        return {"changed_pixels": 0, "changed_bounds": None}
     return {
-        "changed_pixels": len(changed),
+        "changed_pixels": count,
         "changed_bounds": {"x": region.x + left, "y": region.y + top,
-                           "width": max(xs) - left + 1, "height": max(ys) - top + 1},
+                           "width": right - left + 1, "height": bottom - top + 1},
     }
 
 

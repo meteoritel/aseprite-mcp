@@ -1,5 +1,7 @@
 """Read a rectangle of raw RGBA from an Aseprite image."""
 
+from collections.abc import Iterable
+
 from mcp.server.mcpserver.exceptions import ToolError
 
 from .contracts import Region
@@ -7,7 +9,7 @@ from .lua import FIND_LAYER, LAYER_NAMES
 
 
 EMIT_REGION_PIXELS = """
-local function emit_region_pixels(img, origin, region)
+local function emit_region_pixels(img, origin, region, prefix)
     local rgba = app.pixelColor
     for y = region.y, region.y + region.height - 1 do
         local row = {}
@@ -21,7 +23,7 @@ local function emit_region_pixels(img, origin, region)
             row[#row + 1] = string.format("%02x%02x%02x%02x",
                 rgba.rgbaR(value), rgba.rgbaG(value), rgba.rgbaB(value), rgba.rgbaA(value))
         end
-        print("RGBA:" .. table.concat(row))
+        print((prefix or "RGBA:") .. table.concat(row))
     end
 end
 """
@@ -51,12 +53,23 @@ def lua_region(region: Region) -> str:
     return f"{{x={region.x},y={region.y},width={region.width},height={region.height}}}"
 
 
-def read_region_pixels(output: str, region: Region):
-    rows = [bytes.fromhex(line.removeprefix("RGBA:")) for line in output.splitlines() if line.startswith("RGBA:")]
+def read_region_rgba(hex_rows: Iterable[str], region: Region) -> bytes:
+    try:
+        rows = [bytes.fromhex(row) for row in hex_rows]
+    except ValueError as exc:
+        raise ToolError("Failed to read sprite map: invalid RGBA data returned") from exc
     if len(rows) != region.height or any(len(row) != region.width * 4 for row in rows):
         raise ToolError("Failed to read sprite map: incomplete pixel data returned")
+    return b"".join(rows)
+
+
+def region_pixels(rgba: bytes, width: int):
     return {
-        (x, y): tuple(row[start:start + 4])
-        for y, row in enumerate(rows)
-        for x, start in enumerate(range(0, len(row), 4))
+        (pixel % width, pixel // width): tuple(rgba[start:start + 4])
+        for pixel, start in enumerate(range(0, len(rgba), 4))
     }
+
+
+def read_region_pixels(output: str, region: Region):
+    rows = (line.removeprefix("RGBA:") for line in output.splitlines() if line.startswith("RGBA:"))
+    return region_pixels(read_region_rgba(rows, region), region.width)
