@@ -9,7 +9,7 @@ uv sync --locked
 uv run --locked -m aseprite_mcp
 ```
 
-服务通过 stdio 启动，读取仓库根目录的环境文件和运行指令。`ASEPRITE_PATH` 或 PATH 用来定位 Aseprite。`ASERITE_MCP_WORKSPACE` 指定相对素材路径的基准，默认使用服务工作目录。 [环境变量示例](../sample.env) · [运行指令](../SKILL.md)
+服务通过 stdio 启动，读取仓库根目录的环境文件和运行指令。`ASEPRITE_PATH` 或 PATH 用来定位 Aseprite。`ASEPRITE_MCP_WORKSPACE`（兼容旧拼写 `ASERITE_MCP_WORKSPACE`）指定相对素材及新建工程路径的基准，默认使用服务工作目录；`ASEPRITE_MAX_CONCURRENCY` 控制并行 Aseprite 子进程上限（默认 4）。 [环境变量示例](../sample.env) · [运行指令](../SKILL.md)
 
 客户端从其他目录启动时，使用 `uv --directory <仓库绝对路径> run --locked -m aseprite_mcp`。Codex 使用 TOML 配置，支持 `mcpServers` 的客户端使用 JSON。 [安装与配置](../README.md#安装与配置)
 

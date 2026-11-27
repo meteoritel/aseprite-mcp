@@ -7,7 +7,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from ..core.colors import parse_hex_color
 from ..core.commands import AsepriteCommand, lua_escape
 from ..core.contracts import ColorMapping, FrameIndex, LayerRef, NonnegativeInt, ToolOutput
-from ..core.editing import edit_output, execute_edit_script
+from ..core.editing import edit_output, execute_edit_script, parse_palette_colors, set_palette_lua
 from ..core.lua import FIND_LAYER, LAYER_NAMES, lua_layer_ref
 from ..core.results import EditReceipt
 from ..core.state import prepare_filename
@@ -93,33 +93,24 @@ async def get_palette(filename: str = "") -> ToolOutput[list[str]]:
 async def set_palette(filename: str = "", *, colors: List[str]) -> ToolOutput[EditReceipt]:
     """Set the active sprite palette using a list of hex colors.
 
+    Tip: when creating a new canvas or submitting sprite maps, pass
+    `create_canvas(palette=[...])` or `draw_sprite_maps(..., sync_palette=True)`
+    to update the stored palette without a separate subprocess call.
+
     Args:
         filename: Aseprite file to modify (optional; defaults to the
             session's active file)
-        colors: List of #RRGGBB hex colors
+        colors: List of hex colors (#RGB, #RGBA, #RRGGBB or #RRGGBBAA)
     """
     filename = prepare_filename(filename)
     if not colors:
         raise ToolError("Colors list cannot be empty")
 
-    rgb_list = []
-    for color in colors:
-        rgb = _parse_hex_color(color)
-        if rgb is None:
-            raise ToolError("Colors must use #RRGGBB values")
-        rgb_list.append(rgb)
-
-    palette_entries = "\n".join(
-        [f"    pal:setColor({i}, Color({r}, {g}, {b}))" for i, (r, g, b) in enumerate(rgb_list)]
-    )
-
+    rgba_list = parse_palette_colors(colors)
     script = f"""
     local spr = app.activeSprite
     if not spr then print("ERROR:No active sprite") return end
-
-    local pal = Palette({len(rgb_list)})
-{palette_entries}
-    spr:setPalette(pal)
+{set_palette_lua(rgba_list)}
     save_project(spr)
     print("OK")
     """

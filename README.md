@@ -4,9 +4,9 @@
 
 ## 可以做什么
 
-- **绘制与编辑**：绘制像素、图形和字符网格，从复合网格创建可编辑的分层工程，管理调色板与特效，导入图片。
-- **制作动画**：编辑帧和图层内容，设置帧时长、播放区间与补间。
-- **读取与审阅**：回读像素，检查可见合成、颜色统计和帧间差异，生成放大预览。
+- **绘制与编辑**：绘制像素、图形和字符网格，一步建布并同步色板，从复合网格创建可编辑的分层工程，跨工程复用图层，管理调色板与特效，导入图片。
+- **制作动画**：编辑帧和图层内容，设置帧时长、播放区间与缓动补间。
+- **读取与审阅**：回读像素，支持多背景模拟（深暗 HUD / 物品槽 / 棋盘格）与坐标网格、`review_contact_sheet` 多文件/多帧/参考图横向拼图对比、外部 `.png` 零冷启动只读检查，以及帧间差异与颜色统计。
 - **导出交付**：输出 PNG、GIF、精灵表及 Minecraft Java Edition 纹理。单件静态纹理默认发布 PNG，动画和命名切片同时发布 `.png.mcmeta`。
 - **文字与瓦片**：绘制文字，编辑 tilemap 和 slice。
 
@@ -36,14 +36,14 @@ uv sync --locked
       ],
       "env": {
         "ASEPRITE_PATH": "YOUR_ASEPRITE_PATH",
-        "ASERITE_MCP_WORKSPACE": "YOUR_WORKSPACE_PATH"
+        "ASEPRITE_MCP_WORKSPACE": "YOUR_WORKSPACE_PATH"
       }
     }
   }
 }
 ```
 
-`ASEPRITE_PATH` 指向 Aseprite 可执行文件，已加入 PATH 时可省略。`ASERITE_MCP_WORKSPACE` 指定相对素材路径的基准，变量名按示例保留。
+`ASEPRITE_PATH` 指向 Aseprite 可执行文件，已加入 PATH 时可省略。`ASEPRITE_MCP_WORKSPACE` 指定相对素材与新建工程路径的基准（兼容旧拼写 `ASERITE_MCP_WORKSPACE`）。可选 `ASEPRITE_MAX_CONCURRENCY` 控制多文件并发时的最大 Aseprite 子进程数（默认 4）。
 
 Codex 在 `~/.codex/config.toml` 中使用对应的 TOML 配置。
 
@@ -54,7 +54,7 @@ args = ["--directory", "YOUR_ASEPRITE_MCP_PATH", "run", "--locked", "-m", "asepr
 
 [mcp_servers.aseprite.env]
 ASEPRITE_PATH = "YOUR_ASEPRITE_PATH"
-ASERITE_MCP_WORKSPACE = "YOUR_WORKSPACE_PATH"
+ASEPRITE_MCP_WORKSPACE = "YOUR_WORKSPACE_PATH"
 ```
 
 保存配置后重新连接 MCP。客户端找不到 `uv` 时，将 `command` 设为 uv 可执行文件的绝对路径。

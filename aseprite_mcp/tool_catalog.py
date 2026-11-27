@@ -71,6 +71,7 @@ CORE_TOOLS = {
     ),
     "review": (
         "review_frame",
+        "review_contact_sheet",
     ),
     "transform": (
         "flip_layer",
@@ -176,29 +177,100 @@ EXTENSION_TOOLS = {
 }
 
 TOOL_SEARCH_TERMS = {
-    "draw_sprite_map": ("绘制", "修改", "擦除"),
-    "draw_sprite_maps": ("绘制", "修改", "批量"),
-    "create_layered_sprite": ("复合网格", "分层绘制", "分层创建"),
-    "draw_dither_detail": ("抖动", "纹理", "质感"),
-    "apply_dither_pattern": ("抖动", "纹理", "质感"),
-    "apply_dither_gradient": ("抖动", "渐变", "过渡"),
-    "adjust_hsl": ("色相", "色相偏移", "色相调整"),
-    "review_frame": ("审阅", "预览", "复核"),
-    "export_minecraft_texture": ("纹理导出", "导出"),
-    "export_slices_to_minecraft": ("切片导出", "套装纹理"),
+    # Core authoring & review workflow terms
+    "create_canvas": ("建布", "新建画布", "初始化图层"),
+    "draw_sprite_map": ("绘制", "修改", "擦除", "字符网格"),
+    "draw_sprite_maps": ("绘制", "修改", "批量", "字符网格", "色板同步"),
+    "get_sprite_map": ("读取网格", "参考图", "字符画", "reference", "png"),
+    "review_frame": ("审阅", "预览", "复核", "背景预览", "网格刻度", "hud"),
+    "review_contact_sheet": (
+        "拼图", "横排", "并排", "套装对比", "多图对比", "参考图", "多帧对比",
+        "contact sheet", "side by side", "compare", "hud", "reference", "png",
+    ),
+    # Color & palette
+    "get_color_stats": ("实际用色", "颜色统计", "参考图", "reference", "png"),
+    "get_palette": ("保存色板", "读取调色板"),
+    "set_palette": ("设置色板", "调色板"),
+    "generate_color_ramp": ("色阶", "明暗过渡", "配色", "ramp", "shading"),
+    "extract_palette": ("提取色板", "量化色板", "参考图", "reference", "png"),
+    "replace_color": ("换色", "替换颜色", "recolor"),
+    "remap_colors_in_cel_range": ("批量换色", "跨帧换色", "recolor"),
+    # Dither, outline, color adjustment & native filters
+    "draw_dither_detail": ("抖动", "纹理", "质感", "噪点", "bayer"),
+    "apply_dither_pattern": ("抖动", "纹理", "质感", "棋盘格", "bayer", "pattern"),
+    "apply_dither_gradient": ("抖动", "渐变", "过渡", "bayer", "gradient"),
+    "outline_native": ("描边", "轮廓", "外框", "加边", "outline", "border", "stroke", "silhouette"),
+    "outline_cel": ("描边", "轮廓", "外框", "outline", "border", "stroke"),
+    "adjust_hsl": ("色相", "色相偏移", "色相调整", "饱和度", "调色", "hue", "saturation", "hsl"),
+    "adjust_hsl_native": ("色相", "饱和度", "调色", "明度", "hue", "saturation", "hsl"),
+    "adjust_brightness_contrast": ("亮度", "对比度", "明暗", "提亮", "变暗", "brightness", "contrast", "darken", "lighten"),
+    "invert_colors": ("反色", "负片", "invert"),
+    "apply_convolution": ("模糊", "锐化", "浮雕", "边缘检测", "滤镜", "卷积", "blur", "sharpen", "emboss", "filter"),
+    "list_convolution_matrices": ("滤镜列表", "卷积矩阵", "blur", "sharpen"),
+    # Layered creation & cross-sprite reuse
+    "create_layered_sprite": ("复合网格", "分层绘制", "分层创建", "拆分层"),
+    "copy_layers_between_sprites": (
+        "跨文件", "复制图层", "复用图层", "同步图层",
+        "copy layer", "between files", "cross sprite",
+    ),
+    "duplicate_layer": ("同文件复制图层",),
+    "import_image_as_layer": ("导入图片", "导入参考图", "import png"),
+    # Slices, sheets & Minecraft delivery
+    "export_minecraft_texture": ("纹理导出", "导出", "mcmeta", "minecraft"),
+    "export_slices_to_minecraft": ("切片导出", "套装纹理", "批量导出", "minecraft", "slice"),
+    "export_spritesheet": ("精灵表", "图集导出", "spritesheet", "atlas"),
+    "export_layers": ("分图层导出", "导出图层", "split layers"),
+    "create_slice": ("切片", "命名切片", "九宫格", "slice", "9-slice"),
+    "set_slice_center": ("九宫格", "切片中心", "9-slice", "9-patch"),
+    "set_slice_pivot": ("锚点", "轴心", "pivot"),
+    "list_slices": ("查看切片", "切片列表", "slice"),
+    "delete_slice": ("删除切片", "slice"),
+    # Animation, onion skin, tweening & QA
+    "render_onion_skin": ("洋葱皮", "残影", "动画连续性", "onion"),
+    "compare_frames": ("帧差异", "对比帧", "diff"),
+    "tween_cel_positions": ("补间", "位移补间", "tween"),
+    "tween_cel_positions_eased": ("缓动补间", "平滑移动", "easing", "tween"),
+    "oscillate_cel_positions": ("呼吸动画", "漂浮", "正弦摆动", "bob", "float", "oscillate"),
+    "tween_cel_opacity_eased": ("淡入淡出", "透明度补间", "fade", "opacity"),
+    "tween_cel_scale_eased": ("缩放补间", "伸缩动画", "scale", "tween"),
+    "offset_cel_positions": ("批量偏移", "整体移动", "nudge", "offset"),
+    "ensure_layers_present": ("补齐帧", "补齐cel", "质量检查"),
+    "validate_scene": ("场景校验", "检查缺失图层", "质量检查", "qa"),
+    "audit_animation": ("动画审计", "重叠检查", "质量检查", "audit"),
+    "animation_sanitize": ("动画修复", "清理帧", "图层重排", "sanitize"),
+    # Text, tilemap & preview server
+    "draw_text": ("文字", "写字", "像素字", "文本", "text", "font"),
+    "measure_text": ("测量文字", "字体尺寸", "text"),
+    "list_text_fonts": ("字体列表", "可用字体", "font"),
+    "create_tilemap_layer": ("瓦片", "瓦片图", "tilemap", "tileset"),
+    "draw_on_tile": ("绘制瓦片", "tilemap"),
+    "set_tiles": ("铺设瓦片", "tilemap"),
+    "start_preview_server": ("网页预览", "本地预览", "http", "preview server"),
+    "stop_preview_server": ("停止预览", "preview server"),
 }
 
 TOOL_EXAMPLES = {
-    "create_canvas": [{
-        "width": 16, "height": 16, "filename": "D:/art/coin.aseprite", "initial_layers": ["base", "shine"],
-    }],
-    "draw_sprite_maps": [{
-        "palette": {"A": "#8B5A2B", "B": "#F2C48D"},
-        "maps": [
-            {"layer_name": "base", "frame_index": 1, "x": 6, "y": 6, "rows": [".AA.", "AAAA", ".AA."]},
-            {"layer_name": "shine", "frame_index": 1, "x": 7, "y": 6, "rows": ["BB"]},
-        ],
-    }],
+    "create_canvas": [
+        {
+            "width": 16, "height": 16, "filename": "D:/art/coin.aseprite",
+            "initial_layers": ["base", "shine"],
+        },
+        {
+            "width": 16, "height": 16, "filename": "D:/art/potion.aseprite",
+            "initial_layers": ["bottle_back", "potion_liquid", "bottle_front"],
+            "palette": ["#1E1428", "#6DC2CA", "#DEEED6"],
+        },
+    ],
+    "draw_sprite_maps": [
+        {
+            "palette": {"A": "#8B5A2B", "B": "#F2C48D"},
+            "sync_palette": True,
+            "maps": [
+                {"layer_name": "base", "frame_index": 1, "x": 6, "y": 6, "rows": [".AA.", "AAAA", ".AA."]},
+                {"layer_name": "shine", "frame_index": 1, "x": 7, "y": 6, "rows": ["BB"]},
+            ],
+        },
+    ],
     "create_layered_sprite": [{
         "filename": "D:/art/coin.aseprite",
         "rows": [".SS.", "SBB.", ".OO."],
@@ -208,12 +280,17 @@ TOOL_EXAMPLES = {
             {"name": "shine", "mapping": {"S": "S"}},
             {"name": "outline", "mapping": {"O": "O"}},
         ],
+        "sync_palette": True,
     }],
     "draw_sprite_map": [{
         "layer_name": ["shine"], "frame_index": 1, "x": 7, "y": 6,
         "rows": ["B."], "palette": {"B": "#F2C48D"},
         "erase_transparent": True, "create_if_missing": False,
     }],
+    "get_sprite_map": [
+        {"filename": "D:/art/vanilla_potion.png"},
+        {"layer_name": ["base"], "frame_index": 1, "x": 0, "y": 0, "width": 16, "height": 16},
+    ],
     "draw_dither_detail": [{
         "layer_name": "body", "frame_index": 1, "x": 4, "y": 4,
         "width": 8, "height": 8, "color": "#F2C48D", "density": 0.5,
@@ -222,7 +299,44 @@ TOOL_EXAMPLES = {
         {"frame_index": 1, "layer_name": ["shine"],
          "region": {"x": 7, "y": 6, "width": 2, "height": 1}, "palette": {"B": "#F2C48D"}},
         {"frame_index": 1, "layer_names": [["wood_body"], ["outline"]], "preview_mode": "both"},
+        {"frame_index": 1, "backgrounds": ["mc_hud", "mc_slot", "checker"],
+         "show_grid": True, "grid_mode": "none", "save_preview_to": "D:/art/preview.png"},
     ],
+    "review_contact_sheet": [
+        {
+            "filenames": ["D:/art/potion.aseprite", "D:/art/splash_potion.aseprite", "D:/art/vanilla_potion.png"],
+            "backgrounds": ["mc_hud", "mc_slot"],
+            "scale": 8,
+        },
+        {
+            "filename": "D:/art/coin.aseprite",
+            "frame_indices": [1, 2, 3, 4],
+            "backgrounds": ["checker"],
+        },
+    ],
+    "get_color_stats": [{"filename": "D:/art/vanilla_potion.png", "top": 16}],
+    "extract_palette": [{"filename": "D:/art/vanilla_potion.png", "max_colors": 16}],
+    "generate_color_ramp": [{"base_color": "#6DC2CA", "steps": 5, "hue_shift_degrees": 20, "lightness_range": 0.5}],
+    "outline_native": [{"layer_name": "body", "frame_index": 1, "color": "#1E1428", "place": "outside", "matrix": "circle"}],
+    "outline_cel": [{"layer_name": "body", "frame_index": 1, "color": "#1E1428", "include_diagonals": False}],
+    "adjust_hsl_native": [{"layer_name": "body", "frame_index": 1, "hue": 15, "saturation": 10, "lightness": 12}],
+    "adjust_hsl": [{"layer_name": "body", "frame_index": 1, "hue_shift": -15, "saturation_shift": 10, "lightness_shift": 8}],
+    "adjust_brightness_contrast": [{"layer_name": "body", "frame_index": 1, "brightness": 15, "contrast": 10}],
+    "apply_dither_pattern": [{
+        "layer_name": "base", "frame_index": 1, "x": 2, "y": 2,
+        "width": 12, "height": 12, "color_a": "#5B6EE1", "color_b": "#639BFF", "density": 0.5,
+    }],
+    "apply_dither_gradient": [{
+        "layer_name": "base", "frame_index": 1, "x": 0, "y": 0,
+        "width": 16, "height": 16, "color_start": "#306082", "color_end": "#5FCDE4", "horizontal": False,
+    }],
+    "apply_convolution": [{"layer_name": "fx", "frame_index": 1, "matrix": "sharpen-3x3"}],
+    "copy_layers_between_sprites": [{
+        "source_filename": "D:/art/potion.aseprite",
+        "target_filename": "D:/art/splash_potion.aseprite",
+        "layer_names": [["bottle_back"], ["bottle_front"]],
+    }],
+    "create_slice": [{"name": "cat_helmet", "x": 0, "y": 0, "width": 16, "height": 16}],
     "draw_text": [{"text": "A", "font": "DejaVu Sans", "x": 0, "y": 0, "layer_name": "label", "frame_index": 1}],
     "draw_on_tile": [{"layer_name": "tiles", "tile_index": 1, "pixels": [{"x": 0, "y": 0, "color": "#FFFFFF"}]}],
     "get_tile_at": [{"layer_name": "tiles", "frame_index": 1, "col": 0, "row": 0}],
@@ -231,6 +345,7 @@ TOOL_EXAMPLES = {
     "ensure_layers_present": [{"layer_names": ["ink"], "start_frame": 1}],
     "validate_scene": [{"required_layers": ["ink"], "start_frame": 1}],
     "export_layers": [{"output_directory": "D:/art/layers"}],
+    "export_spritesheet": [{"output_filename": "D:/art/sheet.png", "sheet_type": "horizontal", "scale": 1}],
     "get_tilemap_info": [{"layer_name": "tiles"}],
     "audit_animation": [{"layer_frame_ranges": [{"layer": ["art", "ink"], "ranges": [[1, 4]]}], "report_cels": True}],
     "export_minecraft_texture": [

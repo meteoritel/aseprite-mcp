@@ -5,6 +5,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from ..core.commands import AsepriteCommand, lua_escape
 from ..core.composite import COMPOSE_FRAME
 from ..core.contracts import Byte, FrameIndex, NonnegativeInt, PositiveInt, ToolOutput
+from ..core.image_read import is_raster_image, raster_color_stats
 from ..core.results import ColorStats, ExportReceipt, FrameDifference
 from ..core.state import prepare_filename
 
@@ -192,9 +193,11 @@ async def get_color_stats(filename: str = "", frame_index: FrameIndex = 1, top: 
 
     Composites the visible layers and counts pixels with alpha above zero,
     grouped by RGB. Use get_palette to inspect the sprite's stored palette.
+    Also reads external `.png`/`.bmp`/`.webp` reference images directly in
+    read-only mode without starting Aseprite or changing the active file.
 
     Args:
-        filename: Aseprite file to read (optional; defaults to the session's active file)
+        filename: Native project (optional; defaults to active file) or external raster reference image (.png/.bmp/.webp).
         frame_index: Frame to analyze, starting at 1 (default 1)
         top: How many of the most-used colors to list (default 16)
 
@@ -202,9 +205,17 @@ async def get_color_stats(filename: str = "", frame_index: FrameIndex = 1, top: 
         JSON with unique RGB count, opaque_pixels (including partial alpha),
         and the top colors with usage counts.
     """
-    filename = prepare_filename(filename)
+    external_raster = bool(filename) and is_raster_image(filename)
+    filename = prepare_filename(filename, anchor=not external_raster)
     if top < 1:
         raise ToolError("top must be >= 1")
+    if is_raster_image(filename):
+        if frame_index != 1:
+            raise ToolError("External raster images only support frame_index=1")
+        return ToolOutput(
+            summary="Get color stats completed (read-only external image)",
+            data=raster_color_stats(filename, frame_index=1, top=top),
+        )
 
     script = f"""
     {COMPOSE_FRAME}

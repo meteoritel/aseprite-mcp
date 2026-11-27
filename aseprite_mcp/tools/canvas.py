@@ -5,8 +5,8 @@ from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import Field
 
 from ..core.commands import lua_escape
-from ..core.contracts import FrameIndex, LayerRef, PositiveInt, ToolOutput
-from ..core.editing import edit_output, execute_edit_script, new_canvas_lua, new_project_path
+from ..core.contracts import FrameIndex, HexColor, LayerRef, PositiveInt, ToolOutput
+from ..core.editing import edit_output, execute_edit_script, new_canvas_lua, new_project_path, parse_palette_colors, set_palette_lua
 from ..core.lua import FIND_LAYER, LAYER_NAMES, lua_layer_ref
 from ..core.results import EditReceipt
 from ..core.state import prepare_filename, set_active_file
@@ -18,28 +18,45 @@ async def create_canvas(
     filename: str,
     overwrite: bool = False,
     initial_layers: Annotated[list[str], Field(min_length=1)] | None = None,
+    palette: Annotated[list[HexColor], Field(min_length=1)] | None = None,
 ) -> ToolOutput[EditReceipt]:
     """Create a new Aseprite canvas with specified dimensions.
+
+    Pass `initial_layers` and `palette` to build a multi-layer project with its
+    stored palette in one Aseprite invocation (skipping separate add_layer and
+    set_palette calls). To split a single composite ASCII grid into editable
+    layers in one step, use `call_tool("create_layered_sprite", ...)`.
 
     Args:
         width: Width of the canvas in pixels
         height: Height of the canvas in pixels
-        filename: Absolute project path ending in .aseprite or .ase.
+        filename: Project path ending in .aseprite or .ase (absolute, or relative when ASEPRITE_MCP_WORKSPACE is configured).
             An omitted extension becomes .aseprite. The saved project becomes the active file.
         overwrite: Replace an existing native project (default False)
         initial_layers: Unique top-level layer names, listed bottom to top. Omit to use Aseprite's default layer.
+        palette: Optional ordered list of hex colors (#RGB, #RGBA, #RRGGBB or #RRGGBBAA) stored as the project palette.
     """
     if width <= 0 or height <= 0:
         raise ToolError("Width and height must be > 0")
     filename = new_project_path(filename)
     if os.path.exists(filename) and not overwrite:
         raise ToolError(f"Project already exists: {filename}; pass overwrite=true to replace it")
-    script = new_canvas_lua(width, height, initial_layers) + "\nsave_project(spr)\n"
+    palette_lua = ""
+    if palette is not None:
+        if not palette:
+            raise ToolError("palette must contain at least one color")
+        palette_lua = set_palette_lua(parse_palette_colors(palette))
+    script = new_canvas_lua(width, height, initial_layers) + palette_lua + "\nsave_project(spr)\n"
 
     execution = await execute_edit_script(script, output_filename=filename)
 
     set_active_file(filename)
-    return edit_output(f"Canvas created and anchored as active file: {filename}. Subsequent tool calls may omit filename.", filename, execution, None)
+    return edit_output(
+        f"Canvas created: {filename} (anchored as active file for single-file calls; pass explicit filename for parallel multi-file workflows).",
+        filename,
+        execution,
+        None,
+    )
 
 async def add_layer(filename: str = "", *, layer_name: str, group: LayerRef = "") -> ToolOutput[EditReceipt]:
     """Add a new layer to the Aseprite file.

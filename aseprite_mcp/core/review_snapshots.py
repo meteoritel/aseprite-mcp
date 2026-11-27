@@ -2,7 +2,7 @@
 
 from collections import OrderedDict
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from secrets import token_urlsafe
 
 from mcp.server.mcpserver.exceptions import ToolError
@@ -21,6 +21,8 @@ class ReviewBaseline:
     layer_paths: tuple[tuple[str, ...], ...]
     composite: bytes
     cels: tuple[bytes, ...]  # Empty bytes represent a missing cel.
+    composite_palette: dict[str, str] = field(default_factory=dict)
+    cel_palettes: dict[tuple[str, ...], dict[str, str]] = field(default_factory=dict)
 
     @property
     def rgba_bytes(self) -> int:

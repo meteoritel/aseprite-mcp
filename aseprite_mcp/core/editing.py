@@ -9,10 +9,12 @@ import tempfile
 
 from mcp.server.mcpserver.exceptions import ToolError
 
+from collections.abc import Iterable
+from .colors import parse_hex_color
 from .commands import AsepriteCommand, lua_escape
 from .contracts import ToolOutput
 from .results import EditReceipt
-from .state import prepare_filename
+from .state import get_configured_workspace_dir, prepare_filename
 
 NATIVE_EXTENSIONS = {".ase", ".aseprite"}
 ASEPRITE_MAGIC = 0xA5E0
@@ -51,9 +53,40 @@ def native_project_path(filename: str) -> str:
 
 
 def new_project_path(filename: str) -> str:
-    if not os.path.isabs(filename):
-        raise ToolError(f"Specify an ABSOLUTE project filename, e.g. 'D:/art/sprites/coin.aseprite'. Got: {filename!r}")
+    if not filename:
+        raise ToolError("Specify a project filename, e.g. 'D:/art/sprites/coin.aseprite'")
+    if not os.path.isabs(filename) and get_configured_workspace_dir() is None:
+        raise ToolError(
+            "Specify an ABSOLUTE project filename (or configure ASEPRITE_MCP_WORKSPACE), "
+            f"e.g. 'D:/art/sprites/coin.aseprite'. Got: {filename!r}"
+        )
     return native_project_path(prepare_filename(filename, must_exist=False, anchor=False))
+
+
+def parse_palette_colors(colors: Iterable[str]) -> list[tuple[int, int, int, int]]:
+    """Parse hex colors into RGBA tuples for Aseprite palettes."""
+    parsed: list[tuple[int, int, int, int]] = []
+    for color in colors:
+        rgba = parse_hex_color(color)
+        if rgba is None:
+            raise ToolError(f"Invalid color {color!r}: expected #RGB, #RGBA, #RRGGBB or #RRGGBBAA")
+        parsed.append(rgba)
+    return parsed
+
+
+def set_palette_lua(rgba_colors: list[tuple[int, int, int, int]], sprite_var: str = "spr") -> str:
+    """Build Lua statements that set the sprite's palette in slot order."""
+    if not rgba_colors:
+        return ""
+    entries = "\n".join(
+        f"    _pal:setColor({index}, Color{{r={r}, g={g}, b={b}, a={a}}})"
+        for index, (r, g, b, a) in enumerate(rgba_colors)
+    )
+    return f"""
+    local _pal = Palette({len(rgba_colors)})
+{entries}
+    {sprite_var}:setPalette(_pal)
+"""
 
 
 def new_canvas_lua(width: int, height: int, layer_names: list[str] | None = None) -> str:

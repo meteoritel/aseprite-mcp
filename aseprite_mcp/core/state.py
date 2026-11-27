@@ -29,7 +29,8 @@ FILE_NOT_FOUND_HINT = (
     "workspace directory"
 )
 
-WORKSPACE_ENV_VAR = "ASERITE_MCP_WORKSPACE"
+WORKSPACE_ENV_VAR = "ASEPRITE_MCP_WORKSPACE"
+LEGACY_WORKSPACE_ENV_VAR = "ASERITE_MCP_WORKSPACE"
 
 
 def set_active_file(filename: str) -> None:
@@ -53,16 +54,25 @@ def resolve_filename(filename: str) -> str | None:
     return filename or _active_file
 
 
+def get_configured_workspace_dir() -> str | None:
+    """Return explicitly configured workspace directory, if any.
+
+    Checks `ASEPRITE_MCP_WORKSPACE` first and falls back to the legacy
+    `ASERITE_MCP_WORKSPACE` spelling for backwards compatibility.
+    """
+    workspace = os.getenv(WORKSPACE_ENV_VAR) or os.getenv(LEGACY_WORKSPACE_ENV_VAR)
+    if workspace:
+        return os.path.abspath(os.path.expanduser(workspace))
+    return None
+
+
 def get_workspace_dir() -> str:
     """Directory that relative paths resolve against.
 
-    `ASERITE_MCP_WORKSPACE` (usually set by the client to the AI project
-    folder) wins; otherwise the server's current working directory.
+    Explicitly configured workspace (`ASEPRITE_MCP_WORKSPACE` / legacy
+    `ASERITE_MCP_WORKSPACE`) wins; otherwise the server's current working directory.
     """
-    workspace = os.getenv(WORKSPACE_ENV_VAR)
-    if workspace:
-        return os.path.abspath(os.path.expanduser(workspace))
-    return os.getcwd()
+    return get_configured_workspace_dir() or os.getcwd()
 
 
 def resolve_path(path: str) -> str:

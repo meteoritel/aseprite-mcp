@@ -1,5 +1,6 @@
 """Pure character-grid parsing, mirrored painting and exact RGBA encoding."""
 
+from collections import Counter
 import json
 from typing import Any, Dict, List
 from mcp.server.mcpserver.exceptions import ToolError
@@ -8,6 +9,7 @@ from .contracts import Region, SpriteLayerRule
 from .results import PixelChanges
 
 _AUTO_ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+_MAX_GRID_DIAGNOSTICS = 5
 
 
 class SpriteMapCapacityError(ToolError):
@@ -92,33 +94,65 @@ def parse_sprite_map(
     for index, row in enumerate(rows):
         if not isinstance(row, str):
             return None, f"rows[{index}] must be a string, got {type(row).__name__}"
-        if len(row) != width:
-            column = min(width, len(row))
+
+    # When 3+ rows have a clear majority width, diagnose against that width so a typo on rows[0] blames rows[0].
+    expected_width = width
+    majority_count = 0
+    if len(rows) >= 3:
+        counts = Counter(len(row) for row in rows)
+        most_common = counts.most_common(2)
+        if most_common[0][1] > 1 and (len(most_common) == 1 or most_common[0][1] > most_common[1][1]):
+            expected_width, majority_count = most_common[0]
+
+    width_errors: list[str] = []
+    for index, row in enumerate(rows):
+        if len(row) != expected_width:
+            column = min(expected_width, len(row))
             start, stop = max(0, column - 24), min(len(row), column + 24)
             label = f"rows[{index}][{start}:{stop}] = "
             excerpt = json.dumps(row[start:stop])
             caret = " " * (len(label) + len(json.dumps(row[start:column])) - 1)
-            position = "first missing cell" if len(row) < width else "grid right boundary"
-            return None, (
-                f"rows must form a rectangle: rows[0] has {width} character(s) "
-                f"but rows[{index}] has {len(row)}\n"
-                f"{label}{excerpt}\n{caret}^ column {column} ({position}, zero-based)"
-            )
-
+            position = "first missing cell" if len(row) < expected_width else "grid right boundary"
+            if expected_width == width:
+                header = (
+                    f"rows must form a rectangle: rows[0] has {width} character(s) "
+                    f"but rows[{index}] has {len(row)}"
+                )
+            else:
+                header = (
+                    f"rows must form a rectangle: {majority_count} of {len(rows)} rows have {expected_width} character(s) "
+                    f"but rows[{index}] has {len(row)}"
+                )
+            width_errors.append(f"{header}\n{label}{excerpt}\n{caret}^ column {column} ({position}, zero-based)")
+    if width_errors:
+        shown = width_errors[:_MAX_GRID_DIAGNOSTICS]
+        extra = f"\n... and {len(width_errors) - len(shown)} more row width mismatch(es)" if len(width_errors) > len(shown) else ""
+        return None, "\n".join(shown) + extra
 
     cells: List[tuple[int, int, tuple[int, int, int, int]]] = []
+    unknown_errors: list[str] = []
     for row_index, row in enumerate(rows):
         for col_index, char in enumerate(row):
             if char == transparent:
                 continue
             rgba = colours.get(char)
             if rgba is None:
-                return None, (
-                    f"Unknown character {char!r} at row {row_index}, column "
-                    f"{col_index} — add it to palette, or use {transparent!r} "
-                    f"for an empty cell"
-                )
+                if len(unknown_errors) < _MAX_GRID_DIAGNOSTICS:
+                    unknown_errors.append(
+                        f"Unknown character {char!r} at row {row_index}, column {col_index}"
+                    )
+                continue
             cells.append((col_index, row_index, rgba))
+    if unknown_errors:
+        keys_hint = (
+            f"Available palette keys: {sorted(colours)}"
+            if colours
+            else "palette is empty"
+        )
+        return None, (
+            "; ".join(unknown_errors)
+            + f" — add it to palette, or use {transparent!r} for an empty cell ({keys_hint})"
+        )
 
     return (width, len(rows), cells), None
 

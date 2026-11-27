@@ -1,11 +1,11 @@
 """Aseprite MCP - Model Context Protocol implementation for Aseprite."""
 
-import asyncio
 from contextlib import asynccontextmanager
 from importlib import import_module
 from pathlib import Path
 
 from mcp.server import MCPServer
+from .core.concurrency import ResourceLockManager, unwrap_tool_call
 from .core.contracts import ContractTool
 
 from .tool_catalog import CORE_TOOLS, DISCOVERY_TOOLS, EXTENSION_TOOLS, TOOL_EXAMPLES
@@ -57,16 +57,17 @@ def create_server() -> MCPServer:
         raise ValueError("Duplicate names in the tool catalog")
     discovery = create_discovery_tools({tool.name: (category, tool) for category, tool in extensions},
                                        {tool.name: (category, tool) for category, tool in core_entries})
-    tool_lock = asyncio.Lock()
+    lock_manager = ResourceLockManager()
 
-    async def serialize_tools(context, call_next):
+    async def schedule_tools(context, call_next):
         if context.method == "tools/call":
-            async with tool_lock:
+            tool_name, arguments = unwrap_tool_call(context)
+            async with lock_manager.acquire(tool_name, arguments):
                 return await call_next(context)
         return await call_next(context)
 
     return MCPServer("aseprite", instructions=instructions, tools=core + discovery,
-                     lifespan=_lifespan, middleware=[serialize_tools])
+                     lifespan=_lifespan, middleware=[schedule_tools])
 
 __version__ = "0.1.0"
 __author__ = "Divyansh Singh"

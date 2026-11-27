@@ -5,6 +5,7 @@ import signal
 import subprocess
 import tempfile
 import os
+from weakref import WeakKeyDictionary
 import dotenv
 
 from anyio import CancelScope
@@ -64,6 +65,32 @@ def reject_traversal(path: str) -> str | None:
 PROCESS_TIMEOUT_SECONDS = 60
 MAX_OUTPUT_BYTES = 16 * 1024 * 1024
 READ_CHUNK_BYTES = 64 * 1024
+DEFAULT_MAX_CONCURRENCY = 4
+MAX_CONCURRENCY_ENV_VAR = "ASEPRITE_MAX_CONCURRENCY"
+
+_PROCESS_SEMAPHORES: WeakKeyDictionary[asyncio.AbstractEventLoop, tuple[int, asyncio.Semaphore]] = WeakKeyDictionary()
+
+
+def _max_concurrency() -> int:
+    raw = os.getenv(MAX_CONCURRENCY_ENV_VAR)
+    if not raw:
+        return DEFAULT_MAX_CONCURRENCY
+    try:
+        limit = int(raw)
+    except ValueError:
+        return DEFAULT_MAX_CONCURRENCY
+    return max(1, min(limit, 32))
+
+
+def _process_semaphore() -> asyncio.Semaphore:
+    loop = asyncio.get_running_loop()
+    limit = _max_concurrency()
+    cached = _PROCESS_SEMAPHORES.get(loop)
+    if cached is None or cached[0] != limit:
+        semaphore = asyncio.Semaphore(limit)
+        _PROCESS_SEMAPHORES[loop] = (limit, semaphore)
+        return semaphore
+    return cached[1]
 
 
 async def _terminate_process(process: asyncio.subprocess.Process) -> None:
@@ -90,6 +117,11 @@ class AsepriteCommand:
 
     @staticmethod
     async def run_command(args: list[str]) -> str:
+        async with _process_semaphore():
+            return await AsepriteCommand._run_command_unbounded(args)
+
+    @staticmethod
+    async def _run_command_unbounded(args: list[str]) -> str:
         cmd = [os.getenv("ASEPRITE_PATH", "aseprite"), *args]
         options = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW}
                    if os.name == "nt" else {"start_new_session": True})

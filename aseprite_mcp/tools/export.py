@@ -335,6 +335,8 @@ async def export_minecraft_texture(*, filename: str = "", output_filename: str,
     an unpadded vertical strip at the original resolution, with each source
     frame stored once. The mcmeta uses zero-based strip indexes and exact
     game ticks. Animation frame durations must be positive multiples of 50 ms.
+    For multi-item sets laid out as named slices on one canvas, inspect
+    `create_slice` and `export_slices_to_minecraft` via `search_tools`.
 
     Args:
         filename: Source native project (defaults to the active file)

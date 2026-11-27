@@ -5,6 +5,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from ..core.commands import lua_escape
 from ..core.contracts import FrameIndex, LayerRef, ToolOutput
 from ..core.editing import edit_output, execute_edit_script
+from ..core.image_read import is_raster_image, raster_extract_palette
 from ..core.native import build_native_command_script
 from ..core.results import EditReceipt, ExtractedPalette
 from ..core.state import prepare_filename
@@ -166,35 +167,35 @@ async def extract_palette(
     max_colors: int = 16,
     with_alpha: bool = False,
 ) -> ToolOutput[ExtractedPalette]:
-    """Build an OPTIMAL palette from the sprite via native ColorQuantization.
+    """Build an OPTIMAL palette from a sprite or read-only external image.
 
-    True palette extraction (vs the nearest-snap quantize_to_palette): writes
-    the resulting palette to the sprite and returns it. NOTE: mutates the
-    sprite's palette. Sprite must be in RGB mode.
+    For native `.aseprite`/`.ase` projects, runs Aseprite ColorQuantization and
+    writes the resulting palette back to the sprite (requires RGB mode). For
+    external `.png`/`.bmp`/`.webp` reference images, extracts the optimal
+    palette in read-only mode without modifying the file or active project.
 
     `max_colors` is a slot budget, not a promise of that many colours:
-    Aseprite always reserves palette slot 0 for the sprite's transparent
-    colour, and the quantiser's median cut can also come up short. Expect at
-    most max_colors - 1 usable colours, sometimes fewer — and asking for
-    max_colors + 1 does not reliably recover the difference. The returned
-    `palette_size` and `max_colors` make the shortfall visible.
+    slot 0 is reserved for transparency when present, so expect at most
+    `max_colors - 1` usable colours.
 
     Args:
-        filename: Aseprite file to modify (optional; defaults to the
-            session's active file)
+        filename: Native project (defaults to active file) or external raster image (.png/.bmp/.webp, read-only)
         max_colors: palette slot cap, 1..256 (fewer if the art has fewer)
         with_alpha: include alpha when quantizing
 
     Returns:
         JSON {colors: [#RRGGBB, ...], count, transparent_index, max_colors,
-        palette_size}. The palette's transparent slot is NOT a colour and is
-        reported separately as transparent_index (null when the palette has
-        none), so `count` (= palette_size - 1 when the slot is present) is
-        the number of usable colours.
+        palette_size}.
     """
-    filename = prepare_filename(filename)
+    external_raster = bool(filename) and is_raster_image(filename)
+    filename = prepare_filename(filename, anchor=not external_raster)
     if not (1 <= max_colors <= 256):
         raise ToolError("max_colors must be 1..256")
+    if is_raster_image(filename):
+        return ToolOutput(
+            summary="Read-only palette extracted from external image (file untouched)",
+            data=raster_extract_palette(filename, max_colors=max_colors, with_alpha=with_alpha),
+        )
     wa = "true" if with_alpha else "false"
     script = f"""
     local spr = app.activeSprite

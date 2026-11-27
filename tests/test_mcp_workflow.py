@@ -73,13 +73,27 @@ def test_specimen_box_layer_review_edit_and_static_delivery(tmp_path):
             edits.append(edit | {"palette": {character: colour}})
         invoke("draw_sprite_maps", maps=edits)
         baseline = {"before_id": first["snapshot_id"]}
-        for overrides, message in [
-            ({"frame_index": 2}, "same absolute filename and frame"),
-            ({"region": {"width": 4, "height": 4}}, "same region"),
-            ({"layer_names": request["layer_names"][::-1]}, "same layer path"),
+        invoke("add_layer", filename=str(project), layer_name="unrecorded")
+        for overrides, fragments in [
+            ({"frame_index": 2}, ("same absolute filename and frame",)),
+            ({"region": {"width": 4, "height": 4}}, ("same region", "baseline region=")),
+            ({"layer_names": [["unrecorded"]]}, ("same layer path", "wood_body", "unrecorded")),
         ]:
             rejected = call(send, receive, "review_frame", request | baseline | overrides)
-            assert rejected["isError"] and message in rejected["content"][0]["text"]
+            assert rejected["isError"] and all(part in rejected["content"][0]["text"] for part in fragments), rejected
+        composite_only, _ = invoke("review_frame", filename=str(project), frame_index=1, grid_mode="none", **baseline)
+        assert composite_only["map"] is None and composite_only["map_unavailable"] == "omitted"
+        assert composite_only["changes"] == {
+            "composite": {"changed_pixels": 2, "changed_bounds": {"x": 5, "y": 4, "width": 3, "height": 4}},
+            "cel": None,
+        }
+        reordered, _ = invoke("review_frame", filename=str(project), frame_index=1,
+                              layer_names=request["layer_names"][::-1], grid_mode="composite", **baseline)
+        assert [entry["layer_name"] for entry in reordered["changes"]["cels"]] == request["layer_names"][::-1]
+        assert all(entry["status"] == "omitted" and entry["edit"] is None for entry in reordered["cels"])
+        subset, _ = invoke("review_frame", filename=str(project), frame_index=1,
+                           layer_name=[layers[0]], **baseline)
+        assert subset["changes"]["cel"] == {"changed_pixels": 2, "changed_bounds": {"x": 4, "y": 4, "width": 2, "height": 1}}
         changed, _ = invoke("review_frame", **request, **baseline)
         unchanged = {"changed_pixels": 0, "changed_bounds": None}
         assert changed["changes"] == {

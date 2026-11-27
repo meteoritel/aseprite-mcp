@@ -106,7 +106,8 @@ async def duplicate_layer(filename: str = "", *, layer_name: LayerRef, new_name:
 
     The copy inherits the source's opacity and blend mode. By default it is
     placed directly above the source layer; pass `group` to place it inside a
-    group instead.
+    group instead. To copy layers across different `.aseprite` projects, use
+    `call_tool("copy_layers_between_sprites", ...)` (inspect schema via `search_tools`).
 
     Args:
         filename: Aseprite file to modify (optional; defaults to the

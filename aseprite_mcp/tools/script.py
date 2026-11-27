@@ -9,9 +9,12 @@ from ..core.state import get_active_file, prepare_filename
 async def run_lua_script(script: str, filename: str = "") -> ToolOutput[ScriptOutput]:
     """Execute arbitrary Aseprite Lua code in batch mode (escape hatch).
 
-    Use this when no dedicated tool covers what you need. The full API
-    is documented at https://www.aseprite.org/api/. Anything the curated
-    tools do can also be done here — they are Lua underneath.
+    Check `search_tools` before writing custom Lua: dedicated tools already
+    exist for 1px outlines, HSL/brightness/contrast, convolution filters,
+    Bayer dithering, cross-sprite layer copying, composite-to-layer creation,
+    slices, spritesheets, pixel text, tilemaps, animation tweening, and scene QA.
+    The full API is documented at https://www.aseprite.org/api/. Anything the
+    curated tools do can also be done here — they are Lua underneath.
 
     Essentials for batch-mode scripts:
     - When filename is given, it is opened first and available as
